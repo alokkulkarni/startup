@@ -2,7 +2,7 @@
 
 Complete guide to running the full Forge AI stack on your machine.
 
-> **Current build:** Sprints 0–11 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), Template Marketplace with Onboarding Wizard, Billing & Subscriptions (Stripe, plan tiers, usage limits), and Collaboration & Teams (RBAC, workspace invitations, real-time presence).
+> **Current build:** Sprints 0–12 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), Template Marketplace with Onboarding Wizard, Billing & Subscriptions (Stripe, plan tiers, usage limits), Collaboration & Teams (RBAC, workspace invitations, real-time presence), and Analytics & Observability Dashboard.
 
 ---
 
@@ -226,7 +226,7 @@ open http://localhost:8080
 
 ## 4. Run Database Migrations
 
-There are 9 migrations covering all sprints:
+There are 10 migrations covering all sprints:
 
 | Migration | Sprint | What it adds |
 |-----------|--------|-------------|
@@ -239,10 +239,11 @@ There are 9 migrations covering all sprints:
 | `0006_templates` | 9 | templates, template_ratings + onboarding columns on users |
 | `0007_billing` | 10 | Stripe columns on subscriptions (planTier, stripeCustomerId, periodEnd, etc.) |
 | `0008_collaboration` | 11 | workspace_invitations, presence_sessions |
+| `0009_analytics` | 12 | analytics_events (eventType, metadata jsonb, workspaceId, projectId, userId) |
 
 ```bash
 cd apps/api
-pnpm db:migrate    # applies all 9 pending Drizzle migrations
+pnpm db:migrate    # applies all 10 pending Drizzle migrations
 ```
 
 Verify migrations applied:
@@ -251,7 +252,8 @@ docker compose exec postgres psql -U forge -d forge -c "\dt"
 # Should list: users, workspaces, workspace_members, projects, project_files,
 #              ai_conversations, ai_messages, project_snapshots,
 #              deployments, project_env_vars, subscriptions, github_connections,
-#              templates, template_ratings, workspace_invitations, presence_sessions
+#              templates, template_ratings, workspace_invitations, presence_sessions,
+#              analytics_events
 ```
 
 To inspect your database schema:
@@ -976,6 +978,98 @@ RESEND_FROM_EMAIL=noreply@yourdomain.com
 
 ---
 
+### ✅ Sprint 12 — Analytics & Observability Dashboard
+
+Sprint 12 adds a full analytics dashboard with event tracking, AI usage charts, deployment metrics, and a real-time activity feed.
+
+#### Access the analytics dashboard
+1. Log in and click **📊 Analytics** in the dashboard sidebar
+2. You'll see the analytics page at `http://localhost/analytics`
+3. It shows:
+   - **4 stat cards**: AI Requests (30d), Deployments (30d), Active Projects, Active Members
+   - **AI Requests chart**: SVG line chart — last 30 days of AI request volume
+   - **Usage breakdown**: horizontal bar gauges for Projects Created, Templates Cloned, Deployments
+   - **Recent Activity feed**: last 20 events with icons, user, project name, time-ago
+
+#### Event types tracked automatically
+Analytics events are recorded automatically (fire-and-forget) whenever users take action:
+
+| Event type | Triggered by |
+|------------|-------------|
+| `ai_request` | Every AI chat message sent |
+| `deployment_created` | Every one-click deploy to Vercel/Netlify/Cloudflare |
+| `project_created` | New project creation |
+| `template_cloned` | Cloning a template from marketplace |
+| `member_invited` | Sending a workspace invitation |
+| `file_saved` | Auto-save in code editor |
+| `snapshot_created` | Creating a version snapshot |
+| `github_push` | Pushing to GitHub |
+
+#### Test analytics via API
+```bash
+# Get workspace overview (last 30 days)
+curl http://localhost/api/v1/analytics/overview \
+  -b "session=..."
+# → { aiRequests: 42, deployments: 5, activeProjects: 3, activeMembers: 2, ... }
+
+# Get AI usage time series (30 data points)
+curl http://localhost/api/v1/analytics/ai-usage \
+  -b "session=..."
+# → { series: [{ date: "2026-02-10", requests: 3 }, ...] }
+
+# Get per-project stats
+curl http://localhost/api/v1/analytics/projects/<projectId> \
+  -b "session=..."
+# → { projectName: "My App", aiRequests: 12, deployments: 2, aiSeries: [...] }
+
+# Recent activity feed
+curl "http://localhost/api/v1/analytics/activity?page=1&limit=20" \
+  -b "session=..."
+# → { events: [{ eventType, userEmail, projectName, createdAt, metadata }], ... }
+
+# Record a custom event
+curl -X POST http://localhost/api/v1/analytics/events \
+  -H "Content-Type: application/json" \
+  -b "session=..." \
+  -d '{"eventType":"file_saved","projectId":"<id>","metadata":{"filename":"App.tsx"}}'
+```
+
+#### Verify analytics data in database
+```bash
+docker compose exec postgres psql -U forge -d forge
+
+-- Event count by type (last 30 days)
+SELECT event_type, COUNT(*) as total
+FROM analytics_events
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY event_type
+ORDER BY total DESC;
+
+-- Most active projects
+SELECT p.name, COUNT(ae.id) as events
+FROM analytics_events ae
+JOIN projects p ON p.id = ae.project_id
+WHERE ae.created_at > NOW() - INTERVAL '30 days'
+GROUP BY p.name
+ORDER BY events DESC
+LIMIT 10;
+
+-- Daily AI requests
+SELECT DATE(created_at) as day, COUNT(*) as requests
+FROM analytics_events
+WHERE event_type = 'ai_request'
+GROUP BY day
+ORDER BY day DESC
+LIMIT 30;
+
+\q
+```
+
+#### Charts auto-refresh
+The analytics page automatically refreshes data every **30 seconds** in the background — no page reload needed. Open browser DevTools → Network tab to observe the polling requests.
+
+---
+
 ## 10. Running Everything in Docker (Full Stack)
 
 To run the entire stack including API and web in Docker (mirrors production):
@@ -1184,7 +1278,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 docker compose up -d
 # Wait ~60s for Keycloak to boot
 
-# 4. Migrate DB (applies all 9 migrations)
+# 4. Migrate DB (applies all 10 migrations)
 pnpm --filter @forge/api db:migrate
 
 # 5. Seed templates (optional — populates 10 starter templates)
@@ -1207,7 +1301,8 @@ open http://localhost
 - Template Marketplace with 10 starter templates + Onboarding Wizard (Sprint 9)
 - Billing & Subscriptions with Stripe (Sprint 10, needs Stripe keys for checkout)
 - Collaboration & Teams: RBAC, workspace invitations, real-time presence (Sprint 11)
-- 326 unit tests passing across API + web
+- Analytics & Observability: usage dashboard, event tracking, AI usage charts (Sprint 12)
+- 406 unit tests passing across API + web
 
 **Optional features and what they need:**
 
@@ -1216,6 +1311,7 @@ open http://localhost
 | Template Marketplace | `pnpm db:seed` to populate templates |
 | Billing & Subscriptions | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + price IDs — see **Section 9 Sprint 10** |
 | Team Collaboration (RBAC + invites) | Works out of the box; email delivery needs `RESEND_API_KEY` — see **Section 9 Sprint 11** |
+| Analytics Dashboard | Works out of the box — no extra config; events recorded automatically |
 | GitHub push / pull / import | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — see **Section 7b** |
 | Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
 | Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
