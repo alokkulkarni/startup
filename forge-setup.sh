@@ -689,70 +689,72 @@ start_docker() {
   header "Starting Infrastructure (Docker)"
   cd "$PROJECT_ROOT"
 
-  # ── Detect and clean up any duplicate/stale forge stacks ────────────────
+  # ── Detect and clean up stale duplicate stacks ──────────────────────────
   # Docker Compose names the project after the directory by default, so
-  # running the script from two different paths (e.g. "startup" vs "forge-ai")
-  # creates two stacks that fight over the same ports.
+  # running from two different paths (e.g. "startup" vs "forge-ai") creates
+  # two stacks that fight over the same ports.
   step "Checking for existing Forge containers..."
 
-  # Collect all project names that have forge-related containers
-  local _running_projects
-  _running_projects=$(docker ps -a --format '{{.Labels}}' 2>/dev/null \
-    | grep -o 'com.docker.compose.project=[^,]*' \
-    | sed 's/com.docker.compose.project=//' \
-    | sort -u)
+  # Fast approach: scan container NAMES (not labels) for forge-like services
+  # that are NOT prefixed with "forge_" (the canonical project prefix)
+  local _stale_containers
+  _stale_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null \
+    | grep -iE '(postgres|redis|minio|keycloak|traefik|forge.api|forge.web)' \
+    | grep -vE '^forge_' || true)
 
-  local _stale_projects=()
-  while IFS= read -r _proj; do
-    [[ -z "$_proj" ]] && continue
-    # Any project that isn't the canonical "forge" project is a stale duplicate
-    if [[ "$_proj" != "forge" ]]; then
-      # Only flag it if it actually has containers that use our ports
-      local _has_forge_containers
-      _has_forge_containers=$(docker ps -a --filter "label=com.docker.compose.project=${_proj}" \
-        --format '{{.Names}}' 2>/dev/null \
-        | grep -iE 'postgres|redis|minio|keycloak|traefik|api|web' | head -1)
-      [[ -n "$_has_forge_containers" ]] && _stale_projects+=("$_proj")
+  if [[ -n "$_stale_containers" ]]; then
+    warn "Found containers from a different stack that may conflict:"
+    while IFS= read -r _c; do
+      echo -e "  ${YELLOW}⚠${RESET}  $_c"
+    done <<< "$_stale_containers"
+    echo ""
+    # Identify the stale project name from the first offending container
+    local _stale_proj
+    _stale_proj=$(docker inspect \
+      --format '{{index .Config.Labels "com.docker.compose.project"}}' \
+      "$(echo "$_stale_containers" | head -1)" 2>/dev/null || true)
+
+    if [[ -n "$_stale_proj" && "$_stale_proj" != "forge" ]]; then
+      info "Stopping stale stack: ${_stale_proj}"
+      docker compose -p "$_stale_proj" down --remove-orphans 2>/dev/null || true
+      ok "Stale stack '${_stale_proj}' removed"
+    else
+      warn "Could not identify stale project — removing individual containers"
+      while IFS= read -r _c; do
+        docker rm -f "$_c" 2>/dev/null || true
+      done <<< "$_stale_containers"
+      ok "Stale containers removed"
     fi
-  done <<< "$_running_projects"
-
-  if [[ ${#_stale_projects[@]} -gt 0 ]]; then
-    warn "Found duplicate Forge stack(s): ${_stale_projects[*]}"
-    warn "These are competing for the same ports. Stopping them now..."
-    for _proj in "${_stale_projects[@]}"; do
-      info "Stopping project: $_proj"
-      docker compose -p "$_proj" down --remove-orphans 2>/dev/null || true
-    done
-    ok "Duplicate stack(s) removed"
+  else
+    ok "No conflicting containers found"
   fi
 
-  # ── Check that the canonical forge stack isn't already fully running ────
+  # ── Skip if forge stack is already fully running ─────────────────────────
   local _already_up
   _already_up=$(docker compose ps --services --filter status=running 2>/dev/null | wc -l | tr -d ' ')
   if (( _already_up >= 4 )); then
-    ok "Forge infrastructure already running ($_already_up services up) — skipping docker compose up"
+    ok "Forge infrastructure already running ($_already_up services) — skipping docker compose up"
     echo ""
     return 0
   fi
 
-  # ── Port conflict check ──────────────────────────────────────────────────
+  # ── Port conflict check (uses bash /dev/tcp — no lsof needed) ────────────
   local _ports=(80 443 5432 6379 9000 8081 5050)
   local _port_names=(Traefik/HTTP Traefik/HTTPS PostgreSQL Redis MinIO Keycloak pgAdmin)
   local _conflicts=()
   for i in "${!_ports[@]}"; do
-    if lsof -iTCP:"${_ports[$i]}" -sTCP:LISTEN -n -P 2>/dev/null | grep -q LISTEN; then
-      _conflicts+=("  Port ${_ports[$i]} (${_port_names[$i]})")
+    if (echo >/dev/tcp/localhost/${_ports[$i]}) 2>/dev/null; then
+      _conflicts+=("${_ports[$i]} (${_port_names[$i]})")
     fi
   done
   if [[ ${#_conflicts[@]} -gt 0 ]]; then
-    warn "The following ports are already in use:"
-    for _c in "${_conflicts[@]}"; do echo -e "  ${RED}✖${RESET}${_c}"; done
+    warn "The following ports are already in use by another process:"
+    for _c in "${_conflicts[@]}"; do echo -e "  ${RED}✖${RESET}  Port ${_c}"; done
     echo ""
-    warn "Stop the conflicting processes before continuing, then re-run:"
-    info "  sudo lsof -iTCP -sTCP:LISTEN -n -P | grep -E ':(80|443|5432|6379|9000|8081|5050) '"
+    info "Find what's using a port:  lsof -iTCP:<port> -sTCP:LISTEN -n -P"
     echo ""
     local _continue_anyway=""
-    prompt_yn _continue_anyway "Continue anyway (may fail)?" "n"
+    prompt_yn _continue_anyway "Continue anyway (docker compose up may fail)?" "n"
     [[ ! "$_continue_anyway" =~ ^[Yy]$ ]] && { error "Aborted. Free the ports above and re-run."; exit 1; }
   fi
 
