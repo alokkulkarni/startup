@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import { NewProjectModal } from '@/components/projects/NewProjectModal'
 import { DeleteProjectModal } from '@/components/projects/DeleteProjectModal'
+import { ImportFromGitHubModal } from '@/components/github/ImportFromGitHubModal'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/useToast'
 import type { Project } from '@forge/shared'
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -112,6 +114,9 @@ export default function DashboardPage() {
           <Button size="sm" onClick={() => setShowNewModal(true)}>
             + New project
           </Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowImportModal(true)}>
+            Import from GitHub
+          </Button>
           <Link href="/dashboard/profile">
             <div className="w-8 h-8 rounded-full bg-forge-700 flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:ring-2 hover:ring-forge-500 transition-all overflow-hidden">
               {user?.avatarUrl ? (
@@ -135,6 +140,9 @@ export default function DashboardPage() {
           </div>
           <Button onClick={() => setShowNewModal(true)} className="hidden sm:inline-flex">
             + New project
+          </Button>
+          <Button variant="secondary" onClick={() => setShowImportModal(true)} className="hidden sm:inline-flex">
+            Import from GitHub
           </Button>
         </div>
 
@@ -201,6 +209,10 @@ export default function DashboardPage() {
           onConfirm={handleDelete}
         />
       )}
+      <ImportFromGitHubModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
     </div>
   )
 }

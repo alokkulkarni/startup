@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, boolean, integer, jsonb, index, uniqueIndex
+  pgTable, uuid, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, unique
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -53,6 +53,11 @@ export const projects = pgTable('projects', {
   framework: text('framework').notNull().default('react'),
   status: text('status').notNull().default('active'),
   thumbnail: text('thumbnail'),
+  githubRepoUrl: text('github_repo_url'),
+  githubRepoOwner: text('github_repo_owner'),
+  githubRepoName: text('github_repo_name'),
+  githubDefaultBranch: text('github_default_branch').default('main'),
+  githubLastPushedSha: text('github_last_pushed_sha'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, t => ({
@@ -97,6 +102,7 @@ export const aiMessages = pgTable('ai_messages', {
 export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
   memberships: many(workspaceMembers),
+  githubConnections: many(githubConnections),
 }))
 
 export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
@@ -193,4 +199,23 @@ export const deploymentsRelations = relations(deployments, ({ one }) => ({
 
 export const projectEnvVarsRelations = relations(projectEnvVars, ({ one }) => ({
   project: one(projects, { fields: [projectEnvVars.projectId], references: [projects.id] }),
+}))
+
+// ── GitHub Connections ────────────────────────────────────────────────────────
+export const githubConnections = pgTable('github_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  githubUserId: integer('github_user_id').notNull(),
+  githubLogin: text('github_login').notNull(),
+  githubName: text('github_name'),
+  githubAvatarUrl: text('github_avatar_url'),
+  encryptedToken: text('encrypted_token').notNull(),
+  tokenScope: text('token_scope').notNull().default('repo,read:user'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+}, (t) => ({
+  userIdUnique: unique().on(t.userId),
+}))
+
+export const githubConnectionsRelations = relations(githubConnections, ({ one }) => ({
+  user: one(users, { fields: [githubConnections.userId], references: [users.id] }),
 }))
