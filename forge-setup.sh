@@ -474,12 +474,21 @@ collect_inputs() {
   # GitHub Integration
   divider
   echo -e "\n${BOLD}GitHub Integration${RESET} (Sprint 8 — push/pull/import code)\n"
-  echo -e "  Create a GitHub OAuth App at: ${CYAN}https://github.com/settings/developers${RESET}"
-  echo -e "  Callback URL: ${CYAN}http://localhost/api/v1/github/callback${RESET}\n"
+  echo -e "  ${BOLD}You need TWO separate GitHub OAuth Apps:${RESET}\n"
+  echo -e "  ${BOLD}1) Forge GitHub Integration${RESET} (code import/push/pull)"
+  echo -e "     Create at:    ${CYAN}https://github.com/settings/developers${RESET}"
+  echo -e "     Homepage URL: ${CYAN}http://localhost${RESET}"
+  echo -e "     Callback URL: ${CYAN}http://localhost/api/v1/github/callback${RESET}\n"
+  echo -e "  ${BOLD}2) Keycloak Social Login${RESET} (sign in with GitHub)"
+  echo -e "     Create at:    ${CYAN}https://github.com/settings/developers${RESET}"
+  echo -e "     Homepage URL: ${CYAN}http://localhost${RESET}"
+  echo -e "     Callback URL: ${CYAN}http://localhost:8081/realms/forge/broker/github/endpoint${RESET}\n"
+  echo -e "  ${DIM}Enter the credentials for App #1 (Forge GitHub Integration) below.${RESET}"
+  echo -e "  ${DIM}App #2 (Keycloak) is configured in the Keycloak admin console after startup.${RESET}\n"
 
-  prompt_optional GITHUB_CLIENT_ID "GitHub OAuth App Client ID" ""
+  prompt_optional GITHUB_CLIENT_ID "GitHub OAuth App Client ID (App #1)" ""
   if [[ -n "$GITHUB_CLIENT_ID" ]]; then
-    prompt_optional_secret GITHUB_CLIENT_SECRET "GitHub OAuth App Client Secret"
+    prompt_optional_secret GITHUB_CLIENT_SECRET "GitHub OAuth App Client Secret (App #1)"
   else
     GITHUB_CLIENT_SECRET=""
     info "GitHub integration skipped."
