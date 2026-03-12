@@ -112,7 +112,10 @@ services:
 
   # ── Keycloak auth ─────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    build:
+      context: .
+      dockerfile: infra/keycloak/Dockerfile
+    image: forge-keycloak
     container_name: forge_keycloak
     restart: unless-stopped
     environment:
@@ -145,11 +148,11 @@ services:
     networks:
       - forge_network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/health/ready || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health/ready | grep -q UP"]
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 90s
 
   # ── Fastify API ───────────────────────────────────────────────────────────
   api:

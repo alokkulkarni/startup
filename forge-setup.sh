@@ -768,7 +768,7 @@ start_docker() {
   wait_for_postgres 60
   wait_for_redis 30
   wait_for_url "http://localhost:9000/minio/health/live" "MinIO" 30
-  wait_for_url "http://localhost:8081/health/ready" "Keycloak" 120
+  wait_for_url "http://localhost:8081/health/ready" "Keycloak" 180
   wait_for_url "http://localhost:8080/ping" "Traefik" 20
 
   echo ""
