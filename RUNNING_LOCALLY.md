@@ -2,7 +2,7 @@
 
 Complete guide to running the full Forge AI stack on your machine.
 
-> **Current build:** Sprints 0–7 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, and one-click deployment to Vercel / Netlify / Cloudflare Pages.
+> **Current build:** Sprints 0–8 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, and full GitHub integration (push, pull, PR, import).
 
 ---
 
@@ -72,11 +72,18 @@ cp .env.example .env.local
 | `FORGE_NETLIFY_API_KEY` | [app.netlify.com/user/applications](https://app.netlify.com/user/applications) | Enables Deploy → Netlify |
 | `FORGE_CF_API_TOKEN` | [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) | Enables Deploy → Cloudflare Pages |
 | `FORGE_CF_ACCOUNT_ID` | Cloudflare dashboard → right sidebar | Required with CF token |
+| `GITHUB_CLIENT_ID` | [github.com/settings/developers](https://github.com/settings/developers) → New OAuth App | Enables GitHub push/pull/import (Sprint 8) |
+| `GITHUB_CLIENT_SECRET` | Same OAuth App page → Generate client secret | Required with `GITHUB_CLIENT_ID` |
 | `STRIPE_*` | `sk_test_...` | Leave blank — billing UI hidden without valid keys |
 | `SENTRY_DSN` | _(empty)_ | Leave blank for local dev |
 | `RESEND_API_KEY` | _(empty)_ | Email features disabled without this |
-| `GITHUB_CLIENT_ID/SECRET` | _(empty)_ | Social login optional — email/password works without it |
 | `GOOGLE_CLIENT_ID/SECRET` | _(empty)_ | Social login optional |
+
+> ⚠️ **Two different GitHub OAuth Apps** are needed if you want both features:
+> - **GitHub Integration** (Sprint 8 — push/pull/import code): callback = `http://localhost/api/v1/github/callback` — use `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` in `apps/api/.env`
+> - **GitHub Social Login** (Keycloak broker — sign in with GitHub): callback = `http://localhost:8081/realms/forge/broker/github/endpoint` — configured separately in Keycloak Admin Console
+>
+> You can use the **same** OAuth App for both if you register both callback URLs in GitHub's "Authorization callback URL" field (separate with a newline).
 
 ### Create `apps/api/.env` (API server env)
 ```bash
@@ -124,6 +131,14 @@ FORGE_VERCEL_API_KEY=             # get from vercel.com/account/tokens
 FORGE_NETLIFY_API_KEY=            # get from app.netlify.com/user/applications
 FORGE_CF_API_TOKEN=               # get from dash.cloudflare.com/profile/api-tokens
 FORGE_CF_ACCOUNT_ID=              # found in Cloudflare dashboard right sidebar
+
+# ── GitHub Integration (Sprint 8 — enables push/pull/import) ────
+# Create at: https://github.com/settings/developers → New OAuth App
+# App name: Forge AI (Local Dev)
+# Homepage URL: http://localhost
+# Authorization callback URL: http://localhost/api/v1/github/callback
+GITHUB_CLIENT_ID=                 # your GitHub OAuth App client ID
+GITHUB_CLIENT_SECRET=             # your GitHub OAuth App client secret
 
 # ── Stripe (optional — billing UI hidden without these) ─────────
 STRIPE_SECRET_KEY=sk_test_...
@@ -198,7 +213,7 @@ open http://localhost:8080
 
 ## 4. Run Database Migrations
 
-There are 5 migrations covering all sprints:
+There are 6 migrations covering all sprints:
 
 | Migration | Sprint | What it adds |
 |-----------|--------|-------------|
@@ -207,10 +222,11 @@ There are 5 migrations covering all sprints:
 | `0002_ai_indexes` | 3 | performance indexes for AI routes |
 | `0003_snapshots` | 6 | project_snapshots (version history) |
 | `0004_deployments` | 7 | deployments, project_env_vars |
+| `0005_github` | 8 | github_connections + 5 GitHub columns on projects |
 
 ```bash
 cd apps/api
-pnpm db:migrate    # applies all 5 pending Drizzle migrations
+pnpm db:migrate    # applies all 6 pending Drizzle migrations
 ```
 
 Verify migrations applied:
@@ -218,7 +234,7 @@ Verify migrations applied:
 docker compose exec postgres psql -U forge -d forge -c "\dt"
 # Should list: users, workspaces, workspace_members, projects, project_files,
 #              ai_conversations, ai_messages, project_snapshots,
-#              deployments, project_env_vars, subscriptions
+#              deployments, project_env_vars, subscriptions, github_connections
 ```
 
 To inspect your database schema:
@@ -295,43 +311,95 @@ Use the admin console to:
 - Reset passwords
 - Manage client secrets
 
-### GitHub Social Login (optional)
-1. Create a GitHub OAuth app at `https://github.com/settings/developers`
-2. Set callback URL: `http://localhost:8081/realms/forge/broker/github/endpoint`
-3. Add to `apps/api/.env`:
-   ```
-   GITHUB_CLIENT_ID=your-github-client-id
-   GITHUB_CLIENT_SECRET=your-github-client-secret
-   ```
-4. Restart Keycloak: `docker compose restart keycloak`
+### GitHub Social Login via Keycloak (optional — sign in with GitHub)
 
-### Google Social Login (optional)
-1. Create credentials at [console.cloud.google.com](https://console.cloud.google.com)
-2. Set redirect URI: `http://localhost:8081/realms/forge/broker/google/endpoint`
-3. Add to `apps/api/.env`:
-   ```
-   GOOGLE_CLIENT_ID=your-google-client-id
-   GOOGLE_CLIENT_SECRET=your-google-client-secret
-   ```
-4. Restart Keycloak
+> This allows users to log into Forge AI **using** their GitHub account. It is separate from the Sprint 8 GitHub Integration (push/pull code).
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers) → **New OAuth App**
+2. Fill in:
+   - **App name:** `Forge AI Keycloak (Local)`
+   - **Homepage URL:** `http://localhost`
+   - **Authorization callback URL:** `http://localhost:8081/realms/forge/broker/github/endpoint`
+3. Note the **Client ID** and generate a **Client Secret**
+4. In Keycloak Admin (`http://localhost:8081/admin`):
+   - Go to `forge` realm → **Identity Providers** → **Add provider → GitHub**
+   - Enter the Client ID and Secret
+   - Save
+5. Users will now see a "Login with GitHub" button on the Keycloak login page
+
+### Google Social Login via Keycloak (optional)
+1. Create credentials at [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → OAuth 2.0 Client ID
+2. Set **Authorised redirect URI:** `http://localhost:8081/realms/forge/broker/google/endpoint`
+3. In Keycloak Admin → `forge` realm → **Identity Providers** → **Add provider → Google**
+4. Enter the Client ID and Secret → Save
+
+---
+
+## 7b. GitHub Integration Setup (Sprint 8)
+
+> This allows users to **push, pull, and import code** between Forge AI projects and GitHub repositories. Required if you want to test Sprint 8 features.
+
+### Step 1 — Create a GitHub OAuth App
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers) → **New OAuth App**
+2. Fill in:
+   - **App name:** `Forge AI Integration (Local Dev)`
+   - **Homepage URL:** `http://localhost`
+   - **Authorization callback URL:** `http://localhost/api/v1/github/callback`
+3. Click **Register application**
+4. On the next page, click **Generate a new client secret**
+5. Copy both the **Client ID** and **Client Secret**
+
+### Step 2 — Add to `apps/api/.env`
+
+```bash
+GITHUB_CLIENT_ID=Ov23li...        # from Step 1
+GITHUB_CLIENT_SECRET=abc123...    # from Step 1
+```
+
+### Step 3 — Restart the API server
+
+```bash
+# If running with pnpm dev, just save the .env file — Fastify restarts automatically
+# If using Docker full stack:
+docker compose --profile full restart api
+```
+
+### Step 4 — Test the integration
+
+1. Open `http://localhost` → log in → open any project workspace
+2. Click the **GitHub** button in the workspace header
+3. The panel shows "Connect GitHub" → click it
+4. You'll be redirected to GitHub's OAuth consent page
+5. Approve → redirected back to dashboard with `?github=connected`
+6. Reopen the workspace → GitHub panel now shows your username
+
+### Verifying GitHub OAuth works end-to-end
+```bash
+# After connecting, check the DB for the stored (encrypted) token
+docker compose exec postgres psql -U forge -d forge \
+  -c "SELECT github_login, github_name, token_scope, connected_at FROM github_connections;"
+```
+
+> **Security note:** The GitHub access token is encrypted at rest using AES-256-GCM with your `FORGE_ENCRYPTION_KEY`. Never share your `FORGE_ENCRYPTION_KEY` or let it default to the dev placeholder in production.
 
 ---
 
 ## 8. Running Tests
 
-### Current test counts (Sprints 0–7)
+### Current test counts (Sprints 0–8)
 
 | Package | Test files | Tests | Command |
 |---------|-----------|-------|---------|
-| `@forge/api` | 7 | **30** | `pnpm --filter @forge/api test:unit` |
-| `@forge/web` | 8 | **25** | `pnpm --filter @forge/web test:unit` |
-| **Total** | **15** | **55** | `pnpm test` |
+| `@forge/api` | 8 | **60** | `pnpm --filter @forge/api test:unit` |
+| `@forge/web` | 12 | **55** | `pnpm --filter @forge/web test:unit` |
+| **Total** | **20** | **115** | `pnpm test` |
 
 ### Unit tests (fast, no Docker needed)
 ```bash
 pnpm test                              # all packages
-pnpm --filter @forge/api test:unit     # API only (30 tests, ~600ms)
-pnpm --filter @forge/web test:unit     # Web only (25 tests, ~900ms)
+pnpm --filter @forge/api test:unit     # API only (60 tests, ~600ms)
+pnpm --filter @forge/web test:unit     # Web only (55 tests, ~1.7s)
 ```
 
 ### Typecheck
@@ -435,6 +503,68 @@ After the stack is running (`docker compose up -d && pnpm dev`), test each sprin
 6. **Deploy history**: click **📋 Deploys** → panel shows deployment with status badge + URL
 7. **Rollback**: make a change + redeploy → in history panel, click **Rollback** on the previous deploy → files restore + new deploy triggers
 
+### ✅ Sprint 8 — GitHub Integration
+> Requires `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` in `apps/api/.env`. See **Section 7b** for full setup.
+
+#### Connect GitHub
+1. Open a project workspace → click the **GitHub** button in the header
+2. GitHubPanel slides in → click **"Connect GitHub"**
+3. GitHub OAuth consent page → click **Authorize**
+4. Redirected back to dashboard with `?github=connected` in URL
+5. Reopen workspace → panel shows your GitHub username + green connected dot
+
+#### Sync status badge
+- Header shows **"✓ In sync"** (green) when local matches remote
+- Shows **"↑ N ahead"** (orange) after local changes not yet pushed
+- Shows **"↓ N behind"** (blue) when remote has commits you haven't pulled
+
+#### Push to a new GitHub repo
+1. In GitHubPanel → click **Push** → **New Repository** tab
+2. Enter a repo name (e.g. `my-forge-app`) → optionally tick **Private**
+3. Click **Push** → wait ~5s → GitHub repo created
+4. Visit `https://github.com/YOUR_USERNAME/my-forge-app` — all project files committed
+
+#### Push to an existing repo
+1. **Push** → **Existing Repository** tab
+2. Search for a repo in the browser → select it → pick a branch
+3. Enter a commit message (or leave blank for auto-generated)
+4. Click **Push** → commit appears in GitHub
+
+#### Pull from GitHub
+1. Make a commit directly on GitHub.com (edit any file)
+2. In GitHubPanel → sync badge shows **"↓ 1 behind"**
+3. Click **Pull** → confirm → files updated in Monaco + snapshot created automatically
+4. Check History panel — new snapshot entry labelled "Before GitHub pull"
+
+#### Create a Pull Request
+1. After pushing changes to a branch (e.g. `feature-branch`)
+2. In GitHubPanel → click **Create PR**
+3. Set **from** = `feature-branch`, **into** = `main`
+4. AI-suggested title and description are pre-filled (editable)
+5. Click **Create PR** → link shown → click to view on GitHub
+
+#### Import from GitHub
+1. On the **Dashboard** → click **Import from GitHub**
+2. If not connected, connect first (follows same OAuth flow)
+3. Search for and select any of your GitHub repos
+4. Select a branch → optionally rename the project
+5. Click **Import** → redirected to new workspace with all repo files loaded
+6. Verify all files appear in the FileTree
+
+#### Verify GitHub data in database
+```bash
+docker compose exec postgres psql -U forge -d forge
+
+-- Check connection stored
+SELECT github_login, github_name, token_scope FROM github_connections;
+
+-- Check project has repo info after push
+SELECT name, github_repo_owner, github_repo_name, github_default_branch, github_last_pushed_sha
+FROM projects WHERE github_repo_owner IS NOT NULL;
+
+\q
+```
+
 ### 🔍 Verifying the Database State
 ```bash
 # Connect to postgres
@@ -446,7 +576,11 @@ SELECT count(*) FROM projects;
 SELECT count(*) FROM project_files;
 SELECT count(*) FROM project_snapshots;
 SELECT count(*) FROM deployments;
-SELECT key FROM project_env_vars;  -- values are encrypted, keys shown
+SELECT key FROM project_env_vars;        -- values are encrypted, keys shown
+SELECT github_login FROM github_connections;  -- Sprint 8: connected accounts
+
+# Check project GitHub linkage (Sprint 8)
+SELECT name, github_repo_owner, github_repo_name FROM projects WHERE github_repo_owner IS NOT NULL;
 
 # Exit
 \q
@@ -571,6 +705,34 @@ docker compose restart keycloak
 - `FORGE_ENCRYPTION_KEY` must be set in `apps/api/.env`
 - Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
+### GitHub integration not working (Sprint 8)
+
+**"Connect GitHub" does nothing / redirect fails:**
+- Verify `GITHUB_CLIENT_ID` is set in `apps/api/.env` (not empty)
+- Verify the OAuth App callback URL is exactly: `http://localhost/api/v1/github/callback`
+- Check API logs: `docker compose logs api | grep -i github`
+
+**"GitHub not connected" error after OAuth:**
+- The callback goes to `http://localhost/api/v1/github/callback` — Traefik must be running
+- Check Traefik is routing correctly: `curl -v http://localhost/api/v1/health`
+- If running `pnpm dev` without Docker for API, the callback URL won't reach it — use `http://localhost:3001` as `APP_URL` in `.env` and update your GitHub OAuth App accordingly
+
+**"Octokit" / GitHub API errors:**
+- Token may have expired — disconnect and reconnect: click GitHub panel → Disconnect → Connect again
+- Verify the OAuth App has `repo` and `read:user` scopes enabled
+- Check the GitHub App is not suspended at [github.com/settings/developers](https://github.com/settings/developers)
+
+**Push fails with "Repository already exists":**
+- The repo name is taken on your GitHub account — use a different name in the Push modal
+
+**Pull creates no snapshot / files not updated:**
+- Ensure the project has a linked repo (`github_repo_owner` set in DB)
+- Check MinIO `snapshots` bucket exists: `docker compose exec minio mc ls local/`
+
+**"Import from GitHub" stuck loading repos:**
+- GitHub OAuth token may not have `repo` scope — disconnect and reconnect
+- Verify `GITHUB_CLIENT_ID` scope in `.env` (must be `repo read:user` in the OAuth URL)
+
 ### Snapshots not creating (Sprint 6)
 - Snapshots auto-create before every AI diff apply
 - Check `project_snapshots` table: `docker compose exec postgres psql -U forge -d forge -c "SELECT count(*) FROM project_snapshots;"`
@@ -645,7 +807,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 docker compose up -d
 # Wait ~60s for Keycloak to boot
 
-# 4. Migrate DB (applies all 5 migrations)
+# 4. Migrate DB (applies all 6 migrations)
 pnpm --filter @forge/api db:migrate
 
 # 5. Start dev servers
@@ -657,8 +819,22 @@ open http://localhost
 
 **What you get after the above:**
 - Forge AI app at `http://localhost`
-- AI-powered code editor (Sprint 1–4)
+- AI-powered code editor (Sprints 1–4)
 - Live preview with WebContainers (Sprint 5, Chrome/Edge/Firefox only)
 - Version history + undo (Sprint 6)
-- One-click deploy to Vercel/Netlify/Cloudflare (Sprint 7, needs API key)
-- 55 unit tests passing across API + web
+- One-click deploy to Vercel/Netlify/Cloudflare (Sprint 7, needs provider API key)
+- GitHub push/pull/PR/import (Sprint 8, needs GitHub OAuth App — see Section 7b)
+- 115 unit tests passing across API + web
+
+**Optional features and what they need:**
+
+| Feature | Extra config required |
+|---------|----------------------|
+| GitHub push / pull / import | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — see **Section 7b** |
+| Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
+| Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
+| Deploy to Cloudflare Pages | `FORGE_CF_API_TOKEN` + `FORGE_CF_ACCOUNT_ID` |
+| AWS Bedrock AI (primary) | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` |
+| Sign in with GitHub | GitHub OAuth App with Keycloak callback (Section 7) |
+| Email notifications | `RESEND_API_KEY` |
+| Error monitoring | `SENTRY_DSN` |
