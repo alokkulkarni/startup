@@ -401,6 +401,123 @@ docker compose exec postgres psql -U forge -d forge \
 
 ---
 
+## 7c. AWS Bedrock Setup (IAM Role Assumption)
+
+Forge AI uses AWS Bedrock (Claude 3.5 Sonnet) as its **primary AI provider**. It authenticates via **IAM role assumption** — no hardcoded credentials. Choose the option that fits your environment:
+
+---
+
+### Option A — Local dev with a named AWS profile (recommended)
+
+No plaintext keys needed. Uses `~/.aws/config` with SSO or a standard profile.
+
+**1. Configure a profile** (if you haven't already):
+```bash
+# SSO-based (for organisations using AWS Identity Center)
+aws configure sso --profile forge-dev
+
+# OR standard key-based profile (developer IAM user)
+aws configure --profile forge-dev
+# Enter: Access Key ID, Secret Access Key, region (us-east-1), output format (json)
+```
+
+**2. Attach the Bedrock policy to your developer user/role:**
+```bash
+# Create the policy
+aws iam create-policy \
+  --policy-name ForgeAIBedrockPolicy \
+  --policy-document file://infra/aws/bedrock-policy.json
+
+# Attach to your IAM user
+aws iam attach-user-policy \
+  --user-name YOUR_IAM_USERNAME \
+  --policy-arn arn:aws:iam::ACCOUNT_ID:policy/ForgeAIBedrockPolicy
+```
+
+**3. Add to `apps/api/.env`:**
+```bash
+AWS_REGION=us-east-1
+AWS_PROFILE=forge-dev
+# No keys needed — SDK reads from ~/.aws/config
+```
+
+---
+
+### Option B — Explicit role assumption (cross-account or least-privilege)
+
+**1. Create the IAM role:**
+```bash
+# Edit infra/aws/bedrock-role-trust-policy.json — replace ACCOUNT_ID and REGION
+
+aws iam create-role \
+  --role-name ForgeAIBedrockRole \
+  --assume-role-policy-document file://infra/aws/bedrock-role-trust-policy.json
+
+aws iam attach-role-policy \
+  --role-name ForgeAIBedrockRole \
+  --policy-arn arn:aws:iam::ACCOUNT_ID:policy/ForgeAIBedrockPolicy
+```
+
+**2. Add to `apps/api/.env`:**
+```bash
+AWS_REGION=us-east-1
+AWS_ROLE_ARN=arn:aws:iam::ACCOUNT_ID:role/ForgeAIBedrockRole
+AWS_ROLE_SESSION_NAME=forge-bedrock-session   # optional, defaults to this value
+```
+The SDK will call `sts:AssumeRole` on every Bedrock request and auto-refresh the 1h temporary credentials.
+
+---
+
+### Option C — Production on EC2 / ECS / EKS (zero config)
+
+Attach `ForgeAIBedrockRole` directly as the **instance profile** (EC2), **task role** (ECS), or **service account annotation** (EKS IRSA). No env vars needed — the SDK discovers the role via the instance metadata service automatically.
+
+```bash
+# EC2: attach instance profile
+aws iam create-instance-profile --instance-profile-name ForgeAIBedrockProfile
+aws iam add-role-to-instance-profile \
+  --instance-profile-name ForgeAIBedrockProfile \
+  --role-name ForgeAIBedrockRole
+
+# ECS: in your task definition JSON
+# "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ForgeAIBedrockRole"
+```
+
+---
+
+### Step: Enable Bedrock model access in AWS Console
+
+> **Required once per AWS account** before the first Bedrock call.
+
+1. Open [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/) → **Model access**
+2. Click **Manage model access**
+3. Enable: **Anthropic Claude 3.5 Sonnet v2**, **Claude 3 Sonnet**, **Claude 3 Haiku**
+4. Submit — access is usually granted within seconds
+
+---
+
+### Verify Bedrock is working locally
+
+```bash
+# Send a test AI request (replace TOKEN with a valid Keycloak JWT)
+curl -X POST http://localhost/api/v1/projects/PROJECT_ID/ai/chat \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Say hello in one sentence"}' \
+  --no-buffer
+
+# Expected: streaming SSE response starting with data: {"type":"text","text":"Hello..."}
+# Check API logs for which provider was used:
+docker compose logs api | grep "\[AI\] Trying provider"
+# Should show: [AI] Trying provider: bedrock  → [AI] Provider bedrock succeeded
+```
+
+> **Fallback chain:** If Bedrock fails (no credentials, model not enabled, region not supported), the API automatically falls back to **Anthropic API → Gemini → GPT-4o**. The fallback is seamless — no user-visible error unless all providers fail.
+
+> **Full IAM reference:** See `infra/aws/README.md` for the complete guide including the policy JSON, trust policy, and all AWS CLI commands.
+
+---
+
 ## 8. Running Tests
 
 ### Current test counts (Sprints 0–10)
