@@ -11,6 +11,17 @@ function daysAgo(n: number): Date {
   return d
 }
 
+// Resolve the user's default workspace from the DB (first membership by creation order)
+async function getUserWorkspaceId(app: FastifyInstance, keycloakId: string): Promise<string | null> {
+  const rows = await app.db
+    .select({ workspaceId: schema.workspaceMembers.workspaceId })
+    .from(schema.users)
+    .innerJoin(schema.workspaceMembers, eq(schema.workspaceMembers.userId, schema.users.id))
+    .where(eq(schema.users.keycloakId, keycloakId))
+    .limit(1)
+  return rows[0]?.workspaceId ?? null
+}
+
 export async function analyticsRoutes(app: FastifyInstance) {
 
   // ── POST /analytics/events — record event ─────────────────────────────────
@@ -27,10 +38,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const { eventType, projectId, metadata } = request.body
       if (!eventType) return reply.code(400).send({ error: 'eventType required' })
 
+      const workspaceId = await getUserWorkspaceId(app, request.user!.keycloakId)
+      if (!workspaceId) return reply.code(400).send({ error: 'No workspace found' })
+
       await app.db.insert(schema.analyticsEvents).values({
-        workspaceId: request.user.workspaceId,
+        workspaceId,
         projectId: projectId ?? null,
-        userId: request.user.id,
+        userId: request.user!.id,
         eventType,
         metadata: metadata ?? {},
       })
@@ -43,7 +57,8 @@ export async function analyticsRoutes(app: FastifyInstance) {
     '/analytics/overview',
     { preHandler: [requireAuth] },
     async (request, reply) => {
-      const workspaceId = request.user.workspaceId
+      const workspaceId = await getUserWorkspaceId(app, request.user!.keycloakId)
+      if (!workspaceId) return reply.code(400).send({ error: 'No workspace found' })
       const since = daysAgo(30)
 
       // Event counts by type
@@ -110,7 +125,8 @@ export async function analyticsRoutes(app: FastifyInstance) {
     '/analytics/ai-usage',
     { preHandler: [requireAuth] },
     async (request, reply) => {
-      const workspaceId = request.user.workspaceId
+      const workspaceId = await getUserWorkspaceId(app, request.user!.keycloakId)
+      if (!workspaceId) return reply.code(400).send({ error: 'No workspace found' })
       const since = daysAgo(30)
 
       const rows = await app.db
@@ -160,11 +176,14 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const { projectId } = request.params
       const since = daysAgo(30)
 
+      const workspaceId = await getUserWorkspaceId(app, request.user!.keycloakId)
+      if (!workspaceId) return reply.code(400).send({ error: 'No workspace found' })
+
       const project = await app.db.query.projects.findFirst({
         where: (p: any, { and, eq }: any) =>
           and(
             eq(p.id, projectId),
-            eq(p.workspaceId, request.user.workspaceId)
+            eq(p.workspaceId, workspaceId)
           ),
       })
       if (!project) return reply.code(404).send({ error: 'Project not found' })
@@ -233,7 +252,8 @@ export async function analyticsRoutes(app: FastifyInstance) {
     '/analytics/activity',
     { preHandler: [requireAuth] },
     async (request, reply) => {
-      const workspaceId = request.user.workspaceId
+      const workspaceId = await getUserWorkspaceId(app, request.user!.keycloakId)
+      if (!workspaceId) return reply.code(400).send({ error: 'No workspace found' })
       const limit = Math.min(Number(request.query.limit ?? 50), 100)
       const offset = (Number(request.query.page ?? 1) - 1) * limit
 

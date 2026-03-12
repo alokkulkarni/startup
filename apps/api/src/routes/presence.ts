@@ -13,15 +13,19 @@ const PRESENCE_TTL = 60 // seconds
 
 export async function presenceRoutes(app: FastifyInstance) {
   // WebSocket presence endpoint
+  // preHandler runs before the WS upgrade — auth is validated with a real FastifyReply
   app.get<{ Params: { workspaceId: string } }>(
     '/ws/presence/:workspaceId',
-    { websocket: true },
+    {
+      websocket: true,
+      preHandler: async (request, reply) => {
+        await requireAuth(request, reply)
+      },
+    },
     async (connection, request: any) => {
-      if (!(await requireAuth(request, connection))) return
-
       const { workspaceId } = request.params as { workspaceId: string }
-      const userId = request.user.id
-      const userEmail = request.user.email
+      const userId = request.user!.id
+      const userEmail = request.user!.email
 
       const membership = await getWorkspaceMembership(app.db, userId, workspaceId)
       if (!membership) {
@@ -83,3 +87,4 @@ export async function presenceRoutes(app: FastifyInstance) {
     }
   )
 }
+

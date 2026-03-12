@@ -12,13 +12,25 @@ function makeChain(result: unknown[] = []): any {
   return p
 }
 
+const wsChain = () => makeChain([{ workspaceId: 'ws-1' }])
+
+// Smart select mock: returns workspace data when getUserWorkspaceId calls select({ workspaceId })
+function makeMockSelect(dataResult: unknown[] = []) {
+  return (fields: any) => {
+    if (fields && Object.prototype.hasOwnProperty.call(fields, 'workspaceId')) {
+      return wsChain()
+    }
+    return makeChain(dataResult)
+  }
+}
+
 function buildApp() {
   const app = Fastify({ logger: false })
   app.decorate('verifyAuth', async (req: any) => {
-    req.user = { id: 'user-1', keycloakId: 'kc-1', email: 't@t.com', workspaceId: 'ws-1' }
+    req.user = { id: 'user-1', keycloakId: 'kc-1', email: 't@t.com' }
   })
   app.addHook('preHandler', async (req: any) => {
-    if (!req.user) req.user = { id: 'user-1', keycloakId: 'kc-1', email: 't@t.com', workspaceId: 'ws-1' }
+    if (!req.user) req.user = { id: 'user-1', keycloakId: 'kc-1', email: 't@t.com' }
   })
   const mockDb: any = {
     query: {
@@ -29,7 +41,13 @@ function buildApp() {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockResolvedValue([{ id: 'evt-1' }]),
     }),
-    select: vi.fn().mockImplementation(() => makeChain([])),
+    // getUserWorkspaceId calls select({ workspaceId: <column> }) — detect by key name
+    select: vi.fn().mockImplementation((fields: any) => {
+      if (fields && Object.prototype.hasOwnProperty.call(fields, 'workspaceId')) {
+        return makeChain([{ workspaceId: 'ws-1' }])
+      }
+      return makeChain([])
+    }),
   }
   app.decorate('db', mockDb)
   app.register(analyticsRoutes, { prefix: '/api/v1' })
@@ -93,7 +111,7 @@ describe('POST /api/v1/analytics/events', () => {
     expect(res.json()).toMatchObject({ error: 'eventType required' })
   })
 
-  it('inserts event with workspaceId from request.user', async () => {
+  it('inserts event with workspaceId resolved from user membership', async () => {
     await app.inject({
       method: 'POST',
       url: '/api/v1/analytics/events',
@@ -144,7 +162,7 @@ describe('GET /api/v1/analytics/overview', () => {
   })
   afterAll(() => app.close())
   beforeEach(() => {
-    mockDb.select.mockReset().mockImplementation(() => makeChain([]))
+    mockDb.select.mockReset().mockImplementation(makeMockSelect())
   })
 
   it('returns 200', async () => {
@@ -177,6 +195,7 @@ describe('GET /api/v1/analytics/overview', () => {
 
   it('maps ai_request count correctly', async () => {
     mockDb.select
+      .mockReturnValueOnce(wsChain())
       .mockReturnValueOnce(makeChain([{ eventType: 'ai_request', count: '7' }]))
       .mockReturnValueOnce(makeChain([]))
       .mockReturnValueOnce(makeChain([]))
@@ -186,6 +205,7 @@ describe('GET /api/v1/analytics/overview', () => {
 
   it('counts active projects from groupBy results', async () => {
     mockDb.select
+      .mockReturnValueOnce(wsChain())
       .mockReturnValueOnce(makeChain([]))
       .mockReturnValueOnce(makeChain([{ projectId: 'p1' }, { projectId: 'p2' }, { projectId: 'p3' }]))
       .mockReturnValueOnce(makeChain([]))
@@ -195,6 +215,7 @@ describe('GET /api/v1/analytics/overview', () => {
 
   it('counts active members from groupBy results', async () => {
     mockDb.select
+      .mockReturnValueOnce(wsChain())
       .mockReturnValueOnce(makeChain([]))
       .mockReturnValueOnce(makeChain([]))
       .mockReturnValueOnce(makeChain([{ userId: 'u1' }, { userId: 'u2' }]))
@@ -204,6 +225,7 @@ describe('GET /api/v1/analytics/overview', () => {
 
   it('totalEvents sums all event type counts', async () => {
     mockDb.select
+      .mockReturnValueOnce(wsChain())
       .mockReturnValueOnce(
         makeChain([
           { eventType: 'ai_request', count: '5' },
@@ -229,7 +251,7 @@ describe('GET /api/v1/analytics/ai-usage', () => {
   })
   afterAll(() => app.close())
   beforeEach(() => {
-    mockDb.select.mockReset().mockImplementation(() => makeChain([]))
+    mockDb.select.mockReset().mockImplementation(makeMockSelect())
   })
 
   it('returns 200 with series property', async () => {
@@ -260,9 +282,9 @@ describe('GET /api/v1/analytics/ai-usage', () => {
 
   it('populates requests from db rows for matching dates', async () => {
     const today = new Date().toISOString().split('T')[0]
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ day: today, count: '9', metadata: {} }])
-    )
+    mockDb.select
+      .mockReturnValueOnce(wsChain())
+      .mockReturnValueOnce(makeChain([{ day: today, count: '9', metadata: {} }]))
     const res = await app.inject({ method: 'GET', url: '/api/v1/analytics/ai-usage' })
     const todayEntry = res.json().series.find((s: any) => s.date === today)
     expect(todayEntry?.requests).toBe(9)
@@ -288,7 +310,7 @@ describe('GET /api/v1/analytics/projects/:projectId', () => {
   })
   afterAll(() => app.close())
   beforeEach(() => {
-    mockDb.select.mockReset().mockImplementation(() => makeChain([]))
+    mockDb.select.mockReset().mockImplementation(makeMockSelect())
     mockDb.query.projects.findFirst.mockResolvedValue({
       id: 'proj-1',
       name: 'Test Project',
@@ -351,6 +373,7 @@ describe('GET /api/v1/analytics/projects/:projectId', () => {
 
   it('maps event counts to response fields', async () => {
     mockDb.select
+      .mockReturnValueOnce(wsChain())
       .mockReturnValueOnce(
         makeChain([
           { eventType: 'ai_request', count: '4' },
@@ -417,7 +440,7 @@ describe('GET /api/v1/analytics/activity', () => {
   })
   afterAll(() => app.close())
   beforeEach(() => {
-    mockDb.select.mockReset().mockImplementation(() => makeChain([mockEvent]))
+    mockDb.select.mockReset().mockImplementation(makeMockSelect([mockEvent]))
   })
 
   it('returns 200 with events array', async () => {

@@ -151,7 +151,7 @@ export async function aiRoutes(app: FastifyInstance) {
             write({ type: 'done' })
             res.end()
             trackEvent(app.db, {
-              workspaceId: request.user!.workspaceId,
+              workspaceId: project.workspaceId,
               projectId: projectId ?? null,
               userId: user.id,
               eventType: 'ai_request',

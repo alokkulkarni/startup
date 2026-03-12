@@ -23,7 +23,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return
       const { workspaceId } = request.params
-      const membership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const membership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!membership) return reply.code(403).send({ error: 'Not a workspace member' })
 
       const members = await app.db
@@ -59,12 +59,12 @@ export async function collaborationRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'Role must be editor or viewer' })
       }
 
-      const actorMembership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const actorMembership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!actorMembership || !canPerform(actorMembership.role, 'owner')) {
         return reply.code(403).send({ error: 'Only owners can change roles' })
       }
 
-      if (request.user.id === targetUserId) {
+      if (request.user!.id === targetUserId) {
         return reply.code(400).send({ error: 'Cannot change your own role' })
       }
 
@@ -86,12 +86,12 @@ export async function collaborationRoutes(app: FastifyInstance) {
       if (!(await requireAuth(request, reply))) return
       const { workspaceId, userId: targetUserId } = request.params
 
-      const actorMembership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const actorMembership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!actorMembership || !canPerform(actorMembership.role, 'owner')) {
         return reply.code(403).send({ error: 'Only owners can remove members' })
       }
 
-      if (request.user.id === targetUserId) {
+      if (request.user!.id === targetUserId) {
         return reply.code(400).send({ error: 'Cannot remove yourself from workspace' })
       }
 
@@ -111,7 +111,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return
       const { workspaceId } = request.params
-      const membership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const membership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!membership || !canPerform(membership.role, 'editor')) {
         return reply.code(403).send({ error: 'Requires editor role or higher' })
       }
@@ -144,7 +144,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'Role must be editor or viewer' })
       }
 
-      const actorMembership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const actorMembership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!actorMembership || !canPerform(actorMembership.role, 'owner')) {
         return reply.code(403).send({ error: 'Only owners can invite members' })
       }
@@ -175,7 +175,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
         .insert(schema.workspaceInvitations)
         .values({
           workspaceId,
-          invitedBy: request.user.id,
+          invitedBy: request.user!.id,
           email,
           role,
           token: generateToken(),
@@ -193,7 +193,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
 
       trackEvent(app.db, {
         workspaceId,
-        userId: request.user.id,
+        userId: request.user!.id,
         eventType: 'member_invited',
         metadata: { inviteeEmail: email, role },
       }, app.log)
@@ -209,7 +209,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
       if (!(await requireAuth(request, reply))) return
       const { workspaceId, invitationId } = request.params
 
-      const actorMembership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const actorMembership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!actorMembership || !canPerform(actorMembership.role, 'owner')) {
         return reply.code(403).send({ error: 'Only owners can revoke invitations' })
       }
@@ -253,7 +253,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
         return reply.code(410).send({ error: 'Invitation has expired' })
       }
 
-      if (request.user.email !== invitation.email) {
+      if (request.user!.email !== invitation.email) {
         return reply.code(403).send({ error: 'This invitation was sent to a different email address' })
       }
 
@@ -261,7 +261,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
         .insert(schema.workspaceMembers)
         .values({
           workspaceId: invitation.workspaceId,
-          userId: request.user.id,
+          userId: request.user!.id,
           role: invitation.role,
         })
         .onConflictDoUpdate({
@@ -284,7 +284,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return
       const { workspaceId } = request.params
-      const membership = await getWorkspaceMembership(app.db, request.user.id, workspaceId)
+      const membership = await getWorkspaceMembership(app.db, request.user!.id, workspaceId)
       if (!membership) return reply.code(403).send({ error: 'Not a workspace member' })
 
       const redis = (app as any).redis
