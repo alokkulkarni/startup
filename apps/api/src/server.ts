@@ -22,6 +22,9 @@ import { deploymentRoutes } from './routes/deployments.js'
 import { githubRoutes } from './routes/github.js'
 import { templateRoutes } from './routes/templates.js'
 import { billingRoutes } from './routes/billing.js'
+import websocket from '@fastify/websocket'
+import { collaborationRoutes } from './routes/collaboration.js'
+import { presenceRoutes } from './routes/presence.js'
 import { startSnapshotCleanupWorker } from './workers/snapshotCleanup.js'
 import { startDeployWorker } from './workers/deployWorker.js'
 
@@ -72,6 +75,7 @@ await app.register(postgresPlugin)
 await app.register(redisPlugin)
 await app.register(storagePlugin)
 await app.register(authPlugin)
+await app.register(websocket)
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 await app.register(healthRoutes, { prefix: '/api/v1' })
@@ -87,6 +91,8 @@ await app.register(deploymentRoutes, { prefix: '/api/v1/projects' })
 await app.register(githubRoutes, { prefix: '/api/v1' })
 await app.register(templateRoutes, { prefix: '/api/v1' })
 await app.register(billingRoutes, { prefix: '/api/v1' })
+await app.register(collaborationRoutes, { prefix: '/api/v1' })
+await app.register(presenceRoutes, { prefix: '/api/v1' })
 
 startSnapshotCleanupWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 startDeployWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)

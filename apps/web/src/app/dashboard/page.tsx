@@ -16,6 +16,9 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 import { useSubscription } from '@/hooks/useSubscription'
 import { PlanBadge } from '@/components/billing/PlanBadge'
 import { UpgradePrompt } from '@/components/billing/UpgradePrompt'
+import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher'
+import { AvatarStack } from '@/components/presence/AvatarStack'
+import { usePresence } from '@/hooks/usePresence'
 import type { Project } from '@forge/shared'
 
 export default function DashboardPage() {
@@ -31,6 +34,17 @@ export default function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showProjectLimitPrompt, setShowProjectLimitPrompt] = useState(false)
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('forge:workspaceId') ?? ''
+    return ''
+  })
+
+  const { onlineUsers } = usePresence(activeWorkspaceId || null)
+
+  function handleWorkspaceSwitch(workspaceId: string) {
+    setActiveWorkspaceId(workspaceId)
+    if (typeof window !== 'undefined') localStorage.setItem('forge:workspaceId', workspaceId)
+  }
 
   useEffect(() => {
     if (!authLoading && !authenticated) router.push('/login')
@@ -113,10 +127,13 @@ export default function DashboardPage() {
           <Link href="/dashboard" className="w-8 h-8 bg-forge-500 rounded-lg flex items-center justify-center font-bold text-white text-sm">
             F
           </Link>
+          <WorkspaceSwitcher
+            currentWorkspaceId={activeWorkspaceId}
+            onSwitch={handleWorkspaceSwitch}
+          />
           <div className="hidden sm:flex items-center gap-1.5">
-            <span className="font-semibold text-sm">Forge AI</span>
             <span className="text-gray-600 text-sm">/</span>
-            <span className="text-sm text-gray-400">{user?.name ?? 'Workspace'}</span>
+            <span className="text-sm text-gray-400">{user?.name ?? 'Dashboard'}</span>
           </div>
         </div>
 
@@ -145,6 +162,9 @@ export default function DashboardPage() {
             Import from GitHub
           </Button>
           <PlanBadge tier={subscription?.tier ?? 'free'} size="sm" />
+          {onlineUsers.length > 0 && (
+            <AvatarStack users={onlineUsers} maxVisible={4} size="sm" />
+          )}
           <Link href="/dashboard/profile">
             <div className="w-8 h-8 rounded-full bg-forge-700 flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:ring-2 hover:ring-forge-500 transition-all overflow-hidden">
               {user?.avatarUrl ? (

@@ -111,6 +111,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   owner: one(users, { fields: [workspaces.ownerId], references: [users.id] }),
   members: many(workspaceMembers),
   projects: many(projects),
+  invitations: many(workspaceInvitations),
 }))
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -262,4 +263,42 @@ export const templatesRelations = relations(templates, ({ many }) => ({
 export const templateRatingsRelations = relations(templateRatings, ({ one }) => ({
   template: one(templates, { fields: [templateRatings.templateId], references: [templates.id] }),
   user: one(users, { fields: [templateRatings.userId], references: [users.id] }),
+}))
+
+// ── Workspace Invitations ─────────────────────────────────────────────────────
+export const workspaceInvitations = pgTable('workspace_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  invitedBy: uuid('invited_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role').notNull().default('viewer'),
+  token: text('token').notNull().unique(),
+  status: text('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, t => ({
+  workspaceIdx: index('workspace_invitations_workspace_idx').on(t.workspaceId),
+  tokenIdx: uniqueIndex('workspace_invitations_token_idx').on(t.token),
+  emailIdx: index('workspace_invitations_email_idx').on(t.email),
+}))
+
+// ── Presence Sessions ─────────────────────────────────────────────────────────
+export const presenceSessions = pgTable('presence_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  status: text('status').notNull().default('online'),
+}, t => ({
+  uniqueIdx: uniqueIndex('presence_sessions_unique_idx').on(t.workspaceId, t.userId),
+}))
+
+export const workspaceInvitationsRelations = relations(workspaceInvitations, ({ one }) => ({
+  workspace: one(workspaces, { fields: [workspaceInvitations.workspaceId], references: [workspaces.id] }),
+  invitedByUser: one(users, { fields: [workspaceInvitations.invitedBy], references: [users.id] }),
+}))
+
+export const presenceSessionsRelations = relations(presenceSessions, ({ one }) => ({
+  workspace: one(workspaces, { fields: [presenceSessions.workspaceId], references: [workspaces.id] }),
+  user: one(users, { fields: [presenceSessions.userId], references: [users.id] }),
 }))
