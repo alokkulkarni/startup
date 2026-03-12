@@ -120,3 +120,26 @@ export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) =
   workspace: one(workspaces, { fields: [workspaceMembers.workspaceId], references: [workspaces.id] }),
   user: one(users, { fields: [workspaceMembers.userId], references: [users.id] }),
 }))
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }).unique(),
+  plan: text('plan').notNull().default('free'),
+  status: text('status').notNull().default('active'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  currentPeriodEnd: timestamp('current_period_end'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, t => ({
+  workspaceIdx: uniqueIndex('subscriptions_workspace_idx').on(t.workspaceId),
+}))
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  workspace: one(workspaces, { fields: [subscriptions.workspaceId], references: [workspaces.id] }),
+}))
+
+export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
+  conversation: one(aiConversations, { fields: [aiMessages.conversationId], references: [aiConversations.id] }),
+}))
