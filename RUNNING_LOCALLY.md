@@ -2,7 +2,7 @@
 
 Complete guide to running the full Forge AI stack on your machine.
 
-> **Current build:** Sprints 0–9 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), and Template Marketplace with Onboarding Wizard.
+> **Current build:** Sprints 0–10 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), Template Marketplace with Onboarding Wizard, and Billing & Subscriptions (Stripe, plan tiers, usage limits).
 
 ---
 
@@ -213,7 +213,7 @@ open http://localhost:8080
 
 ## 4. Run Database Migrations
 
-There are 7 migrations covering all sprints:
+There are 8 migrations covering all sprints:
 
 | Migration | Sprint | What it adds |
 |-----------|--------|-------------|
@@ -224,10 +224,11 @@ There are 7 migrations covering all sprints:
 | `0004_deployments` | 7 | deployments, project_env_vars |
 | `0005_github` | 8 | github_connections + 5 GitHub columns on projects |
 | `0006_templates` | 9 | templates, template_ratings + onboarding columns on users |
+| `0007_billing` | 10 | Stripe columns on subscriptions (planTier, stripeCustomerId, periodEnd, etc.) |
 
 ```bash
 cd apps/api
-pnpm db:migrate    # applies all 7 pending Drizzle migrations
+pnpm db:migrate    # applies all 8 pending Drizzle migrations
 ```
 
 Verify migrations applied:
@@ -389,19 +390,19 @@ docker compose exec postgres psql -U forge -d forge \
 
 ## 8. Running Tests
 
-### Current test counts (Sprints 0–9)
+### Current test counts (Sprints 0–10)
 
 | Package | Test files | Tests | Command |
 |---------|-----------|-------|---------|
-| `@forge/api` | 9 | **92** | `pnpm --filter @forge/api test:unit` |
-| `@forge/web` | 17 | **80** | `pnpm --filter @forge/web test:unit` |
-| **Total** | **26** | **172** | `pnpm test` |
+| `@forge/api` | 10 | **124** | `pnpm --filter @forge/api test:unit` |
+| `@forge/web` | 23 | **108** | `pnpm --filter @forge/web test:unit` |
+| **Total** | **33** | **232** | `pnpm test` |
 
 ### Unit tests (fast, no Docker needed)
 ```bash
 pnpm test                              # all packages
-pnpm --filter @forge/api test:unit     # API only (92 tests, ~600ms)
-pnpm --filter @forge/web test:unit     # Web only (80 tests, ~2s)
+pnpm --filter @forge/api test:unit     # API only (124 tests, ~600ms)
+pnpm --filter @forge/web test:unit     # Web only (108 tests, ~2s)
 ```
 
 ### Typecheck
@@ -649,8 +650,73 @@ SELECT slug, category, framework, use_count FROM templates ORDER BY use_count DE
 # Check user onboarding state (Sprint 9)
 SELECT email, onboarding_completed, onboarding_step FROM users;
 
+# Check billing subscription (Sprint 10)
+SELECT u.email, s.plan_tier, s.status, s.stripe_customer_id, s.period_end
+FROM subscriptions s JOIN users u ON u.id = s.user_id;
+
 # Exit
 \q
+```
+
+### ✅ Sprint 10 — Billing & Subscriptions
+
+> **Stripe keys required for full testing.** Without keys the billing UI is hidden but the app still works.
+
+#### Set up Stripe test keys
+1. Create a free account at [dashboard.stripe.com](https://dashboard.stripe.com)
+2. Go to **Developers → API Keys** → copy the **Secret key** (`sk_test_...`)
+3. Add to `apps/api/.env`:
+```
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...   # set up in next step
+STRIPE_PRO_MONTHLY_PRICE_ID=price_...
+STRIPE_PRO_YEARLY_PRICE_ID=price_...
+STRIPE_TEAM_MONTHLY_PRICE_ID=price_...
+STRIPE_TEAM_YEARLY_PRICE_ID=price_...
+```
+4. Create products in Stripe Dashboard: **Pro Monthly ($19)**, **Pro Yearly ($15×12)**, **Team Monthly ($49)**, **Team Yearly ($39×12)**
+5. For webhook: install Stripe CLI → `stripe listen --forward-to localhost/api/v1/billing/webhook` → copy the `whsec_...` key
+
+#### Pricing page
+1. Navigate to `http://localhost/pricing`
+2. You should see **3 plan cards**: Free, Pro (highlighted "Most Popular"), Team
+3. Toggle **Monthly / Yearly** — prices update (Pro: $19/mo or $15/mo, Team: $49/mo or $39/mo)
+4. Click **Upgrade to Pro** → redirected to Stripe Checkout (requires real Stripe keys)
+
+#### Plan badge in dashboard
+1. Log in → dashboard header shows **Free** badge (grey pill)
+2. After upgrading: badge shows **⚡ Pro** (violet) or **🚀 Team** (amber)
+
+#### Usage bar
+1. In dashboard → click **Account / Billing** → `BillingPanel` shows AI usage progress bar
+2. Shows: `23 / 50 AI requests today` for free tier
+3. When ≥90% used: bar turns orange with `⚠️ Nearing limit`
+4. When 100%: shows `Limit reached — upgrade for more`
+
+#### Upgrade prompts
+1. **Rate limit prompt**: Send 50+ AI requests in a day (free tier) → after the 429 response, an upgrade banner appears in the workspace chat
+2. **Project limit prompt**: Try to create a 4th project on free tier → upgrade modal appears before the create dialog
+
+#### Billing portal (paid users only)
+1. After upgrading to Pro → dashboard shows **Manage Billing** button
+2. Clicking it redirects to Stripe Customer Portal to manage subscription, download invoices, cancel
+
+#### Verify billing data in database
+```bash
+docker compose exec postgres psql -U forge -d forge
+
+-- Check subscription tiers
+SELECT u.email, s.plan_tier, s.status, s.stripe_customer_id, s.cancel_at_period_end
+FROM subscriptions s JOIN users u ON u.id = s.user_id;
+
+-- Check AI rate limit key in Redis
+\q
+```
+```bash
+docker compose exec redis redis-cli
+KEYS ratelimit:ai:*       -- shows per-user rate limit keys
+GET ratelimit:ai:<userId> -- current count for a user
+exit
 ```
 
 ### 🔍 Verifying Redis State
@@ -877,7 +943,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 docker compose up -d
 # Wait ~60s for Keycloak to boot
 
-# 4. Migrate DB (applies all 7 migrations)
+# 4. Migrate DB (applies all 8 migrations)
 pnpm --filter @forge/api db:migrate
 
 # 5. Seed templates (optional — populates 10 starter templates)
@@ -898,13 +964,15 @@ open http://localhost
 - One-click deploy to Vercel/Netlify/Cloudflare (Sprint 7, needs provider API key)
 - GitHub push/pull/PR/import (Sprint 8, needs GitHub OAuth App — see Section 7b)
 - Template Marketplace with 10 starter templates + Onboarding Wizard (Sprint 9)
-- 172 unit tests passing across API + web
+- Billing & Subscriptions with Stripe (Sprint 10, needs Stripe keys for checkout)
+- 232 unit tests passing across API + web
 
 **Optional features and what they need:**
 
 | Feature | Extra config required |
 |---------|----------------------|
 | Template Marketplace | `pnpm db:seed` to populate templates |
+| Billing & Subscriptions | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + price IDs — see **Section 9 Sprint 10** |
 | GitHub push / pull / import | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — see **Section 7b** |
 | Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
 | Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
