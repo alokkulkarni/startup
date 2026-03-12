@@ -2,7 +2,7 @@
 
 Complete guide to running the full Forge AI stack on your machine.
 
-> **Current build:** Sprints 0–8 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, and full GitHub integration (push, pull, PR, import).
+> **Current build:** Sprints 0–9 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), and Template Marketplace with Onboarding Wizard.
 
 ---
 
@@ -213,7 +213,7 @@ open http://localhost:8080
 
 ## 4. Run Database Migrations
 
-There are 6 migrations covering all sprints:
+There are 7 migrations covering all sprints:
 
 | Migration | Sprint | What it adds |
 |-----------|--------|-------------|
@@ -223,10 +223,11 @@ There are 6 migrations covering all sprints:
 | `0003_snapshots` | 6 | project_snapshots (version history) |
 | `0004_deployments` | 7 | deployments, project_env_vars |
 | `0005_github` | 8 | github_connections + 5 GitHub columns on projects |
+| `0006_templates` | 9 | templates, template_ratings + onboarding columns on users |
 
 ```bash
 cd apps/api
-pnpm db:migrate    # applies all 6 pending Drizzle migrations
+pnpm db:migrate    # applies all 7 pending Drizzle migrations
 ```
 
 Verify migrations applied:
@@ -234,7 +235,8 @@ Verify migrations applied:
 docker compose exec postgres psql -U forge -d forge -c "\dt"
 # Should list: users, workspaces, workspace_members, projects, project_files,
 #              ai_conversations, ai_messages, project_snapshots,
-#              deployments, project_env_vars, subscriptions, github_connections
+#              deployments, project_env_vars, subscriptions, github_connections,
+#              templates, template_ratings
 ```
 
 To inspect your database schema:
@@ -387,19 +389,19 @@ docker compose exec postgres psql -U forge -d forge \
 
 ## 8. Running Tests
 
-### Current test counts (Sprints 0–8)
+### Current test counts (Sprints 0–9)
 
 | Package | Test files | Tests | Command |
 |---------|-----------|-------|---------|
-| `@forge/api` | 8 | **60** | `pnpm --filter @forge/api test:unit` |
-| `@forge/web` | 12 | **55** | `pnpm --filter @forge/web test:unit` |
-| **Total** | **20** | **115** | `pnpm test` |
+| `@forge/api` | 9 | **92** | `pnpm --filter @forge/api test:unit` |
+| `@forge/web` | 17 | **80** | `pnpm --filter @forge/web test:unit` |
+| **Total** | **26** | **172** | `pnpm test` |
 
 ### Unit tests (fast, no Docker needed)
 ```bash
 pnpm test                              # all packages
-pnpm --filter @forge/api test:unit     # API only (60 tests, ~600ms)
-pnpm --filter @forge/web test:unit     # Web only (55 tests, ~1.7s)
+pnpm --filter @forge/api test:unit     # API only (92 tests, ~600ms)
+pnpm --filter @forge/web test:unit     # Web only (80 tests, ~2s)
 ```
 
 ### Typecheck
@@ -565,6 +567,65 @@ FROM projects WHERE github_repo_owner IS NOT NULL;
 \q
 ```
 
+### ✅ Sprint 9 — Template Marketplace & Onboarding
+
+> **Setup required first:** Run `pnpm db:seed` to populate the 10 starter templates.
+
+```bash
+cd apps/api
+pnpm db:seed   # seeds 10 templates into the templates table
+```
+
+#### Onboarding Wizard (first-time users)
+1. Log in with a **brand new user account** (register fresh in Keycloak)
+2. After first login → dashboard loads with the **Onboarding Wizard overlay** (z-index overlay, dark backdrop)
+3. **Step 0 — Welcome:** "Welcome to Forge AI!" → click **Get Started**
+4. **Step 1 — Describe your project:** Type "I want to build a SaaS dashboard" → click **Find Templates**
+   - 3 template suggestions appear below the input
+5. **Step 2 — Select template:** Click a template card to select it (purple border highlights it)
+6. **Confirm:** Click **Create Project** → wizard closes → redirected to new workspace pre-loaded with template files
+7. Test **Skip:** Click the skip button on any step → wizard closes, onboarding marked complete
+
+#### Template Gallery Page
+1. Navigate to `http://localhost/templates`
+2. You should see a **3-column grid** of 10 template cards
+3. Each card shows: gradient thumbnail, name, description, framework badge (colour-coded), stats
+4. **Category filter:** Click "SaaS" pill → grid filters to SaaS templates only
+5. **Search:** Type "todo" in the search bar → React Todo template appears
+6. **Sort:** Change dropdown to "Top Rated" → templates reorder by avg_rating
+7. Click **Preview** on any card → `TemplatePreviewModal` opens with file tree on the right panel
+8. Click stars (1–5) in the modal to rate the template
+9. Click **Use This Template** → cloned project created → redirect to workspace
+
+#### New Project from Template (in dashboard)
+1. On Dashboard → click **New Project**
+2. Modal opens showing **"From Template" tab** (default, not blank)
+3. Template grid shows available templates (searchable)
+4. Click a template card to select (purple border)
+5. Project name auto-fills from template name (editable)
+6. Click **Create Project** → workspace opens with all template files pre-populated
+7. Switch to **"Blank Project" tab** → original form (name + framework dropdown) still works
+
+#### Templates navigation link
+1. Check dashboard header — **"Templates"** link should appear next to other nav items
+2. Clicking it navigates to `/templates` gallery page
+
+#### Verify templates data in database
+```bash
+docker compose exec postgres psql -U forge -d forge
+
+-- Check 10 templates seeded
+SELECT slug, category, framework, use_count, avg_rating FROM templates ORDER BY slug;
+
+-- Check ratings after rating a template
+SELECT t.slug, tr.rating, tr.user_id FROM template_ratings tr JOIN templates t ON t.id = tr.template_id;
+
+-- Check onboarding state per user
+SELECT email, onboarding_completed, onboarding_step FROM users;
+
+\q
+```
+
 ### 🔍 Verifying the Database State
 ```bash
 # Connect to postgres
@@ -581,6 +642,12 @@ SELECT github_login FROM github_connections;  -- Sprint 8: connected accounts
 
 # Check project GitHub linkage (Sprint 8)
 SELECT name, github_repo_owner, github_repo_name FROM projects WHERE github_repo_owner IS NOT NULL;
+
+# Check templates were seeded (Sprint 9)
+SELECT slug, category, framework, use_count FROM templates ORDER BY use_count DESC;
+
+# Check user onboarding state (Sprint 9)
+SELECT email, onboarding_completed, onboarding_step FROM users;
 
 # Exit
 \q
@@ -807,13 +874,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 docker compose up -d
 # Wait ~60s for Keycloak to boot
 
-# 4. Migrate DB (applies all 6 migrations)
+# 4. Migrate DB (applies all 7 migrations)
 pnpm --filter @forge/api db:migrate
 
-# 5. Start dev servers
+# 5. Seed templates (optional — populates 10 starter templates)
+pnpm --filter @forge/api db:seed
+
+# 6. Start dev servers
 pnpm dev
 
-# 6. Open browser
+# 7. Open browser
 open http://localhost
 ```
 
@@ -824,12 +894,14 @@ open http://localhost
 - Version history + undo (Sprint 6)
 - One-click deploy to Vercel/Netlify/Cloudflare (Sprint 7, needs provider API key)
 - GitHub push/pull/PR/import (Sprint 8, needs GitHub OAuth App — see Section 7b)
-- 115 unit tests passing across API + web
+- Template Marketplace with 10 starter templates + Onboarding Wizard (Sprint 9)
+- 172 unit tests passing across API + web
 
 **Optional features and what they need:**
 
 | Feature | Extra config required |
 |---------|----------------------|
+| Template Marketplace | `pnpm db:seed` to populate templates |
 | GitHub push / pull / import | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — see **Section 7b** |
 | Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
 | Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
