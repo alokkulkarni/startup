@@ -14,6 +14,10 @@ vi.mock('../services/diff.js', () => ({
   parseAIResponse: vi.fn().mockReturnValue({ explanation: '', diffs: [] }),
   applyDiffs: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock('../services/stripe.js', () => ({
+  getUserPlanLimit: vi.fn(async () => 50),
+  PLAN_LIMITS: { free: { aiRequestsPerDay: 50, maxProjects: 3, maxFilesPerProject: 20 } },
+}))
 
 const mockUser = {
   id: 'user-uuid-001',

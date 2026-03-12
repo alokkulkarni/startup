@@ -21,6 +21,8 @@ import { useWebContainer } from '@/hooks/useWebContainer'
 import { useSnapshots } from '@/hooks/useSnapshots'
 import { useToast } from '@/hooks/useToast'
 import { useDeployments } from '@/hooks/useDeployments'
+import { useSubscription } from '@/hooks/useSubscription'
+import { UpgradePrompt } from '@/components/billing/UpgradePrompt'
 import type { FileNode } from '@/hooks/useFileTree'
 import type { Project } from '@forge/shared'
 import type { Viewport } from '@/components/preview/ViewportToggle'
@@ -52,6 +54,7 @@ export default function ProjectPage() {
   const [githubPanelOpen, setGithubPanelOpen] = useState(false)
   const [deployMenuOpen, setDeployMenuOpen] = useState(false)
   const [healAttempts, setHealAttempts] = useState(0)
+  const [showRateLimitPrompt, setShowRateLimitPrompt] = useState(false)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -63,6 +66,7 @@ export default function ProjectPage() {
   }, [authenticated])
 
   const { toast } = useToast()
+  const { startCheckout } = useSubscription()
 
   const { isDeploying, latestDeployUrl, triggerDeploy } = useDeployments(id, token)
   const { syncStatus, refetchSyncStatus } = useGitHub(id)
@@ -400,6 +404,7 @@ export default function ProjectPage() {
             initialPrompt={fixPrompt}
             onPromptConsumed={() => setFixPrompt(null)}
             files={files}
+            onRateLimit={() => setShowRateLimitPrompt(true)}
           />
         </div>
 
@@ -502,6 +507,13 @@ export default function ProjectPage() {
         isOpen={githubPanelOpen}
         onClose={() => setGithubPanelOpen(false)}
       />
+      {showRateLimitPrompt && (
+        <UpgradePrompt
+          type="rate_limit"
+          onClose={() => setShowRateLimitPrompt(false)}
+          onUpgrade={priceId => startCheckout(priceId)}
+        />
+      )}
     </div>
   )
 }

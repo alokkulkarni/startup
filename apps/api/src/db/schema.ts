@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, unique
+  pgTable, uuid, text, varchar, timestamp, boolean, integer, jsonb, index, uniqueIndex, unique
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -140,7 +140,11 @@ export const subscriptions = pgTable('subscriptions', {
   status: text('status').notNull().default('active'),
   stripeCustomerId: text('stripe_customer_id'),
   stripeSubscriptionId: text('stripe_subscription_id'),
+  stripePriceId: varchar('stripe_price_id', { length: 255 }),
+  planTier: varchar('plan_tier', { length: 50 }).default('free').notNull(),
   currentPeriodEnd: timestamp('current_period_end'),
+  periodStart: timestamp('period_start'),
+  periodEnd: timestamp('period_end'),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, t => ({

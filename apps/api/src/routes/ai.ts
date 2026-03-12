@@ -6,8 +6,8 @@ import { requireAuth } from '../middleware/auth.js'
 import { streamAIResponse } from '../services/ai.js'
 import { buildSystemPrompt, getConversationHistory } from '../services/context.js'
 import { parseAIResponse, applyDiffs } from '../services/diff.js'
+import { getUserPlanLimit } from '../services/stripe.js'
 
-const FREE_TIER_DAILY_LIMIT = 50
 const RATE_LIMIT_TTL_SECONDS = 86400 // 24 hours
 
 const chatBodySchema = z.object({
@@ -59,13 +59,16 @@ export async function aiRoutes(app: FastifyInstance) {
         })
       }
 
-      // Rate limit: 50 AI requests per user per day
+      // Rate limit: check per-plan daily limit
       const rateLimitKey = `ratelimit:ai:${user.id}`
-      const currentCount = await app.redis.incr(rateLimitKey)
+      const [currentCount, planLimit] = await Promise.all([
+        app.redis.incr(rateLimitKey),
+        getUserPlanLimit(app.db, user.id),
+      ])
       if (currentCount === 1) {
         await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
       }
-      if (currentCount > FREE_TIER_DAILY_LIMIT) {
+      if (currentCount > planLimit) {
         return reply
           .code(429)
           .header('X-RateLimit-Remaining', '0')

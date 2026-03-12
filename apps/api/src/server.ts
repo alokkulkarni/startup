@@ -21,6 +21,7 @@ import { snapshotRoutes } from './routes/snapshots.js'
 import { deploymentRoutes } from './routes/deployments.js'
 import { githubRoutes } from './routes/github.js'
 import { templateRoutes } from './routes/templates.js'
+import { billingRoutes } from './routes/billing.js'
 import { startSnapshotCleanupWorker } from './workers/snapshotCleanup.js'
 import { startDeployWorker } from './workers/deployWorker.js'
 
@@ -85,6 +86,7 @@ await app.register(snapshotRoutes, { prefix: '/api/v1/projects' })
 await app.register(deploymentRoutes, { prefix: '/api/v1/projects' })
 await app.register(githubRoutes, { prefix: '/api/v1' })
 await app.register(templateRoutes, { prefix: '/api/v1' })
+await app.register(billingRoutes, { prefix: '/api/v1' })
 
 startSnapshotCleanupWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 startDeployWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)

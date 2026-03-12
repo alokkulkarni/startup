@@ -15,6 +15,7 @@ interface ChatPanelProps {
   initialPrompt?: string | null
   onPromptConsumed?: () => void
   files?: { path: string }[]
+  onRateLimit?: () => void
 }
 
 function EmptyState() {
@@ -96,7 +97,7 @@ function getSuggestions(lastMessage: string): string[] {
   return suggestions.slice(0, 3)
 }
 
-export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed, files }: ChatPanelProps) {
+export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed, files, onRateLimit }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
@@ -124,6 +125,13 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptCo
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isStreaming])
+
+  // Notify parent when rate limit is hit
+  useEffect(() => {
+    if (rateLimit?.remaining === 0) {
+      onRateLimit?.()
+    }
+  }, [rateLimit?.remaining]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify parent when AI finishes streaming (files may have changed)
   useEffect(() => {

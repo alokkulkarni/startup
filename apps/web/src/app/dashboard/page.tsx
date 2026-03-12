@@ -13,6 +13,9 @@ import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/useToast'
 import { useOnboarding } from '@/hooks/useOnboarding'
+import { useSubscription } from '@/hooks/useSubscription'
+import { PlanBadge } from '@/components/billing/PlanBadge'
+import { UpgradePrompt } from '@/components/billing/UpgradePrompt'
 import type { Project } from '@forge/shared'
 
 export default function DashboardPage() {
@@ -20,12 +23,14 @@ export default function DashboardPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { onboarding } = useOnboarding()
+  const { subscription, startCheckout } = useSubscription()
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showProjectLimitPrompt, setShowProjectLimitPrompt] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !authenticated) router.push('/login')
@@ -45,6 +50,15 @@ export default function DashboardPage() {
   useEffect(() => {
     if (authenticated) fetchProjects()
   }, [authenticated, fetchProjects])
+
+  const handleNewProject = () => {
+    const maxProjects = subscription?.limits.maxProjects ?? -1
+    if (maxProjects !== -1 && projects.length >= maxProjects) {
+      setShowProjectLimitPrompt(true)
+      return
+    }
+    setShowNewModal(true)
+  }
 
   const handleCreate = async (name: string, framework: string) => {
     const res = await api.post<Project>('/v1/projects', { name, framework })
@@ -114,7 +128,7 @@ export default function DashboardPage() {
             onChange={e => setSearchQuery(e.target.value)}
             className="hidden sm:block h-9 w-52 bg-gray-800 border border-gray-700 rounded-xl px-3 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-forge-500"
           />
-          <Button size="sm" onClick={() => setShowNewModal(true)}>
+          <Button size="sm" onClick={handleNewProject}>
             + New project
           </Button>
           <Link href="/templates">
@@ -122,9 +136,15 @@ export default function DashboardPage() {
               Templates
             </Button>
           </Link>
+          <Link href="/pricing">
+            <Button size="sm" variant="secondary">
+              Pricing
+            </Button>
+          </Link>
           <Button size="sm" variant="secondary" onClick={() => setShowImportModal(true)}>
             Import from GitHub
           </Button>
+          <PlanBadge tier={subscription?.tier ?? 'free'} size="sm" />
           <Link href="/dashboard/profile">
             <div className="w-8 h-8 rounded-full bg-forge-700 flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:ring-2 hover:ring-forge-500 transition-all overflow-hidden">
               {user?.avatarUrl ? (
@@ -146,7 +166,7 @@ export default function DashboardPage() {
               {projects.length} project{projects.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <Button onClick={() => setShowNewModal(true)} className="hidden sm:inline-flex">
+          <Button onClick={handleNewProject} className="hidden sm:inline-flex">
             + New project
           </Button>
           <Button variant="secondary" onClick={() => setShowImportModal(true)} className="hidden sm:inline-flex">
@@ -182,7 +202,7 @@ export default function DashboardPage() {
                 : 'Create your first AI-powered web app in seconds. Just describe what you want.'}
             </p>
             {!searchQuery && (
-              <Button onClick={() => setShowNewModal(true)} size="lg">
+              <Button onClick={handleNewProject} size="lg">
                 Create your first project
               </Button>
             )}
@@ -221,6 +241,13 @@ export default function DashboardPage() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
       />
+      {showProjectLimitPrompt && (
+        <UpgradePrompt
+          type="project_limit"
+          onClose={() => setShowProjectLimitPrompt(false)}
+          onUpgrade={priceId => startCheckout(priceId)}
+        />
+      )}
       {/* Onboarding wizard — shown to first-time users */}
       {onboarding !== null && !onboarding.completed && (
         <OnboardingWizard onComplete={() => setShowNewModal(false)} />
