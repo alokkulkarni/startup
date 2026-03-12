@@ -17,6 +17,8 @@ import { uploadRoutes } from './routes/upload.js'
 import { projectRoutes } from './routes/projects.js'
 import { aiRoutes } from './routes/ai.js'
 import { fileRoutes } from './routes/files.js'
+import { snapshotRoutes } from './routes/snapshots.js'
+import { startSnapshotCleanupWorker } from './workers/snapshotCleanup.js'
 
 const app = Fastify({
   logger: {
@@ -75,6 +77,9 @@ await app.register(uploadRoutes, { prefix: '/api/v1/upload' })
 await app.register(projectRoutes, { prefix: '/api/v1/projects' })
 await app.register(aiRoutes, { prefix: '/api/v1/projects' })
 await app.register(fileRoutes, { prefix: '/api/v1/projects' })
+await app.register(snapshotRoutes, { prefix: '/api/v1/projects' })
+
+startSnapshotCleanupWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const start = async () => {

@@ -109,6 +109,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   workspace: one(workspaces, { fields: [projects.workspaceId], references: [workspaces.id] }),
   files: many(projectFiles),
   conversations: many(aiConversations),
+  snapshots: many(projectSnapshots),
 }))
 
 export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
@@ -142,4 +143,19 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
 
 export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
   conversation: one(aiConversations, { fields: [aiMessages.conversationId], references: [aiConversations.id] }),
+}))
+
+// ── Project Snapshots ─────────────────────────────────────────────────────────
+export const projectSnapshots = pgTable('project_snapshots', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  filesJson: jsonb('files_json').notNull().default([]),
+  triggeredBy: text('triggered_by').notNull().default('ai'),
+  description: text('description'),
+  label: text('label'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const projectSnapshotsRelations = relations(projectSnapshots, ({ one }) => ({
+  project: one(projects, { fields: [projectSnapshots.projectId], references: [projects.id] }),
 }))

@@ -2,6 +2,7 @@ import { applyPatch, parsePatch } from 'diff'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { and, eq } from 'drizzle-orm'
 import * as schema from '../db/schema.js'
+import { createSnapshot } from './snapshot.js'
 
 type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>
 
@@ -59,8 +60,12 @@ export async function applyDiffs(
   projectId: string,
   diffs: FileDiff[],
   db: DrizzleDB,
+  description?: string,
 ): Promise<void> {
   if (diffs.length === 0) return
+
+  // Auto-snapshot before applying AI changes
+  await createSnapshot(projectId, db, 'ai', description)
 
   await db.transaction(async (tx) => {
     for (const fileDiff of diffs) {

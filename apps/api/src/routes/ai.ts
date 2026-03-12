@@ -141,7 +141,7 @@ export async function aiRoutes(app: FastifyInstance) {
             // Parse and apply any file diffs
             const { diffs } = parseAIResponse(fullContent)
             if (diffs.length > 0) {
-              await applyDiffs(project.id, diffs, app.db)
+              await applyDiffs(project.id, diffs, app.db, prompt)
             }
 
             write({ type: 'done' })
