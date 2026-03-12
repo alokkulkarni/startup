@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
+import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
@@ -10,6 +11,9 @@ import { storagePlugin } from './plugins/storage.js'
 import { authPlugin } from './plugins/auth.js'
 import { healthRoutes } from './routes/health.js'
 import { authRoutes } from './routes/auth.js'
+import { userRoutes } from './routes/users.js'
+import { workspaceRoutes } from './routes/workspaces.js'
+import { uploadRoutes } from './routes/upload.js'
 
 const app = Fastify({
   logger: {
@@ -30,6 +34,8 @@ await app.register(cors, {
   origin: process.env.APP_URL ?? 'http://localhost',
   credentials: true,
 })
+
+await app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024 } })
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 await app.register(rateLimit, {
@@ -60,6 +66,9 @@ await app.register(authPlugin)
 // ── Routes ────────────────────────────────────────────────────────────────────
 await app.register(healthRoutes, { prefix: '/api/v1' })
 await app.register(authRoutes, { prefix: '/api/v1/auth' })
+await app.register(userRoutes, { prefix: '/api/v1/users' })
+await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' })
+await app.register(uploadRoutes, { prefix: '/api/v1/upload' })
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const start = async () => {

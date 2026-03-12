@@ -1,15 +1,20 @@
 import fp from 'fastify-plugin'
-import { Issuer } from 'openid-client'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+import type { FastifyRequest, FastifyReply } from 'fastify'
+import type { JWTPayload } from 'jose'
 
 export interface AuthUser {
-  id: string
-  keycloakId: string
+  id: string          // DB UUID (populated after sync)
+  keycloakId: string  // Keycloak sub claim
   email: string
   name: string
   roles: string[]
 }
 
 declare module 'fastify' {
+  interface FastifyInstance {
+    verifyAuth: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  }
   interface FastifyRequest {
     user?: AuthUser
   }
@@ -17,55 +22,50 @@ declare module 'fastify' {
 
 export const authPlugin = fp(async app => {
   const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8081'
-  const realm = process.env.KEYCLOAK_REALM ?? 'forge'
-  const issuerUrl = `${keycloakUrl}/realms/${realm}`
+  const realm        = process.env.KEYCLOAK_REALM ?? 'forge'
+  const jwksUri      = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/certs`
 
-  let keycloakIssuer: Awaited<ReturnType<typeof Issuer.discover>>
+  // Cache the JWKS remotely — jose handles key rotation automatically
+  const JWKS = createRemoteJWKSet(new URL(jwksUri), {
+    cacheMaxAge: 10 * 60 * 1000, // 10 min
+  })
 
-  try {
-    keycloakIssuer = await Issuer.discover(issuerUrl)
-    app.log.info({ issuer: issuerUrl }, 'Keycloak OIDC issuer discovered')
-  } catch (err) {
-    app.log.warn({ err, issuerUrl }, 'Could not connect to Keycloak at startup — will retry on first request')
-  }
-
-  // Decorator to protect routes — call verifyAuth(request, reply) in route handlers
   app.decorate('verifyAuth', async (request: any, reply: any) => {
-    const authHeader = request.headers.authorization
+    const authHeader = request.headers.authorization as string | undefined
     if (!authHeader?.startsWith('Bearer ')) {
-      return reply.code(401).send({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing bearer token' } })
+      return reply.code(401).send({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Missing Bearer token' },
+      })
     }
 
     const token = authHeader.slice(7)
 
+    let payload: JWTPayload
     try {
-      if (!keycloakIssuer) {
-        keycloakIssuer = await Issuer.discover(issuerUrl)
-      }
+      const result = await jwtVerify(token, JWKS, {
+        issuer: `${keycloakUrl}/realms/${realm}`,
+      })
+      payload = result.payload
+    } catch (err: any) {
+      request.log.warn({ err: err.message }, 'JWT verification failed')
+      const code = err.code === 'ERR_JWT_EXPIRED' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN'
+      return reply.code(401).send({
+        success: false,
+        error: { code, message: err.message },
+      })
+    }
 
-      // Verify JWT signature using JWKS
-      const jwks = keycloakIssuer.metadata.jwks_uri!
-      const response = await fetch(jwks)
-      const { keys } = await response.json() as { keys: JsonWebKey[] }
+    const realmAccess = payload['realm_access'] as { roles?: string[] } | undefined
 
-      // Simple decode for now — in prod use jose library for full verification
-      const [, payloadB64] = token.split('.')
-      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
-
-      if (payload.exp < Math.floor(Date.now() / 1000)) {
-        return reply.code(401).send({ success: false, error: { code: 'TOKEN_EXPIRED', message: 'Token expired' } })
-      }
-
-      request.user = {
-        id: payload.sub,
-        keycloakId: payload.sub,
-        email: payload.email,
-        name: payload.name ?? payload.preferred_username,
-        roles: payload.realm_access?.roles ?? [],
-      }
-    } catch (err) {
-      request.log.error({ err }, 'Token verification failed')
-      return reply.code(401).send({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid token' } })
+    request.user = {
+      id: '',  // populated after DB lookup in routes that need it
+      keycloakId: payload.sub!,
+      email: (payload['email'] as string) ?? '',
+      name: (payload['name'] as string) ?? (payload['preferred_username'] as string) ?? '',
+      roles: realmAccess?.roles ?? [],
     }
   })
+
+  app.log.info({ jwksUri }, 'Keycloak JWKS auth plugin ready')
 })

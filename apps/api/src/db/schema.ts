@@ -115,3 +115,8 @@ export const aiConversationsRelations = relations(aiConversations, ({ one, many 
   project: one(projects, { fields: [aiConversations.projectId], references: [projects.id] }),
   messages: many(aiMessages),
 }))
+
+export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) => ({
+  workspace: one(workspaces, { fields: [workspaceMembers.workspaceId], references: [workspaces.id] }),
+  user: one(users, { fields: [workspaceMembers.userId], references: [users.id] }),
+}))

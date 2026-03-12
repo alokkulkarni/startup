@@ -1,0 +1,61 @@
+'use client'
+
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { initAuth, getKeycloak } from '@/lib/auth'
+import { api } from '@/lib/api'
+
+interface AuthUser {
+  id: string
+  email: string
+  name: string
+  avatarUrl: string | null
+  plan: string
+}
+
+interface AuthContextValue {
+  user: AuthUser | null
+  loading: boolean
+  authenticated: boolean
+  logout: () => void
+}
+
+const AuthContext = createContext<AuthContextValue>({
+  user: null,
+  loading: true,
+  authenticated: false,
+  logout: () => {},
+})
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [authenticated, setAuthenticated] = useState(false)
+
+  useEffect(() => {
+    initAuth().then(async ({ authenticated: auth }) => {
+      setAuthenticated(auth)
+      if (auth) {
+        try {
+          await api.post('/v1/auth/sync', {})
+          const res = await api.get<AuthUser>('/v1/users/me')
+          if (res.data) setUser(res.data)
+        } catch (err) {
+          console.error('Auth sync failed', err)
+        }
+      }
+      setLoading(false)
+    })
+  }, [])
+
+  const logout = () => {
+    getKeycloak().logout({ redirectUri: window.location.origin })
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, authenticated, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
