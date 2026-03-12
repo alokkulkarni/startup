@@ -10,8 +10,11 @@ import { ChatPanel } from '@/components/chat/ChatPanel'
 import { FileTree } from '@/components/editor/FileTree'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { PreviewPanel } from '@/components/preview/PreviewPanel'
+import { VersionHistoryPanel } from '@/components/history/VersionHistoryPanel'
 import { useFileTree } from '@/hooks/useFileTree'
 import { useWebContainer } from '@/hooks/useWebContainer'
+import { useSnapshots } from '@/hooks/useSnapshots'
+import { useToast } from '@/hooks/useToast'
 import type { FileNode } from '@/hooks/useFileTree'
 import type { Project } from '@forge/shared'
 import type { Viewport } from '@/components/preview/ViewportToggle'
@@ -37,6 +40,8 @@ export default function ProjectPage() {
   const [showConsole, setShowConsole] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [fixPrompt, setFixPrompt] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [healAttempts, setHealAttempts] = useState(0)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -46,6 +51,8 @@ export default function ProjectPage() {
       setToken(getToken() ?? null)
     }
   }, [authenticated])
+
+  const { toast } = useToast()
 
   // Load panel widths from localStorage
   useEffect(() => {
@@ -108,6 +115,41 @@ export default function ProjectPage() {
     restart: restartWC,
     clearLogs,
   } = useWebContainer(id, files, showPreview && files.length > 0)
+
+  const MAX_HEAL_ATTEMPTS = 3
+
+  const { snapshots: _snapshots, fetchSnapshots, undoLast } = useSnapshots(
+    id,
+    token,
+    async () => {
+      await refreshFiles()
+      await syncFiles(files)
+    },
+  )
+
+  // Auto self-heal on WebContainer errors
+  useEffect(() => {
+    if (wcError && healAttempts < MAX_HEAL_ATTEMPTS) {
+      const healPrompt = `Fix this runtime error (attempt ${healAttempts + 1}/${MAX_HEAL_ATTEMPTS}):\n\n${wcError.message}${wcError.file ? `\nFile: ${wcError.file}:${wcError.line}` : ''}${wcError.stack ? `\n\nStack trace:\n${wcError.stack}` : ''}`
+      setFixPrompt(healPrompt)
+      setHealAttempts(prev => prev + 1)
+    }
+    if (!wcError) {
+      setHealAttempts(0)
+    }
+  }, [wcError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undoLast()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undoLast])
 
   const handleSave = useCallback(async (path: string, content: string) => {
     await updateFile(path, content)
@@ -216,6 +258,25 @@ export default function ProjectPage() {
               {project.framework}
             </span>
           )}
+          {/* Undo last AI change */}
+          <button
+            onClick={async () => {
+              const success = await undoLast()
+              if (!success) toast('No changes to undo', 'info')
+            }}
+            title="Undo last AI change (Cmd+Z)"
+            className="text-xs px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+          >
+            ↩ Undo
+          </button>
+          {/* Version history toggle */}
+          <button
+            onClick={() => { setHistoryOpen(true); fetchSnapshots() }}
+            title="Version history"
+            className="text-xs px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+          >
+            🕐 History
+          </button>
           <button className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-medium transition-all duration-200 opacity-50 cursor-not-allowed">
             Deploy
           </button>
@@ -264,6 +325,7 @@ export default function ProjectPage() {
             onFilesChanged={handleFilesChanged}
             initialPrompt={fixPrompt}
             onPromptConsumed={() => setFixPrompt(null)}
+            files={files}
           />
         </div>
 
@@ -341,6 +403,14 @@ export default function ProjectPage() {
           </>
         )}
       </div>
+
+      <VersionHistoryPanel
+        projectId={id}
+        token={token}
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onRestored={async () => { await refreshFiles(); await syncFiles(files) }}
+      />
     </div>
   )
 }

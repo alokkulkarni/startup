@@ -14,6 +14,7 @@ interface ChatPanelProps {
   onFilesChanged?: () => void
   initialPrompt?: string | null
   onPromptConsumed?: () => void
+  files?: { path: string }[]
 }
 
 function EmptyState() {
@@ -55,7 +56,47 @@ function EmptyState() {
   )
 }
 
-export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed }: ChatPanelProps) {
+function getSuggestions(lastMessage: string): string[] {
+  const suggestions: string[] = []
+  if (lastMessage.includes('button') || lastMessage.includes('click')) {
+    suggestions.push('Add hover animation to the button')
+  }
+  if (lastMessage.includes('form') || lastMessage.includes('input')) {
+    suggestions.push('Add form validation with error messages')
+  }
+  if (lastMessage.includes('list') || lastMessage.includes('item')) {
+    suggestions.push('Add the ability to delete items from the list')
+  }
+  if (
+    lastMessage.includes('color') ||
+    lastMessage.includes('style') ||
+    lastMessage.includes('css')
+  ) {
+    suggestions.push('Make it responsive for mobile screens')
+  }
+  if (
+    lastMessage.includes('api') ||
+    lastMessage.includes('fetch') ||
+    lastMessage.includes('data')
+  ) {
+    suggestions.push('Add a loading spinner while data is fetching')
+    suggestions.push('Handle error states gracefully')
+  }
+  const fallbacks = [
+    'Add a loading state',
+    'Make it mobile responsive',
+    'Add error handling',
+    'Improve the styling with better spacing',
+    'Add keyboard navigation support',
+  ]
+  while (suggestions.length < 3) {
+    const fb = fallbacks.shift()
+    if (fb && !suggestions.includes(fb)) suggestions.push(fb)
+  }
+  return suggestions.slice(0, 3)
+}
+
+export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed, files }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
@@ -164,6 +205,21 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptCo
         <div ref={bottomRef} />
       </div>
 
+      {/* Suggested follow-up prompts */}
+      {!isStreaming && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+        <div className="px-3 pb-2 flex flex-col gap-1.5">
+          {getSuggestions(messages[messages.length - 1].content).map((s, i) => (
+            <button
+              key={i}
+              onClick={() => setInput(s)}
+              className="text-left text-xs px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 hover:border-gray-600 transition-all truncate"
+            >
+              💡 {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Error display */}
       {error && (
         <div className="shrink-0 mx-4 mb-2 px-3 py-2 rounded-xl bg-red-950/50 border border-red-800/50">
@@ -179,6 +235,7 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptCo
           disabled={!authenticated || rateLimit?.remaining === 0}
           value={input}
           onChange={setInput}
+          files={files}
         />
       </div>
     </div>

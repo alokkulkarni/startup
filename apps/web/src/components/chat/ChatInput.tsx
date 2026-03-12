@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback, type KeyboardEvent, type ChangeEvent } from 'react'
+import { useRef, useCallback, useState, type KeyboardEvent, type ChangeEvent } from 'react'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
@@ -9,13 +9,15 @@ interface ChatInputProps {
   disabled?: boolean
   value: string
   onChange: (value: string) => void
+  files?: { path: string }[]
 }
 
 const MAX_CHARS = 4000
 const CHAR_COUNT_THRESHOLD = 3000
 
-export function ChatInput({ onSend, isStreaming, disabled, value, onChange }: ChatInputProps) {
+export function ChatInput({ onSend, isStreaming, disabled, value, onChange, files }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [mentionSuggestions, setMentionSuggestions] = useState<string[]>([])
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current
@@ -31,8 +33,20 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange }: Ch
       const newValue = e.target.value.slice(0, MAX_CHARS)
       onChange(newValue)
       adjustHeight()
+
+      // Detect @mention for file autocomplete
+      const atMatch = newValue.match(/@([^@\s]*)$/)
+      if (atMatch) {
+        const query = atMatch[1].toLowerCase()
+        const matches = (files ?? [])
+          .filter(f => f.path.toLowerCase().includes(query))
+          .slice(0, 5)
+        setMentionSuggestions(matches.map(f => f.path))
+      } else {
+        setMentionSuggestions([])
+      }
     },
-    [adjustHeight, onChange],
+    [adjustHeight, onChange, files],
   )
 
   const handleSend = useCallback(() => {
@@ -69,6 +83,27 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange }: Ch
 
   return (
     <div className="flex flex-col gap-2 p-4 border-t border-gray-700 bg-gray-900">
+      {/* @mention file autocomplete dropdown */}
+      {mentionSuggestions.length > 0 && (
+        <div className="relative">
+          <div className="absolute bottom-0 left-0 right-0 mb-1 bg-gray-800 border border-gray-700 rounded-lg overflow-hidden shadow-xl z-50">
+            {mentionSuggestions.map(path => (
+              <button
+                key={path}
+                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white font-mono"
+                onMouseDown={e => {
+                  e.preventDefault()
+                  const newValue = value.replace(/@([^@\s]*)$/, `@${path} `)
+                  onChange(newValue)
+                  setMentionSuggestions([])
+                }}
+              >
+                @{path}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         className={cn(
           'flex items-end gap-3 rounded-2xl border bg-gray-800 px-4 py-3',
