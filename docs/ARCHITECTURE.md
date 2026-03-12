@@ -49,11 +49,17 @@ This document defines the complete technical architecture for Forge AI — an AI
 | Primary AI provider | AWS Bedrock | Enterprise SLA, cost control, no egress to third-party, unified AWS billing |
 | Primary AI model | Claude 3.5 Sonnet via Bedrock | Best code quality; accessed through Bedrock for compliance + cost |
 | Fallback AI tier 1 | Anthropic API (direct) | Same model, direct API if Bedrock has regional outage |
-| Fallback AI tier 2 | OpenAI GPT-4o / Gemini 2.0 Flash | Different model family; last-resort fallback |
+| Fallback AI tier 2 | Google Gemini 2.0 Flash | Different model family; 1M context, cheaper than GPT-4o |
+| Fallback AI tier 3 | OpenAI GPT-4o | Last resort only |
 | Vision tasks | Claude 3.5 Sonnet v2 (Bedrock) primary, Gemini 2.0 Flash fallback | Both support multimodal natively |
 | AI response format | Unified diffs | Efficient context use, easier review, partial apply |
-| Auth provider | Clerk | MFA, social auth, org management — months of work out of the box |
-| Database | Supabase (Postgres) | RLS for multi-tenancy, Realtime for collab, Storage for files |
+| **Auth provider** | **Keycloak 24** | **Open source, Docker-native, OIDC/OAuth2/SAML/MFA — cloud-agnostic, self-hosted** |
+| **Database** | **PostgreSQL 16 + Drizzle ORM** | **Standard SQL, Docker-native, runs anywhere — RDS, Cloud SQL, Azure DB, or self-hosted** |
+| **Cache / Queue** | **Redis 7** | **Open standard, Docker-native — ElastiCache, Memorystore, or self-hosted** |
+| **File storage** | **MinIO (S3-compatible API)** | **Runs locally in Docker; same API works against AWS S3, GCS, Azure Blob in cloud** |
+| **Reverse proxy** | **Traefik** | **Docker-native, auto SSL, cloud-agnostic — no Vercel/Railway hosting dependency** |
+| **Container registry** | **GHCR (GitHub Container Registry)** | **Free, integrated with GitHub Actions CI/CD pipeline** |
+| **Local dev** | **Docker Compose** | **Single command spins full stack locally: Postgres, Redis, MinIO, Keycloak, API, Web** |
 | Real-time collab | Liveblocks | CRDT-based, Monaco binding available, battle-tested |
 | API framework | Fastify | 2× throughput vs Express, TypeScript-native, schema validation |
 
@@ -70,14 +76,14 @@ This document defines the complete technical architecture for Forge AI — an AI
 │  ┌──────────────┐    ┌──────────────────────────────────────────┐   │
 │  │              │    │                                          │   │
 │  │   Browser    │◄──►│         Forge AI Web App                │   │
-│  │   (User)     │    │  (Next.js on Vercel + WebContainer)     │   │
+│  │   (User)     │    │   (Next.js in Docker / Traefik)         │   │
 │  │              │    │                                          │   │
 │  └──────────────┘    └──────────────┬───────────────────────────┘   │
 │                                     │                               │
 │                                     ▼                               │
 │                        ┌────────────────────┐                       │
 │                        │   Forge API        │                       │
-│                        │  (Fastify/Railway) │                       │
+│                        │  (Fastify/Docker)  │                       │
 │                        └────────┬───────────┘                       │
 │                                 │                                   │
 └─────────────────────────────────┼───────────────────────────────────┘
@@ -86,30 +92,35 @@ This document defines the complete technical architecture for Forge AI — an AI
         │                         │                              │
         ▼                         ▼                              ▼
 ┌──────────────┐        ┌──────────────────┐         ┌────────────────┐
-│  AWS Bedrock │        │    Supabase      │         │    Stripe      │
-│  (PRIMARY)   │        │  (Postgres +     │         │   (Billing)    │
-│  Claude 3.5  │        │   Auth + Store)  │         │                │
+│  AWS Bedrock │        │   PostgreSQL 16  │         │    Stripe      │
+│  (PRIMARY)   │        │  (Postgres DB    │         │   (Billing)    │
+│  Claude 3.5  │        │  + RLS policies) │         │                │
 └──────────────┘        └──────────────────┘         └────────────────┘
         │                         │                              │
 ┌──────────────┐        ┌──────────────────┐         ┌────────────────┐
-│  Anthropic   │        │  Upstash Redis   │         │    GitHub      │
+│  Anthropic   │        │   Redis 7        │         │    GitHub      │
 │  API         │        │  (Cache + Queue) │         │    API         │
 │  (Fallback 1)│        │                  │         │                │
 └──────────────┘        └──────────────────┘         └────────────────┘
-        │
-┌──────────────┐
-│  OpenAI API  │
-│  Gemini 2.0   │
-│  Flash        │
-│  (Fallback 2  │
-│   + Vision)   │
-└──────────────┘
+        │                         │
+┌──────────────┐        ┌──────────────────┐
+│  Gemini 2.0  │        │     MinIO        │
+│  Flash       │        │  (S3-compatible  │
+│  (Fallback 2)│        │   File Storage)  │
+└──────────────┘        └──────────────────┘
+        │                         │
+┌──────────────┐        ┌──────────────────┐
+│  OpenAI API  │        │   Keycloak 24    │
+│  GPT-4o      │        │  (OIDC/OAuth2    │
+│  (Fallback 3)│        │   Identity)      │
+└──────────────┘        └──────────────────┘
                                   │
                         ┌──────────────────┐
                         │   Vercel API     │
                         │   Netlify API    │
                         │  Cloudflare API  │
-                        │  (Deploy targets)│
+                        │  (User deploy    │
+                        │   targets only)  │
                         └──────────────────┘
 ```
 
@@ -120,7 +131,7 @@ This document defines the complete technical architecture for Forge AI — an AI
 │  USER BROWSER                                                   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Next.js Web App (Vercel Edge)                          │   │
+│  │  Next.js Web App (Docker + Traefik / any cloud)         │   │
 │  │                                                         │   │
 │  │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │   │
 │  │  │  Dashboard  │  │  Workspace   │  │  Marketing    │  │   │
@@ -141,9 +152,18 @@ This document defines the complete technical architecture for Forge AI — an AI
 │                                                                 │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │ HTTPS / SSE
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │  Traefik (Reverse Proxy)    │
+                    │  - TLS termination          │
+                    │  - Route /api → API         │
+                    │  - Route /    → Web         │
+                    │  - Docker-native, auto SSL  │
+                    └─────────────┬──────────────┘
+                                  │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  FORGE API  (Fastify on Railway)                                │
+│  FORGE API  (Fastify — Docker container)                        │
 │                                                                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
 │  │  REST API   │  │  SSE Stream │  │  BullMQ Workers         │ │
@@ -160,13 +180,25 @@ This document defines the complete technical architecture for Forge AI — an AI
             │                     │
             ▼                     ▼
 ┌──────────────────┐   ┌──────────────────────────────────────────┐
-│  Supabase        │   │  Upstash Redis                           │
-│  - Postgres DB   │   │  - Session cache                         │
+│  PostgreSQL 16   │   │  Redis 7                                 │
+│  (Docker local / │   │  (Docker local /                         │
+│   RDS/Cloud SQL  │   │   ElastiCache/Memorystore in cloud)      │
+│   in cloud)      │   │  - Session cache                         │
 │  - RLS policies  │   │  - Rate limit counters                   │
-│  - Realtime      │   │  - BullMQ job queue                      │
-│  - Auth (JWTs)   │   │  - AI response cache (future)            │
-│  - Storage (R2)  │   └──────────────────────────────────────────┘
+│  - Drizzle ORM   │   │  - BullMQ job queue                      │
+│  - pgBouncer     │   │  - AI response cache (future)            │
+│    (pool)        │   └──────────────────────────────────────────┘
 └──────────────────┘
+            │
+┌──────────────────┐   ┌──────────────────────────────────────────┐
+│  MinIO           │   │  Keycloak 24                             │
+│  (Docker local / │   │  (Docker local /                         │
+│   any S3-compat. │   │   any container platform in cloud)       │
+│   in cloud)      │   │  - OIDC / OAuth2                         │
+│  - User avatars  │   │  - GitHub + Google identity brokering    │
+│  - Snapshots     │   │  - MFA, SAML (Enterprise)                │
+│  - Assets        │   │  - Session management                    │
+└──────────────────┘   └──────────────────────────────────────────┘
 ```
 
 ### Core Data Flow: User Prompt → Live Preview Update
@@ -176,10 +208,10 @@ This document defines the complete technical architecture for Forge AI — an AI
        │
 2. POST /v1/projects/:id/ai/chat  (HTTP request with body)
        │
-3. API middleware: validate Clerk JWT → check rate limit → load project
+3. API middleware: validate Keycloak OIDC token → check rate limit → load project
        │
 4. AIService.buildContext():
-   - Load project files from Supabase
+   - Load project files from PostgreSQL (via Drizzle ORM)
    - Fetch last 20 messages from ai_conversations
    - Assemble system prompt + file tree + history + user prompt
        │
@@ -190,7 +222,7 @@ This document defines the complete technical architecture for Forge AI — an AI
        │
 7. DiffParser extracts file changes from completed response
        │
-8. Apply diffs → update project_files in Supabase
+8. Apply diffs → update project_files in PostgreSQL
        │
 9. Create snapshot in project_snapshots (before apply)
        │
@@ -231,7 +263,7 @@ apps/web/
 │   │   │   └── [projectId]/
 │   │   │       └── page.tsx          # The main workspace (CSR only)
 │   │   └── api/                      # Next.js API routes (thin proxy)
-│   │       ├── auth/[...clerk]/      # Clerk auth handler
+│   │       ├── auth/callback/route.ts # Keycloak OIDC callback handler
 │   │       └── ai/stream/route.ts    # SSE proxy (streams from Forge API)
 │   │
 │   ├── components/
@@ -281,13 +313,17 @@ apps/web/
 │   │
 │   ├── lib/
 │   │   ├── api.ts                    # Typed API client (wraps fetch)
-│   │   ├── supabase/
-│   │   │   ├── client.ts             # Browser Supabase client
-│   │   │   ├── server.ts             # Server-side Supabase client
-│   │   │   └── types.ts              # Generated DB types (supabase gen types)
+│   │   ├── auth/
+│   │   │   ├── keycloak.ts           # Keycloak OIDC client (openid-client)
+│   │   │   └── session.ts            # Server-side session helpers (iron-session)
+│   │   ├── db/
+│   │   │   ├── client.ts             # Drizzle ORM client (postgres.js driver)
+│   │   │   └── types.ts              # Inferred types from Drizzle schema
+│   │   ├── storage/
+│   │   │   └── minio.ts              # MinIO S3 client (aws-sdk v3 S3Client)
 │   │   ├── webcontainer/
 │   │   │   ├── manager.ts            # WebContainer lifecycle manager
-│   │   │   └── fileSync.ts           # Supabase files → WebContainer FS sync
+│   │   │   └── fileSync.ts           # Postgres files → WebContainer FS sync
 │   │   ├── diff/
 │   │   │   ├── parser.ts             # Parse unified diff strings
 │   │   │   └── renderer.tsx          # Render diff as React component
@@ -406,7 +442,7 @@ export class WebContainerManager {
 ```
 User types in Monaco
       ↓ (debounce 300ms)
-Auto-save: PUT /v1/projects/:id/files/:path → Supabase
+Auto-save: PUT /v1/projects/:id/files/:path → PostgreSQL
       ↓ (optimistic: don't wait for API)
 writeFile() → WebContainer FS
       ↓
@@ -499,7 +535,7 @@ apps/api/
 │   │       └── index.ts           # GitHub integration endpoints
 │   │
 │   ├── middleware/
-│   │   ├── auth.ts                # Clerk JWT validation → req.user
+│   │   ├── auth.ts                # Keycloak OIDC token validation → req.user
 │   │   ├── ratelimit.ts           # Redis sliding window rate limiter
 │   │   ├── planCheck.ts           # Verify user plan for gated features
 │   │   └── requestLogger.ts       # Pino structured request logging
@@ -511,17 +547,17 @@ apps/api/
 │   │   │   ├── diffApplier.ts     # Parses + applies unified diffs
 │   │   │   ├── bedrock.ts         # AWS Bedrock SDK wrapper (PRIMARY)
 │   │   │   ├── anthropic.ts       # Anthropic direct API wrapper (Fallback 1)
-│   │   │   ├── openai.ts          # OpenAI GPT-4o wrapper (optional Fallback 3)
-│   │   │   ├── gemini.ts          # Google Gemini 2.0 Flash wrapper (Fallback 2 + Vision fallback)
+│   │   │   ├── gemini.ts          # Google Gemini 2.0 Flash wrapper (Fallback 2)
+│   │   │   ├── openai.ts          # OpenAI GPT-4o wrapper (Fallback 3)
 │   │   │   └── router.ts          # Model routing + circuit breaker
 │   │   ├── deploy/
-│   │   │   ├── vercel.ts          # Vercel API client
-│   │   │   ├── netlify.ts         # Netlify API client
-│   │   │   └── cloudflare.ts      # Cloudflare Pages API client
+│   │   │   ├── vercel.ts          # Vercel API client (user deploy target)
+│   │   │   ├── netlify.ts         # Netlify API client (user deploy target)
+│   │   │   └── cloudflare.ts      # Cloudflare Pages API client (user deploy target)
 │   │   ├── github/
 │   │   │   └── index.ts           # isomorphic-git wrapper
 │   │   ├── storage/
-│   │   │   └── r2.ts              # Cloudflare R2 SDK wrapper
+│   │   │   └── minio.ts           # MinIO S3-compatible client (AWS SDK v3 S3Client)
 │   │   └── email/
 │   │       └── resend.ts          # Transactional email via Resend
 │   │
@@ -531,8 +567,8 @@ apps/api/
 │   │   └── thumbnail.worker.ts
 │   │
 │   ├── plugins/
-│   │   ├── supabase.ts            # Supabase client as Fastify plugin
-│   │   ├── redis.ts               # Upstash Redis as Fastify plugin
+│   │   ├── postgres.ts            # Drizzle/postgres.js as Fastify plugin
+│   │   ├── redis.ts               # Redis 7 as Fastify plugin (ioredis)
 │   │   └── stripe.ts              # Stripe as Fastify plugin
 │   │
 │   ├── errors/
@@ -633,7 +669,7 @@ async function aiRateLimitMiddleware(req, reply) {
 interface DeployJobData {
   deploymentId: string
   projectId: string
-  provider: 'vercel' | 'netlify' | 'cloudflare'
+  provider: 'vercel' | 'netlify' | 'cloudflare-pages'   // user's chosen deploy target
   files: ProjectFile[]
   envVars: Record<string, string>
 }
@@ -1202,7 +1238,7 @@ export async function callAIWithVision(params: VisionParams): Promise<string> {
 ```bash
 # AWS Bedrock (Primary) — uses IAM role in production, keys in dev
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=...          # dev only; use IAM role in prod (Railway)
+AWS_ACCESS_KEY_ID=...          # dev only; use IAM role in prod (ECS task role)
 AWS_SECRET_ACCESS_KEY=...      # dev only
 
 # Anthropic Direct (Fallback 1)
@@ -1265,7 +1301,7 @@ await db.ai_messages.update(messageId, {
 
 ### 6.1 Multi-Tenancy Model
 
-All data is scoped to a **workspace**. Every table with user data has a `workspace_id` or traces back to one via foreign key. Supabase Row Level Security (RLS) enforces this at the database layer — even if the application has a bug, data cannot leak between workspaces.
+All data is scoped to a **workspace**. Every table with user data has a `workspace_id` or traces back to one via foreign key. PostgreSQL Row Level Security (RLS) enforces this at the database layer — even if the application has a bug, data cannot leak between workspaces. RLS policies are applied directly on standard PostgreSQL — no Supabase dependency required.
 
 ### 6.2 Full Schema
 
@@ -1276,7 +1312,7 @@ All data is scoped to a **workspace**. Every table with user data has a `workspa
 
 CREATE TABLE users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  clerk_id        TEXT UNIQUE NOT NULL,
+  keycloak_id     TEXT UNIQUE NOT NULL,
   email           TEXT UNIQUE NOT NULL,
   name            TEXT,
   avatar_url      TEXT,
@@ -1384,7 +1420,7 @@ CREATE TABLE deployments (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   triggered_by    UUID REFERENCES users(id),
-  provider        TEXT NOT NULL,        -- vercel|netlify|cloudflare
+  provider        TEXT NOT NULL,        -- vercel|netlify|cloudflare-pages (user's chosen target)
   provider_id     TEXT,                 -- external deployment ID
   status          TEXT NOT NULL DEFAULT 'pending',  -- pending|building|deployed|failed
   deploy_url      TEXT,
@@ -1559,65 +1595,441 @@ CREATE INDEX idx_templates_fts
 
 ## 7. Infrastructure Architecture
 
+### 7.0 Local Development with Docker Compose
+
+The entire platform runs locally with a single `docker compose up`. No cloud accounts required to develop or test.
+
+```yaml
+# docker-compose.yml (root of monorepo)
+version: '3.9'
+
+services:
+
+  # ── Reverse Proxy ──────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # ── Frontend ───────────────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      target: dev
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - NEXT_PUBLIC_KEYCLOAK_URL=http://localhost/auth
+      - NEXT_PUBLIC_KEYCLOAK_REALM=forge
+      - NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=forge-web
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    labels:
+      - "traefik.http.routers.web.rule=Host(`localhost`) && PathPrefix(`/`)"
+    depends_on:
+      - keycloak
+
+  # ── API ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      target: dev
+    environment:
+      - DATABASE_URL=postgres://forge:forge@postgres:5432/forge
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=forge
+      - KEYCLOAK_CLIENT_ID=forge-api
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+    labels:
+      - "traefik.http.routers.api.rule=Host(`localhost`) && PathPrefix(`/api`)"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  # ── PostgreSQL 16 ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forge
+      POSTGRES_DB: forge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge"]
+      interval: 5s
+      retries: 5
+
+  # ── Redis 7 ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  # ── MinIO (S3-compatible object storage) ───────────────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      retries: 5
+
+  # ── Keycloak 24 (Identity Provider) ───────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: forge
+      KC_DB_PASSWORD: forge
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm.json
+    labels:
+      - "traefik.http.routers.keycloak.rule=Host(`localhost`) && PathPrefix(`/auth`)"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      retries: 10
+
+  # ── pgAdmin (optional DB UI) ───────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@forge.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    profiles:
+      - tools   # only starts with: docker compose --profile tools up
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+```
+
+**Local development commands:**
+```bash
+# First time setup
+cp .env.example .env.local
+docker compose up -d           # Start all services
+pnpm install                   # Install dependencies
+pnpm db:migrate                # Run database migrations
+pnpm db:seed                   # Seed development data
+
+# Daily development
+pnpm dev                       # Start Next.js + Fastify in watch mode
+docker compose logs -f api     # Follow API logs
+docker compose restart minio   # Restart a single service
+
+# With optional tools (pgAdmin)
+docker compose --profile tools up -d
+
+# Teardown
+docker compose down            # Stop services (keep volumes)
+docker compose down -v         # Stop + delete all data (clean slate)
+```
+
+**Service URLs (local):**
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Web App | http://localhost | — |
+| API | http://localhost/api | — |
+| Keycloak Admin | http://localhost:8081 | admin / admin |
+| MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
+| pgAdmin | http://localhost:5050 | admin@forge.local / admin |
+| Traefik Dashboard | http://localhost:8080 | — |
+
+---
+
 ### 7.1 Environment Strategy
 
-| Environment | Frontend | API | Database | Redis | Purpose |
-|-------------|----------|-----|----------|-------|---------|
-| **Local** | `localhost:3000` | `localhost:3001` | Supabase local | Redis local | Development |
-| **Preview** | Vercel preview URL (per PR) | Railway staging | Supabase staging project | Upstash staging | PR review, QA |
-| **Production** | `forge.ai` (Vercel) | `api.forge.ai` (Railway) | Supabase prod | Upstash prod | Live traffic |
+| Environment | Frontend | API | Database | Purpose |
+|-------------|----------|-----|----------|---------|
+| **Local** | `localhost` (Docker) | `localhost/api` (Docker) | PostgreSQL in Docker | Development |
+| **Staging** | Docker image → staging cluster | Docker image → staging cluster | Managed Postgres (RDS/Cloud SQL) | PR review, QA |
+| **Production** | Docker image → prod cluster | Docker image → prod cluster | Managed Postgres (RDS/Cloud SQL) | Live traffic |
+
+**All environments use the same Docker images** — the only difference is the environment variables injected at runtime. This ensures "works on my machine" = "works in production".
 
 ### 7.2 CI/CD Pipeline
 
+All pipelines use **GitHub Actions**. Docker images are built and pushed to **GHCR (GitHub Container Registry)**. Deployment is cloud-agnostic — the same pipeline can target AWS ECS, GKE, Azure Container Apps, or any Docker-capable platform.
+
+```
+                 ┌─────────────────────────────────────────┐
+                 │           GitHub Repository              │
+                 └─────────────────────┬───────────────────┘
+                                       │
+            ┌──────────────────────────┼──────────────────────────┐
+            │ push to PR branch        │ merge to main            │ nightly
+            ▼                          ▼                          ▼
+   ┌────────────────┐        ┌─────────────────┐       ┌────────────────┐
+   │  PR Checks     │        │  Staging Deploy │       │ Nightly Audit  │
+   │  (pr.yml)      │        │  (staging.yml)  │       │ (nightly.yml)  │
+   └────────────────┘        └────────┬────────┘       └────────────────┘
+                                      │ on staging OK
+                                      ▼
+                             ┌─────────────────┐
+                             │  Prod Deploy    │
+                             │  (prod.yml)     │
+                             │  (manual gate)  │
+                             └─────────────────┘
+```
+
 ```yaml
-# .github/workflows/pr.yml
+# .github/workflows/pr.yml  — PR quality gates
 name: PR Checks
-on: [pull_request]
+on:
+  pull_request:
+    branches: [main, staging]
+
 jobs:
-  quality:
+  test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: forge, POSTGRES_PASSWORD: forge, POSTGRES_DB: forge_test }
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: 'pnpm' }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck        # tsc --noEmit
-      - run: pnpm lint             # ESLint + Prettier check
-      - run: pnpm test             # Vitest unit tests
-      - run: pnpm test:integration # Integration tests (against staging DB)
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:integration
+        env:
+          DATABASE_URL: postgres://forge:forge@localhost:5432/forge_test
+          REDIS_URL: redis://localhost:6379
 
-  preview-deploy:
-    needs: quality
+  docker-build:
     runs-on: ubuntu-latest
     steps:
-      - run: vercel deploy --token $VERCEL_TOKEN  # Auto preview URL
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build web image (verify it compiles)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/web
+          push: false
+          tags: forge-web:pr-${{ github.sha }}
+      - name: Build api image (verify it compiles)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/api
+          push: false
+          tags: forge-api:pr-${{ github.sha }}
 
-# .github/workflows/main.yml
-name: Production Deploy
+---
+# .github/workflows/staging.yml  — Build, push, deploy to staging on main merge
+name: Staging Deploy
 on:
   push:
     branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - run: pnpm test:all                       # Full test suite
-      - run: pnpm db:migrate:prod                # Run pending migrations
-      - run: vercel deploy --prod                # Deploy frontend
-      - run: railway up --service api            # Deploy API
-      - run: pnpm notify:slack                   # Notify team
 
-# .github/workflows/nightly.yml
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/forge
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_tag: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # auto-provided, no setup needed
+
+      - name: Build + push web image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/web
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-web:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-web:staging-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build + push api image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/api
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-api:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-api:staging-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run DB migrations before deploying new containers
+      - name: Run migrations
+        run: |
+          docker run --rm \
+            -e DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }} \
+            ${{ env.IMAGE_PREFIX }}-api:${{ github.sha }} \
+            pnpm db:migrate
+
+      # Cloud-agnostic: swap this step for your cloud
+      # AWS ECS example (also works with GKE, ACA, Fly.io — just change this step):
+      - name: Deploy to AWS ECS (staging)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: infra/ecs/staging-task-def.json
+          service: forge-staging
+          cluster: forge-staging
+          image: ${{ env.IMAGE_PREFIX }}-api:${{ github.sha }}
+          wait-for-service-stability: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+
+      - name: Run smoke tests
+        run: pnpm test:smoke --env staging
+
+---
+# .github/workflows/prod.yml  — Production deploy (manual approval gate)
+name: Production Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Image SHA to deploy (defaults to staging-latest)'
+        required: false
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production    # ← GitHub environment with required reviewers
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run migrations
+        run: |
+          docker run --rm \
+            -e DATABASE_URL=${{ secrets.PROD_DATABASE_URL }} \
+            ${{ env.IMAGE_PREFIX }}-api:${{ inputs.sha || 'staging-latest' }} \
+            pnpm db:migrate
+
+      - name: Deploy to AWS ECS (production)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: infra/ecs/prod-task-def.json
+          service: forge-prod
+          cluster: forge-prod
+          image: ${{ env.IMAGE_PREFIX }}-api:${{ inputs.sha || 'staging-latest' }}
+          wait-for-service-stability: true
+
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: '{"text":"✅ Forge AI deployed to production: ${{ github.sha }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+---
+# .github/workflows/nightly.yml  — Security + backup verification
 name: Nightly
 on:
   schedule:
-    - cron: '0 2 * * *'  # 2 AM UTC
+    - cron: '0 2 * * *'   # 2 AM UTC
 jobs:
   security:
+    runs-on: ubuntu-latest
     steps:
-      - run: snyk test              # Dependency vulnerabilities
-      - run: pnpm audit             # npm audit
-      - run: pnpm db:backup:verify  # Confirm backup completed
+      - uses: actions/checkout@v4
+      - run: pnpm audit --audit-level=high
+      - uses: snyk/actions/node@master
+        env: { SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }} }
+      - run: pnpm db:backup:verify
+        env: { DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }} }
+```
+
+**Cloud deployment targets (switch by changing one step):**
+| Cloud | Swap the deploy step for | Notes |
+|-------|--------------------------|-------|
+| **AWS** | `aws-actions/amazon-ecs-deploy-task-definition` | ECS Fargate recommended |
+| **GCP** | `google-github-actions/deploy-cloudrun` | Cloud Run for serverless containers |
+| **Azure** | `azure/container-apps-deploy-action` | Azure Container Apps |
+| **Self-hosted** | `docker/compose-action` + SSH | Compose on any VM |
+| **Fly.io** | `superfly/flyctl-actions` | Simple global deployment |
+
+**Multi-arch images** — build for both AMD64 and ARM64 to support Apple Silicon dev and Graviton2 in prod:
+```yaml
+- uses: docker/setup-buildx-action@v3
+  with:
+    platforms: linux/amd64,linux/arm64
 ```
 
 ### 7.3 Observability Stack
@@ -1959,13 +2371,13 @@ const colors = {
 
 | Threat | Mitigation |
 |--------|-----------|
-| **SQL Injection** | Supabase parameterized queries everywhere; no raw string concatenation |
+| **SQL Injection** | Drizzle ORM parameterized queries everywhere; no raw string concatenation |
 | **XSS** | React escapes by default; `dangerouslySetInnerHTML` never used; CSP headers |
-| **CSRF** | SameSite=Strict cookies; Clerk handles session management |
-| **Broken Auth** | Clerk handles MFA, session rotation, brute-force protection |
-| **Sensitive Data Exposure** | TLS 1.3 everywhere; AES-256 at rest; API keys hashed with bcrypt |
-| **Broken Access Control** | Supabase RLS at DB layer + API middleware checks — two layers |
-| **Security Misconfiguration** | Security headers via Vercel config; no default credentials |
+| **CSRF** | SameSite=Strict cookies; Keycloak handles session management |
+| **Broken Auth** | Keycloak handles MFA, session rotation, brute-force protection; OIDC tokens are short-lived |
+| **Sensitive Data Exposure** | TLS 1.3 everywhere; AES-256 at rest (Postgres + MinIO encryption); API keys hashed with bcrypt |
+| **Broken Access Control** | PostgreSQL RLS at DB layer + API middleware checks — two independent layers |
+| **Security Misconfiguration** | Security headers via Traefik middleware; no default credentials in prod; Keycloak hardened realm settings |
 | **Prompt Injection** | AI output sandboxed in WebContainer; no exec() or system calls allowed |
 | **Dependency Vulnerabilities** | Snyk in CI + nightly audit; auto-PRs for security patches |
 | **Logging Failures** | Pino structured logs for all requests; Sentry for all errors |
@@ -2002,17 +2414,20 @@ const colors = {
 
 ---
 
-### ADR-003: Supabase over Raw Postgres + Custom Auth
+### ADR-003: PostgreSQL + Drizzle ORM over Supabase
 
 **Status:** Accepted  
-**Context:** Need database, auth, file storage, and real-time for collaboration.  
-**Decision:** Supabase  
+**Context:** Need database, file storage, and real-time for collaboration. Original plan used Supabase as a managed wrapper around Postgres.  
+**Decision:** Standard PostgreSQL 16 with Drizzle ORM, MinIO for file storage, and SSE for real-time (already in the API). No Supabase dependency.  
 **Consequences:**
-- ✅ RLS at database layer = security by default
-- ✅ Realtime subscriptions = collaboration without WebSocket server
-- ✅ Storage = file uploads without S3 complexity
-- ✅ 3–4 months of engineering work replaced by managed service
-- ⚠️ Vendor lock-in mitigated by: Supabase is open-source, Postgres is standard
+- ✅ Runs identically in Docker locally, on RDS, Cloud SQL, Azure DB, or bare metal — truly cloud-agnostic
+- ✅ No vendor SDK lock-in: standard `postgres.js` wire protocol driver works everywhere
+- ✅ Drizzle ORM provides type-safe queries, schema-as-code migrations, and zero runtime overhead
+- ✅ PostgreSQL RLS works natively without Supabase — same security model, no wrapper needed
+- ✅ MinIO provides S3-compatible object storage locally; same SDK (`@aws-sdk/client-s3`) targets AWS S3/GCS/Azure Blob in cloud
+- ✅ pgBouncer connection pooler handles connection limits at scale (Docker sidecar locally, RDS Proxy in cloud)
+- ⚠️ No Supabase Realtime — real-time collaboration uses Liveblocks (ADR-007) and SSE for AI streaming
+- ⚠️ Migration management is manual — solved by Drizzle Kit (`pnpm db:migrate`) in CI before every deploy
 
 ---
 
@@ -2046,17 +2461,23 @@ const colors = {
 
 ---
 
-### ADR-006: Clerk over Custom Auth
+### ADR-006: Keycloak over Clerk or Custom Auth
 
 **Status:** Accepted  
-**Context:** Build custom JWT auth or use an auth service.  
-**Decision:** Clerk  
+**Context:** Need auth with social OAuth, MFA, org/workspace model, and future SAML/SSO for enterprise. Options: (A) Clerk (SaaS, $0.02/MAU), (B) custom JWT auth, (C) Keycloak (open source, self-hosted).  
+**Decision:** Keycloak 24  
 **Consequences:**
-- ✅ GitHub + Google OAuth out of the box
-- ✅ MFA, session management, brute-force protection handled
-- ✅ Organization/workspace concept maps to our workspace model
-- ✅ 2–3 months of auth engineering saved
-- ⚠️ $0.02/MAU pricing — acceptable at current scale, revisit at 500K MAU
+- ✅ **Zero vendor lock-in** — open source Apache 2.0, runs in Docker locally and on any cloud
+- ✅ **GitHub + Google OAuth** via identity brokering — same UX as Clerk, configured via realm export JSON
+- ✅ **MFA, brute-force protection, session management** built in — no custom code
+- ✅ **SAML 2.0 and OIDC** natively supported — Enterprise SSO (Google Workspace, Okta, Azure AD) works from day one
+- ✅ **OIDC-compliant tokens** — standard JWT, works with any OIDC library (`openid-client` in Node.js)
+- ✅ **$0/MAU** — no pricing cliff at 500K users
+- ✅ **Realm config as code** — `realm-export.json` in repo, imported at startup in Docker Compose and CI
+- ⚠️ We operate the Keycloak instance — need to handle upgrades, backups, and HA in production
+  - Mitigation: Keycloak on managed container platform (ECS/GKE), PostgreSQL DB already managed, stateless so easy to scale horizontally
+- ⚠️ COOP/COEP headers (required by WebContainers) can break OAuth popup flows
+  - Mitigation: Use Keycloak redirect flow (not popup) — fully supported, no workarounds needed
 
 ---
 
@@ -2074,41 +2495,45 @@ const colors = {
 
 ---
 
-### ADR-008: Neon over Traditional Hosted Postgres
+### ADR-008: Docker-First, Cloud-Agnostic Deployment
 
 **Status:** Accepted  
-**Context:** Choose Postgres hosting: Neon, RDS, Supabase Postgres, PlanetScale.  
-**Decision:** Neon (serverless Postgres) via Supabase  
+**Context:** Choose deployment approach: PaaS (Vercel/Railway/Fly.io), serverless (Lambda/Cloud Run), or containerized Docker on any cloud.  
+**Decision:** Docker containers, deployed via GitHub Actions to any OCI-compatible runtime. GHCR as container registry.  
 **Consequences:**
-- ✅ Scale to zero when idle (zero cost in dev/staging)
-- ✅ Instant compute scaling on traffic spikes
-- ✅ Branching for dev/preview environments
-- ✅ Connection pooler built in (PgBouncer)
-- ⚠️ Cold start latency on first query after idle (~100ms) — acceptable for our use case
+- ✅ **Local = Production** — same Docker images run in `docker compose up` locally and in ECS/GKE/ACA in cloud
+- ✅ **Cloud-agnostic** — swap one step in the GitHub Actions workflow to change cloud provider
+- ✅ **GHCR is free** and integrated with GitHub tokens (no registry credentials to manage)
+- ✅ **Multi-arch builds** (AMD64 + ARM64) — supports Apple Silicon dev machines and Graviton2/T2A in cloud
+- ✅ **Environment variables as the only config** — same image, different env → different behaviour
+- ✅ **Deterministic builds** — Docker layer caching in GitHub Actions means fast CI builds
+- ✅ **Staging = scaled-down production** — same Compose services, smaller instance sizes
+- ⚠️ Need to manage Dockerfiles for web + api — solved by multi-stage builds (dev target + prod target in same file)
+- ⚠️ Database migrations must run before new containers start — solved by migration job step in CI before container deploy
 
 ---
 
 ## 12. Open Questions & Future Considerations
 
 ### Unresolved Technical Questions (Sprint 0)
-1. **WebContainer + Clerk conflict:** COOP/COEP headers may block Clerk's popup OAuth. Must test in Sprint 1 and find workaround (redirect flow instead of popup).
-2. **Snapshot storage strategy:** `files_json` JSONB in Postgres may become expensive for large projects. Consider moving to R2 at > 1MB snapshot size.
+1. **WebContainer + Keycloak redirect:** COOP/COEP headers required by WebContainers — redirect-based Keycloak OIDC flow must be tested in Sprint 1 (popup flow explicitly not used).
+2. **Snapshot storage strategy:** `files_json` JSONB in Postgres may become expensive for large projects. Consider moving to MinIO at > 1MB snapshot size (Sprint 13).
 3. **WebContainer memory limits:** Chrome caps WASM at 4GB. Large projects with `node_modules` may approach this. Need to measure in Sprint 5.
 4. **Diff format failure rate:** Need to measure % of Claude responses that fail diff parsing and design graceful fallback in Sprint 3.
 
 ### Scalability at 100K Users
-- **Bottleneck 1:** Supabase connection limits → resolved by Neon connection pooler
+- **Bottleneck 1:** PostgreSQL connection limits → resolved by pgBouncer (Docker sidecar locally, RDS Proxy in cloud)
 - **Bottleneck 2:** BullMQ single Redis instance → resolved by Redis Cluster in v2.0
-- **Bottleneck 3:** AI cost → $0.003 per 1K output tokens × 50 msgs/day × 100K users = ~$15K/day at full free tier. Must enforce limits aggressively and monetize early.
+- **Bottleneck 3:** AI cost → $0.003 per 1K output tokens × 50 msgs/day × 100K users = ~$15K/day at full free tier. Must enforce limits aggressively and monetise early.
 
 ### Future Architecture Evolutions
 | Feature | Architecture Change Needed |
 |---------|--------------------------|
 | Mobile app | React Native (Web view for preview, native for dashboard) |
-| Self-hosted / on-premise | Docker Compose bundle, replace Clerk/Supabase with OSS equivalents (Keycloak, raw Postgres) |
+| Self-hosted / on-premise | Already possible — ship the Docker Compose bundle. Customer provides Postgres + Redis. |
 | Multi-language support | WebContainers only support Node.js. Python/Ruby would require server-side sandboxes (Firecracker microVMs) |
 | Custom AI model fine-tuning | Separate ML infra (Modal.com or HuggingFace Inference), routing layer to choose model |
-| Real-time backend generation | Supabase schema generation via AI → already partially feasible with Claude |
+| Database branching | Migrate Postgres to Neon for branching-per-PR (optional — swap connection string in staging workflow) |
 
 ---
 

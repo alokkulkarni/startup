@@ -13,9 +13,9 @@
 | Role | Responsibilities |
 |------|-----------------|
 | **Frontend Engineer (FE)** | Next.js, React, Monaco Editor, UI components, WebContainer integration |
-| **Backend Engineer (BE)** | Fastify API, Supabase, Redis, BullMQ, REST endpoints |
+| **Backend Engineer (BE)** | Fastify API, PostgreSQL, Redis, BullMQ, REST endpoints |
 | **AI / Full-stack Engineer (AI)** | Claude integration, prompt engineering, streaming, diff system, full-stack features |
-| **Infra / DevOps (Infra)** | CI/CD, Vercel, Railway, Cloudflare, monitoring, security |
+| **Infra / DevOps (Infra)** | CI/CD, Docker, GitHub Actions, GHCR, cloud deployments, monitoring, security |
 
 ## Ceremonies
 
@@ -63,26 +63,27 @@
 ### Sprint 0 — Project Foundation
 **Duration:** Week 0 (pre-sprint setup)  
 **Sprint Goal:** Every engineer can commit, test, and deploy on day 1.  
-**Value Delivered:** Zero-friction development environment for the whole team.
+**Value Delivered:** Zero-friction development environment for the whole team. Full local stack runs with one command.
 
 | ID | Story | Points | Owner | Acceptance Criteria |
 |----|-------|--------|-------|---------------------|
 | S0-01 | Set up monorepo (Turborepo) with `apps/web`, `apps/api`, `packages/shared` | 3 | Infra | `pnpm dev` starts all services locally |
-| S0-02 | Configure Next.js 14 app with TypeScript + Tailwind + shadcn/ui | 2 | FE | `localhost:3000` renders a blank page with correct styling |
-| S0-03 | Configure Fastify API with TypeScript, Zod validation, Pino logging | 2 | BE | `localhost:3001/health` returns `{ status: "ok" }` |
-| S0-04 | Set up Supabase project (dev + prod), run initial migration | 3 | BE | Tables created, RLS enabled, local Supabase running |
-| S0-05 | Configure Clerk (dev keys, Next.js middleware, Fastify JWT plugin) | 2 | BE | Auth middleware rejects unauthenticated requests with 401 |
-| S0-06 | Set up Upstash Redis (dev + prod) | 1 | Infra | Redis client connects, `ping` returns `PONG` |
-| S0-07 | GitHub Actions: PR lint + typecheck + test workflow | 3 | Infra | PR check runs in < 3 min, fails on lint errors |
-| S0-08 | GitHub Actions: Deploy to Vercel (web) + Railway (api) on main merge | 3 | Infra | Push to main triggers deploy, staging URL active |
-| S0-09 | Set up Sentry (FE + BE) and PostHog (FE) | 2 | Infra | Errors appear in Sentry dashboard, pageviews in PostHog |
-| S0-10 | Configure Cloudflare R2 bucket (dev + prod) with SDK | 2 | Infra | Upload test file via SDK, retrieve via R2 URL |
-| S0-11 | Create shared TypeScript types package (`packages/shared`) | 2 | AI | API request/response types imported correctly in both apps |
-| S0-12 | Write team README: local setup, env vars, deploy process | 1 | Infra | Any engineer can set up from scratch in < 30 min |
-| **Total** | | **26** | | |
+| S0-02 | Configure Next.js 14 app with TypeScript + Tailwind + shadcn/ui | 2 | FE | `localhost/` renders a blank page with correct styling |
+| S0-03 | Configure Fastify API with TypeScript, Zod validation, Pino logging | 2 | BE | `localhost/api/health` returns `{ status: "ok" }` |
+| S0-04 | Write `docker-compose.yml` with PostgreSQL 16, Redis 7, MinIO, Keycloak 24, Traefik | 5 | Infra | `docker compose up` starts all services; health checks pass for all containers |
+| S0-05 | Write multi-stage Dockerfiles for `apps/web` and `apps/api` (dev + prod targets) | 3 | Infra | `docker build --target dev` and `--target prod` both succeed; prod image < 200MB |
+| S0-06 | Configure Keycloak realm: create `forge` realm, `forge-web` + `forge-api` clients, enable GitHub + Google identity brokering | 5 | BE+Infra | Export `infra/keycloak/realm-export.json`; `docker compose up` auto-imports realm; GitHub OAuth login works locally |
+| S0-07 | Set up PostgreSQL schema with Drizzle ORM: initial migration, RLS policies enabled | 3 | BE | `pnpm db:migrate` runs cleanly; tables created; `pnpm db:seed` populates test data |
+| S0-08 | Integrate MinIO: create buckets (`avatars`, `snapshots`, `assets`), configure SDK in API | 2 | BE | Upload test file via `@aws-sdk/client-s3` pointing at MinIO; file retrievable via presigned URL |
+| S0-09 | GitHub Actions: `pr.yml` — lint + typecheck + unit tests + docker build check | 3 | Infra | PR check runs in < 4 min; runs Postgres + Redis as service containers; fails on type errors |
+| S0-10 | GitHub Actions: `staging.yml` — build images → push to GHCR → deploy to staging | 3 | Infra | Push to `main` builds multi-arch images, pushes to `ghcr.io/org/forge-web` and `forge-api`, deploys to staging environment |
+| S0-11 | Set up Sentry (FE + BE) and PostHog (FE) | 2 | Infra | Errors appear in Sentry dashboard, pageviews in PostHog |
+| S0-12 | Create shared TypeScript types package (`packages/shared`) | 2 | AI | API request/response types imported correctly in both apps |
+| S0-13 | Write team README: local setup (docker compose), env vars, deploy process | 1 | Infra | Any engineer can set up from scratch in < 30 min using only Docker + pnpm |
+| **Total** | | **36** | | |
 
-**Definition of Done:** Every engineer has cloned the repo, run `pnpm install && pnpm dev`, and seen all services start without errors.  
-**Demo:** Walk through local dev environment — show monorepo structure, hot reload, CI passing, staging deploy.
+**Definition of Done:** Every engineer has run `docker compose up && pnpm install && pnpm dev`, seen all services healthy, and made a PR that passed CI.  
+**Demo:** Walk through `docker compose up` from scratch → show Traefik dashboard → Keycloak admin → MinIO console → pgAdmin → hot reload in web app.
 
 ---
 
@@ -93,23 +94,23 @@
 
 | ID | Story | Points | Owner | Acceptance Criteria |
 |----|-------|--------|-------|---------------------|
-| S1-01 | GitHub OAuth login via Clerk | 3 | FE+BE | User clicks "Continue with GitHub", authenticates, lands on dashboard |
-| S1-02 | Google OAuth login via Clerk | 2 | FE+BE | Same as above for Google |
-| S1-03 | Email + password signup with verification | 3 | FE+BE | Verification email sent, account unlocked after clicking link |
-| S1-04 | Magic link login | 2 | FE+BE | Email received, link logs user in, expires in 15 min |
-| S1-05 | Clerk webhook → create `users` + `workspaces` record in Supabase | 3 | BE | New Supabase user + personal workspace created on first login |
-| S1-06 | Auth middleware: protect all `/dashboard` routes in Next.js | 2 | FE | Unauthenticated users redirected to `/login` |
-| S1-07 | User profile page (name, avatar, email display) | 2 | FE | Profile page renders user data from Supabase |
-| S1-08 | Avatar upload (to R2, update Supabase `users.avatar_url`) | 3 | FE+BE | User uploads JPG/PNG < 2MB, new avatar shown immediately |
-| S1-09 | Password reset flow | 2 | FE | Reset email sent, new password set, user logged in |
-| S1-10 | Account deletion (soft delete, schedule cleanup job) | 3 | BE | Confirmation modal, account inaccessible immediately, data deleted in 30 days |
-| S1-11 | Logout | 1 | FE | Session cleared, redirected to `/`, can't access dashboard |
+| S1-01 | GitHub OAuth login via Keycloak identity brokering | 3 | FE+BE | User clicks "Continue with GitHub" → Keycloak redirect → authenticates → lands on dashboard with OIDC session |
+| S1-02 | Google OAuth login via Keycloak identity brokering | 2 | FE+BE | Same as above for Google; both providers configured in realm-export.json |
+| S1-03 | Email + password signup with email verification | 3 | FE+BE | Keycloak sends verification email (via Resend SMTP); account unlocked after clicking link |
+| S1-04 | Magic link / passwordless login | 2 | FE+BE | Keycloak "email OTP" flow; link logs user in, expires in 15 min |
+| S1-05 | OIDC callback → create `users` + `workspaces` record in PostgreSQL | 3 | BE | On first successful Keycloak login, `POST /v1/auth/sync` creates user + personal workspace; idempotent |
+| S1-06 | Auth middleware: Keycloak OIDC token validation for all `/dashboard` routes | 2 | FE+BE | Expired/invalid tokens return 401; unauthenticated users redirected to `/login` |
+| S1-07 | User profile page (name, avatar, email display) | 2 | FE | Profile page renders user data from PostgreSQL |
+| S1-08 | Avatar upload (to MinIO `avatars` bucket, update PostgreSQL `users.avatar_url`) | 3 | FE+BE | User uploads JPG/PNG < 2MB, presigned URL returned, new avatar shown immediately |
+| S1-09 | Password reset flow (via Keycloak) | 2 | FE | Reset email sent via Keycloak; new password set; user logged in |
+| S1-10 | Account deletion (soft delete, schedule cleanup job) | 3 | BE | Confirmation modal; account inaccessible immediately; data deleted in 30 days via BullMQ job |
+| S1-11 | Logout (clear OIDC session in Keycloak + client-side) | 1 | FE | Session cleared in Keycloak + browser; redirected to `/`; can't access dashboard |
 | S1-12 | `/login` and `/signup` page UI (polished, branded) | 3 | FE | Matches design spec, mobile-responsive, no layout issues |
 | **Total** | | **29** | | |
 
 **Definition of Done:** A new user can sign up with GitHub, see their profile, and log out.  
 **Demo:** Live signup → profile → logout → login with magic link.  
-**Risks:** Clerk webhook delivery latency (mitigation: also create user on first authenticated API call as fallback).
+**Risks:** Keycloak OIDC redirect must work under COOP/COEP headers (WebContainer requirement) — redirect flow (not popup) is used, which is compatible. Verify in this sprint.
 
 ---
 
@@ -151,7 +152,7 @@
 | S3-01 | `POST /v1/projects/:id/ai/chat` — streaming AI endpoint (SSE) | 5 | AI | Sends prompt to Claude 3.5 Sonnet, streams response tokens back to client |
 | S3-02 | Context assembly: file tree + last 20 messages + user prompt | 5 | AI | System prompt includes full file tree summary and conversation history |
 | S3-03 | AI response parser: extract diff blocks + explanation text | 5 | AI | Diff blocks parsed into `{ path, diff }` objects, explanation text separated |
-| S3-04 | Diff applier: apply unified diffs to project files in Supabase | 5 | AI | Files updated correctly, no corruption on edge cases (new file, deleted file) |
+| S3-04 | Diff applier: apply unified diffs to project files in PostgreSQL | 5 | AI | Files updated correctly, no corruption on edge cases (new file, deleted file) |
 | S3-05 | Chat UI component: message list with user/assistant bubbles | 3 | FE | Messages scroll correctly, auto-scroll to latest, timestamps shown |
 | S3-06 | Streaming text display: token-by-token render with cursor animation | 3 | FE | Text appears smoothly during stream, no layout jumps |
 | S3-07 | Diff viewer component: show changed lines (green/red) in chat bubble | 5 | FE | Unified diff rendered with syntax highlighting, file name shown |
@@ -162,7 +163,7 @@
 | **Total** | | **39** | | |
 
 **Definition of Done:** User types "Add a blue header with the text Hello World" → AI streams back response → diff shown → files updated in DB.  
-**Demo:** Live prompt → streaming response → diff shown in chat → inspect Supabase to see updated file.  
+**Demo:** Live prompt → streaming response → diff shown in chat → inspect PostgreSQL to see updated file.  
 **Risks:** Claude API latency (mitigation: stream first token immediately, show typing indicator at < 500ms). Diff parsing edge cases (mitigation: dedicate 1 day to diff format testing with 20 edge cases).
 
 ---
@@ -179,7 +180,7 @@
 | S4-03 | Monaco Editor integration (lazy-loaded, language detection by extension) | 5 | FE | Editor loads for `.tsx`, `.ts`, `.css`, `.json` with correct syntax highlighting |
 | S4-04 | File open (click file → loads in editor, tab created) | 3 | FE | Click file in tree → editor loads content, tab appears in tab bar |
 | S4-05 | Multi-tab support (open multiple files, close tabs with ×) | 3 | FE | Multiple tabs, active tab highlighted, unsaved changes dot shown |
-| S4-06 | Auto-save (debounced 500ms → `PUT /v1/projects/:id/files/*path`) | 3 | FE+BE | Edit in editor → file saved to Supabase within 1s, no manual save needed |
+| S4-06 | Auto-save (debounced 500ms → `PUT /v1/projects/:id/files/*path`) | 3 | FE+BE | Edit in editor → file saved to PostgreSQL within 1s, no manual save needed |
 | S4-07 | `PUT /v1/projects/:id/files/*path` — create or update file API | 2 | BE | File upserted in `project_files`, size calculated |
 | S4-08 | `DELETE /v1/projects/:id/files/*path` — delete file API | 1 | BE | File removed from DB |
 | S4-09 | Create new file (right-click in tree → New File → name input) | 2 | FE | New file created in tree, editor opens to empty file, saved immediately |
@@ -203,7 +204,7 @@
 | ID | Story | Points | Owner | Acceptance Criteria |
 |----|-------|--------|-------|---------------------|
 | S5-01 | WebContainer bootstrap (install `@webcontainer/api`, configure COOP/COEP headers) | 3 | FE+Infra | WebContainer boots without errors, Vercel headers configured |
-| S5-02 | Mount project files into WebContainer on workspace load | 5 | FE | All `project_files` from Supabase loaded into WebContainer FS on open |
+| S5-02 | Mount project files into WebContainer on workspace load | 5 | FE | All `project_files` from PostgreSQL loaded into WebContainer FS on open |
 | S5-03 | Run `npm install` + `npm run dev` inside WebContainer on boot | 3 | FE | Vite dev server starts inside WebContainer, terminal output shown |
 | S5-04 | Preview iframe: render WebContainer server URL in iframe | 3 | FE | App renders in preview pane, interactive (click, type, scroll all work) |
 | S5-05 | File sync: editor save → WebContainer FS update → HMR triggers | 5 | FE | Edit file in Monaco → preview updates within 500ms (Vite HMR) |
@@ -218,7 +219,7 @@
 
 **Definition of Done:** User opens a project, sees "Starting your app…" progress bar, app appears in preview pane within 10s, edits a heading in Monaco and sees it update in preview within 500ms.  
 **Demo:** Open workspace → wait for preview boot → type in app (input field) → edit text in Monaco → preview hot-reloads → trigger a runtime error → click "Fix with AI" → AI fixes it.  
-**Risks:** WebContainer requires cross-origin isolation headers (COOP/COEP) which can break third-party scripts. Mitigation: test with Clerk, PostHog, Stripe.js early. WebContainer only works in Chrome/Edge/Firefox (not Safari < 16.4).
+**Risks:** WebContainer requires cross-origin isolation headers (COOP/COEP) which can break third-party scripts. Mitigation: test with Keycloak redirect flow (confirmed COOP/COEP compatible — no popup), PostHog, Stripe.js early. WebContainer only works in Chrome/Edge/Firefox (not Safari < 16.4).
 
 ---
 
@@ -268,7 +269,7 @@
 | S7-07 | Cloudflare Pages deploy | 3 | BE | Cloudflare Pages API integration, deploy to CF Pages |
 | S7-08 | Rollback to previous deployment | 2 | BE+FE | Click "Rollback" on a past deployment → Vercel/Netlify rollback API called |
 | S7-09 | Shareable preview URL (`preview.forge.ai/p/{id}`) | 3 | FE+Infra | WebContainer preview accessible via public URL for logged-out users (if project is public) |
-| S7-10 | Environment variable management UI (add/edit/delete key-value pairs) | 3 | FE+BE | Env vars stored encrypted in Supabase, injected into deploy as Vercel env vars |
+| S7-10 | Environment variable management UI (add/edit/delete key-value pairs) | 3 | FE+BE | Env vars stored encrypted in PostgreSQL, injected into user's deploy as provider env vars |
 | **Total** | | **35** | | |
 
 **Definition of Done:** User clicks Deploy → selects Vercel → sees progress → live URL appears within 90s → clicking URL shows the deployed app.  
@@ -361,7 +362,7 @@
 | S11-05 | Team settings page (invite by email, see members, change roles, remove) | 3 | FE+BE | Owner can invite, change roles, remove members |
 | S11-06 | Role-based access: Viewer role (read-only, no editor/chat access) | 2 | FE+BE | Viewer can open workspace but editor and chat input are disabled |
 | S11-07 | Code comments (highlight code → right-click → Add Comment → thread) | 5 | FE+BE | Comment stored in DB, shown as annotation in Monaco gutter, resolvable |
-| S11-08 | Activity feed panel (right sidebar: AI prompts, deploys, file edits) | 3 | FE+BE | Feed shows last 50 events per project, real-time updates via Supabase Realtime |
+| S11-08 | Activity feed panel (right sidebar: AI prompts, deploys, file edits) | 3 | FE+BE | Feed shows last 50 events per project, real-time updates via SSE (PostgreSQL LISTEN/NOTIFY → SSE stream) |
 | S11-09 | Team plan enforcement (collaboration features gated to Team tier) | 2 | BE | API returns 403 for collaboration endpoints if workspace is not on Team plan |
 | **Total** | | **29** | | |
 
@@ -501,7 +502,7 @@
 
 | ID | Story | Points | Owner |
 |----|-------|--------|-------|
-| S19-01 | SSO: SAML via Clerk (Google Workspace, Okta, Azure AD) | 5 | BE+Infra |
+| S19-01 | SSO: SAML 2.0 via Keycloak (Google Workspace, Okta, Azure AD) — Keycloak supports SAML natively | 3 | BE+Infra |
 | S19-02 | Audit log (all admin actions stored in `audit_log` table, exportable as CSV) | 5 | BE+FE |
 | S19-03 | Enterprise billing (custom contract flow, invoice billing via Stripe) | 3 | BE |
 | S19-04 | SLA dashboard (uptime % over last 30/90/365 days) | 3 | FE+BE |
@@ -531,7 +532,7 @@
 | Debt Item | Introduced In | Pay-Back Sprint | Notes |
 |-----------|---------------|-----------------|-------|
 | No pagination on file tree (load all files) | Sprint 4 | Sprint 12 | Fine for < 200 files, needs virtualization at scale |
-| Snapshot `files_json` stored in Postgres (not R2) | Sprint 6 | Sprint 13 | Large snapshots will inflate DB. Move to R2 in Sprint 13 |
+| Snapshot `files_json` stored in Postgres | Sprint 6 | Sprint 13 | Large snapshots will inflate DB. Move to MinIO at > 1MB snapshot size in Sprint 13 |
 | WebContainer boots fresh each workspace open | Sprint 5 | Sprint 16 | No caching between sessions. Investigate FS persistence |
 | No AI response caching (same prompt → full new call) | Sprint 3 | Sprint 14 | Add prompt hash cache in Redis with 1h TTL |
 | Template previews are live WebContainers (expensive) | Sprint 9 | Sprint 17 | Pre-render screenshots for template gallery |
@@ -544,16 +545,18 @@
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|------|-----------|--------|------------|
-| 1 | Anthropic API rate limits or outage | M | H | GPT-4o fallback, queue with backoff, status page monitoring |
+| 1 | Anthropic/Bedrock API rate limits or outage | M | H | Multi-provider circuit breaker (Bedrock → Anthropic → Gemini → GPT-4o); effectively zero AI downtime |
 | 2 | WebContainer incompatibility (Safari) | H | M | Show "Use Chrome/Firefox" banner, track % Safari users |
-| 3 | COOP/COEP header conflicts with third-party scripts | M | H | Test Clerk, PostHog, Stripe.js in Sprint 5 before integration |
-| 4 | Supabase RLS policy bug → data leak between users | L | H | Automated RLS tests, regular audit, separate staging tenant |
+| 3 | COOP/COEP header conflicts with third-party scripts | M | H | Keycloak uses redirect flow (COOP/COEP compatible). Test PostHog, Stripe.js in Sprint 5 |
+| 4 | PostgreSQL RLS policy bug → data leak between users | L | H | Automated RLS integration tests, regular audit, separate staging tenant |
 | 5 | Stripe webhook replay → double-charge | L | H | Idempotency keys on all Stripe calls, event deduplication table |
 | 6 | WebContainer memory leak in long sessions | M | M | Implement session timeout warning + soft reload at 4 hours |
-| 7 | AI generates malicious code (prompt injection) | L | H | Output sanitization, content moderation API (OpenAI Moderation) |
+| 7 | AI generates malicious code (prompt injection) | L | H | Output sandboxed in WebContainer; no exec() or system calls; content moderation layer |
 | 8 | Competitor (Lovable/Bolt) adds same features faster | H | M | Differentiate on quality + GitHub integration + pricing |
 | 9 | Key engineer leaves in early stage | M | H | Document all systems, cross-train, pair programming culture |
-| 10 | AI costs exceed revenue at scale | M | H | Per-user cost tracking from Sprint 10, aggressive caching, model routing |
+| 10 | AI costs exceed revenue at scale | M | H | Per-user cost tracking from Sprint 10, aggressive caching, task-based model routing |
+| 11 | Keycloak upgrade breaking changes | L | M | Pin Keycloak version in Docker Compose; test upgrades in staging first; realm-export.json in version control |
+| 12 | Docker image size slows CI builds | M | L | Multi-stage builds, Docker layer cache in GitHub Actions (cache-from: type=gha) |
 
 ---
 
