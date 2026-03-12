@@ -2,7 +2,7 @@
 
 Complete guide to running the full Forge AI stack on your machine.
 
-> **Current build:** Sprints 0–10 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), Template Marketplace with Onboarding Wizard, and Billing & Subscriptions (Stripe, plan tiers, usage limits).
+> **Current build:** Sprints 0–11 complete. Covers auth, projects, AI chat, code editor, live preview (WebContainers), version history, one-click deployment to Vercel / Netlify / Cloudflare Pages, full GitHub integration (push, pull, PR, import), Template Marketplace with Onboarding Wizard, Billing & Subscriptions (Stripe, plan tiers, usage limits), and Collaboration & Teams (RBAC, workspace invitations, real-time presence).
 
 ---
 
@@ -226,7 +226,7 @@ open http://localhost:8080
 
 ## 4. Run Database Migrations
 
-There are 8 migrations covering all sprints:
+There are 9 migrations covering all sprints:
 
 | Migration | Sprint | What it adds |
 |-----------|--------|-------------|
@@ -238,10 +238,11 @@ There are 8 migrations covering all sprints:
 | `0005_github` | 8 | github_connections + 5 GitHub columns on projects |
 | `0006_templates` | 9 | templates, template_ratings + onboarding columns on users |
 | `0007_billing` | 10 | Stripe columns on subscriptions (planTier, stripeCustomerId, periodEnd, etc.) |
+| `0008_collaboration` | 11 | workspace_invitations, presence_sessions |
 
 ```bash
 cd apps/api
-pnpm db:migrate    # applies all 8 pending Drizzle migrations
+pnpm db:migrate    # applies all 9 pending Drizzle migrations
 ```
 
 Verify migrations applied:
@@ -250,7 +251,7 @@ docker compose exec postgres psql -U forge -d forge -c "\dt"
 # Should list: users, workspaces, workspace_members, projects, project_files,
 #              ai_conversations, ai_messages, project_snapshots,
 #              deployments, project_env_vars, subscriptions, github_connections,
-#              templates, template_ratings
+#              templates, template_ratings, workspace_invitations, presence_sessions
 ```
 
 To inspect your database schema:
@@ -859,9 +860,119 @@ KEYS ratelimit:*
 # Check BullMQ job queues
 KEYS bull:*
 
+# Check presence sessions (Sprint 11)
+KEYS presence:*
+
 # Exit
 exit
 ```
+
+---
+
+### ✅ Sprint 11 — Collaboration & Teams
+
+Sprint 11 adds workspace invitations, role-based access control (RBAC), and real-time presence via WebSocket.
+
+#### Role hierarchy
+Forge AI uses three workspace roles, in descending permission order:
+
+| Role | Can do |
+|------|--------|
+| **owner** | All actions: invite, remove members, change roles, manage workspace |
+| **editor** | View members list, view pending invitations, edit projects |
+| **viewer** | View workspace content; read-only access to projects |
+
+#### Manage team members
+1. Navigate to `http://localhost/settings/members`
+2. You'll see a list of current members with their role badges (purple=owner, blue=editor, grey=viewer)
+3. As **owner**: use the **Invite member** form at the top — enter an email and select role (editor or viewer)
+4. As **owner**: use the role dropdown next to each member to change their role
+5. As **owner**: click **Remove** to remove a member from the workspace
+
+#### Send & accept an invitation
+```bash
+# 1. Send an invite (as owner) via API:
+curl -X POST http://localhost/api/v1/workspaces/<workspaceId>/invitations \
+  -H "Content-Type: application/json" \
+  -b "session=..." \
+  -d '{"email":"colleague@example.com","role":"editor"}'
+# Returns: { invitation: { id, email, role, expiresAt } }
+
+# 2. The invitation token is logged to the API console (email sending is async / Resend-backed):
+# Look for: "Invitation created" in docker compose logs api
+
+# 3. Accepting the invite (as the invited user, must be logged in):
+curl -X POST http://localhost/api/v1/invitations/<token>/accept \
+  -b "session=..."
+# Returns: { workspaceId, role }
+```
+
+> **Note:** Real email sending requires a `RESEND_API_KEY` (see Optional features table). Without it, the invitation token is visible in the API logs for manual testing.
+
+#### Workspace switcher
+1. Log in → the dashboard top-left now shows a **workspace switcher** dropdown
+2. Click it to see all workspaces you belong to with your role
+3. Click **+ Create workspace** to create a new one (name → auto-generates slug)
+4. Switching workspace refreshes your active context
+
+#### Real-time presence
+1. Open `http://localhost` in **two different browser windows** (logged in as different users)
+2. Both users join the same project — you'll see the **avatar stack** in the dashboard header showing online collaborators (e.g. `JD TU +1  3 online`)
+3. Avatars use initials from email + deterministic colour
+4. Presence uses WebSocket (`WS /api/v1/ws/presence/:workspaceId`) with a 30-second ping keepalive; sessions expire after 60s without a ping
+
+#### Test presence via Redis
+```bash
+docker compose exec redis redis-cli
+
+# List online users in a workspace
+SMEMBERS presence:ws:<workspaceId>
+
+# Inspect a specific user's presence data
+GET presence:user:<workspaceId>:<userId>
+
+exit
+```
+
+#### Verify collaboration data in database
+```bash
+docker compose exec postgres psql -U forge -d forge
+
+-- List workspace members and roles
+SELECT u.email, wm.role, wm.joined_at
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = '<your-workspace-id>';
+
+-- List pending invitations
+SELECT email, role, status, expires_at
+FROM workspace_invitations
+WHERE workspace_id = '<your-workspace-id>' AND status = 'pending';
+
+\q
+```
+
+#### RBAC enforcement (API-level)
+All collaboration endpoints enforce RBAC automatically:
+```bash
+# As editor (not owner) — should return 403:
+curl -X DELETE http://localhost/api/v1/workspaces/<id>/members/<userId> \
+  -b "session=..." 
+# → {"error":"Only owners can remove members"}
+
+# As viewer — list members (allowed):
+curl http://localhost/api/v1/workspaces/<id>/members \
+  -b "session=..."
+# → {"members":[...]}
+```
+
+#### Optional: Configure email sending for invitations (Resend)
+Add to `apps/api/.env`:
+```
+RESEND_API_KEY=re_...           # get from resend.com (free tier: 3,000 emails/month)
+RESEND_FROM_EMAIL=noreply@yourdomain.com
+```
+> Without this, invitations still work — the token is logged to the console and can be manually shared.
 
 ---
 
@@ -1073,7 +1184,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 docker compose up -d
 # Wait ~60s for Keycloak to boot
 
-# 4. Migrate DB (applies all 8 migrations)
+# 4. Migrate DB (applies all 9 migrations)
 pnpm --filter @forge/api db:migrate
 
 # 5. Seed templates (optional — populates 10 starter templates)
@@ -1095,7 +1206,8 @@ open http://localhost
 - GitHub push/pull/PR/import (Sprint 8, needs GitHub OAuth App — see Section 7b)
 - Template Marketplace with 10 starter templates + Onboarding Wizard (Sprint 9)
 - Billing & Subscriptions with Stripe (Sprint 10, needs Stripe keys for checkout)
-- 232 unit tests passing across API + web
+- Collaboration & Teams: RBAC, workspace invitations, real-time presence (Sprint 11)
+- 326 unit tests passing across API + web
 
 **Optional features and what they need:**
 
@@ -1103,6 +1215,7 @@ open http://localhost
 |---------|----------------------|
 | Template Marketplace | `pnpm db:seed` to populate templates |
 | Billing & Subscriptions | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + price IDs — see **Section 9 Sprint 10** |
+| Team Collaboration (RBAC + invites) | Works out of the box; email delivery needs `RESEND_API_KEY` — see **Section 9 Sprint 11** |
 | GitHub push / pull / import | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` — see **Section 7b** |
 | Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
 | Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
