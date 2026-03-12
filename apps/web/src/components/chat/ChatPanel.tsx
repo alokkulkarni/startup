@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getToken } from '@/lib/auth'
 import { useAIChat } from '@/hooks/useAIChat'
@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils'
 interface ChatPanelProps {
   projectId: string
   onFilesChanged?: () => void
+  initialPrompt?: string | null
+  onPromptConsumed?: () => void
 }
 
 function EmptyState() {
@@ -53,7 +55,7 @@ function EmptyState() {
   )
 }
 
-export function ChatPanel({ projectId, onFilesChanged }: ChatPanelProps) {
+export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
@@ -62,6 +64,15 @@ export function ChatPanel({ projectId, onFilesChanged }: ChatPanelProps) {
   )
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevStreamingRef = useRef(false)
+  const [input, setInput] = useState('')
+
+  // Pre-fill input when an external prompt arrives (e.g., "Fix with AI")
+  useEffect(() => {
+    if (initialPrompt) {
+      setInput(initialPrompt)
+      onPromptConsumed?.()
+    }
+  }, [initialPrompt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (authenticated) {
@@ -166,6 +177,8 @@ export function ChatPanel({ projectId, onFilesChanged }: ChatPanelProps) {
           onSend={sendMessage}
           isStreaming={isStreaming}
           disabled={!authenticated || rateLimit?.remaining === 0}
+          value={input}
+          onChange={setInput}
         />
       </div>
     </div>

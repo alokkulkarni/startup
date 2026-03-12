@@ -9,11 +9,14 @@ import { api } from '@/lib/api'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { FileTree } from '@/components/editor/FileTree'
 import { CodeEditor } from '@/components/editor/CodeEditor'
+import { PreviewPanel } from '@/components/preview/PreviewPanel'
 import { useFileTree } from '@/hooks/useFileTree'
+import { useWebContainer } from '@/hooks/useWebContainer'
 import type { FileNode } from '@/hooks/useFileTree'
 import type { Project } from '@forge/shared'
+import type { Viewport } from '@/components/preview/ViewportToggle'
 
-const DEFAULT_WIDTHS = { fileTree: 20, chat: 35, editor: 45 }
+const DEFAULT_WIDTHS = { fileTree: 15, chat: 25, editor: 30, preview: 30 }
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -30,6 +33,10 @@ export default function ProjectPage() {
   const [token, setToken] = useState<string | null>(null)
   const [panelWidths, setPanelWidths] = useState(DEFAULT_WIDTHS)
   const [autoSaved, setAutoSaved] = useState(false)
+  const [viewport, setViewport] = useState<Viewport>('desktop')
+  const [showConsole, setShowConsole] = useState(false)
+  const [showPreview, setShowPreview] = useState(true)
+  const [fixPrompt, setFixPrompt] = useState<string | null>(null)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -46,9 +53,11 @@ export default function ProjectPage() {
       try {
         const saved = localStorage.getItem(`forge:panel:${id}`)
         if (saved) {
-          const parsed = JSON.parse(saved) as typeof DEFAULT_WIDTHS
-          setPanelWidths(parsed)
-          panelWidthsRef.current = parsed
+          const parsed = JSON.parse(saved) as Partial<typeof DEFAULT_WIDTHS>
+          // Merge with defaults so old 3-panel saves gracefully upgrade
+          const merged = { ...DEFAULT_WIDTHS, ...parsed }
+          setPanelWidths(merged)
+          panelWidthsRef.current = merged
         }
       } catch {
         // ignore
@@ -88,12 +97,26 @@ export default function ProjectPage() {
     renameFile,
   } = useFileTree(id, token)
 
+  const {
+    status: wcStatus,
+    previewUrl,
+    logs: consoleLogs,
+    error: wcError,
+    progress: wcProgress,
+    writeFile,
+    syncFiles,
+    restart: restartWC,
+    clearLogs,
+  } = useWebContainer(id, files, showPreview && files.length > 0)
+
   const handleSave = useCallback(async (path: string, content: string) => {
     await updateFile(path, content)
+    // Sync to WebContainer FS for HMR
+    await writeFile(path, content)
     setAutoSaved(true)
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => setAutoSaved(false), 2000)
-  }, [updateFile])
+  }, [updateFile, writeFile])
 
   const handleCreateFile = useCallback(async (path: string) => {
     await createFile(path, '')
@@ -112,8 +135,8 @@ export default function ProjectPage() {
     await deleteFile(file.path)
   }, [deleteFile])
 
-  // Drag handle logic
-  const handleDragStart = useCallback((e: React.MouseEvent, dragIndex: 0 | 1) => {
+  // Drag handle logic — supports 3 drag handles (0, 1, 2) for the 4-panel layout
+  const handleDragStart = useCallback((e: React.MouseEvent, dragIndex: 0 | 1 | 2) => {
     e.preventDefault()
     const startX = e.clientX
     const startWidths = { ...panelWidthsRef.current }
@@ -126,21 +149,23 @@ export default function ProjectPage() {
       const percentDx = (dx / containerWidth) * 100
 
       if (dragIndex === 0) {
-        const newFileTree = Math.min(Math.max(startWidths.fileTree + percentDx, 10), 70)
+        // fileTree ↔ chat
+        const newFileTree = Math.min(Math.max(startWidths.fileTree + percentDx, 10), 60)
         const diff = newFileTree - startWidths.fileTree
-        const newChat = Math.min(Math.max(startWidths.chat - diff, 10), 70)
-        const newEditor = 100 - newFileTree - newChat
-        if (newEditor >= 10) {
-          setPanelWidths({ fileTree: newFileTree, chat: newChat, editor: newEditor })
-        }
-      } else {
-        const newChat = Math.min(Math.max(startWidths.chat + percentDx, 10), 70)
+        const newChat = Math.min(Math.max(startWidths.chat - diff, 10), 60)
+        setPanelWidths(prev => ({ ...prev, fileTree: newFileTree, chat: newChat }))
+      } else if (dragIndex === 1) {
+        // chat ↔ editor
+        const newChat = Math.min(Math.max(startWidths.chat + percentDx, 10), 60)
         const diff = newChat - startWidths.chat
-        const newEditor = Math.min(Math.max(startWidths.editor - diff, 10), 70)
-        const newFileTree = 100 - newChat - newEditor
-        if (newFileTree >= 10) {
-          setPanelWidths({ fileTree: newFileTree, chat: newChat, editor: newEditor })
-        }
+        const newEditor = Math.min(Math.max(startWidths.editor - diff, 10), 60)
+        setPanelWidths(prev => ({ ...prev, chat: newChat, editor: newEditor }))
+      } else {
+        // editor ↔ preview
+        const newEditor = Math.min(Math.max(startWidths.editor + percentDx, 10), 60)
+        const diff = newEditor - startWidths.editor
+        const newPreview = Math.min(Math.max(startWidths.preview - diff, 10), 60)
+        setPanelWidths(prev => ({ ...prev, editor: newEditor, preview: newPreview }))
       }
     }
 
@@ -155,6 +180,11 @@ export default function ProjectPage() {
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [id])
+
+  const handleFilesChanged = useCallback(async () => {
+    await refreshFiles()
+    await syncFiles(files)
+  }, [refreshFiles, syncFiles, files])
 
   if (authLoading || loading) {
     return (
@@ -192,7 +222,7 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      {/* Three-panel workspace */}
+      {/* Four-panel workspace */}
       <div className="flex-1 flex overflow-hidden" data-panels>
         {/* Panel 1 — File Tree */}
         <div
@@ -229,7 +259,12 @@ export default function ProjectPage() {
           className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden"
           style={{ width: `${panelWidths.chat}%` }}
         >
-          <ChatPanel projectId={id} onFilesChanged={refreshFiles} />
+          <ChatPanel
+            projectId={id}
+            onFilesChanged={handleFilesChanged}
+            initialPrompt={fixPrompt}
+            onPromptConsumed={() => setFixPrompt(null)}
+          />
         </div>
 
         {/* Drag handle 2 */}
@@ -240,7 +275,7 @@ export default function ProjectPage() {
 
         {/* Panel 3 — Code Editor */}
         <div
-          className="flex-1 flex flex-col overflow-hidden"
+          className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden"
           style={{ width: `${panelWidths.editor}%` }}
         >
           <CodeEditor
@@ -249,6 +284,33 @@ export default function ProjectPage() {
             activeFile={activeFile}
             onSave={handleSave}
             onFileClick={setActiveFile}
+          />
+        </div>
+
+        {/* Drag handle 3 */}
+        <div
+          className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
+          onMouseDown={e => handleDragStart(e, 2)}
+        />
+
+        {/* Panel 4 — Preview */}
+        <div
+          className="shrink-0 flex flex-col overflow-hidden"
+          style={{ width: `${panelWidths.preview}%` }}
+        >
+          <PreviewPanel
+            status={wcStatus}
+            previewUrl={previewUrl}
+            progress={wcProgress}
+            logs={consoleLogs}
+            error={wcError}
+            viewport={viewport}
+            onViewportChange={setViewport}
+            onRefresh={restartWC}
+            onFixWithAI={msg => setFixPrompt(`Fix this error:\n\n${msg}`)}
+            onClearLogs={clearLogs}
+            showConsole={showConsole}
+            onToggleConsole={() => setShowConsole(v => !v)}
           />
         </div>
       </div>
@@ -268,6 +330,14 @@ export default function ProjectPage() {
           <>
             <span className="text-gray-600">|</span>
             <span className="text-green-500">✓ Auto-saved</span>
+          </>
+        )}
+        {wcStatus !== 'idle' && (
+          <>
+            <span className="text-gray-600">|</span>
+            <span className={wcStatus === 'ready' ? 'text-green-500' : 'text-yellow-500'}>
+              ● {wcStatus === 'ready' ? 'Preview running' : wcStatus}
+            </span>
           </>
         )}
       </div>

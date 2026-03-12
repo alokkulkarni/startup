@@ -1,19 +1,20 @@
 'use client'
 
-import { useRef, useState, useCallback, type KeyboardEvent, type ChangeEvent } from 'react'
+import { useRef, useCallback, type KeyboardEvent, type ChangeEvent } from 'react'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
   onSend: (prompt: string) => void
   isStreaming: boolean
   disabled?: boolean
+  value: string
+  onChange: (value: string) => void
 }
 
 const MAX_CHARS = 4000
 const CHAR_COUNT_THRESHOLD = 3000
 
-export function ChatInput({ onSend, isStreaming, disabled }: ChatInputProps) {
-  const [value, setValue] = useState('')
+export function ChatInput({ onSend, isStreaming, disabled, value, onChange }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const adjustHeight = useCallback(() => {
@@ -28,21 +29,21 @@ export function ChatInput({ onSend, isStreaming, disabled }: ChatInputProps) {
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       const newValue = e.target.value.slice(0, MAX_CHARS)
-      setValue(newValue)
+      onChange(newValue)
       adjustHeight()
     },
-    [adjustHeight],
+    [adjustHeight, onChange],
   )
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed || isStreaming || disabled) return
     onSend(trimmed)
-    setValue('')
+    onChange('')
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [value, isStreaming, disabled, onSend])
+  }, [value, isStreaming, disabled, onSend, onChange])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -55,11 +56,11 @@ export function ChatInput({ onSend, isStreaming, disabled }: ChatInputProps) {
   )
 
   const handleStop = useCallback(() => {
-    setValue('')
+    onChange('')
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [])
+  }, [onChange])
 
   const charCount = value.length
   const showCharCount = charCount > CHAR_COUNT_THRESHOLD

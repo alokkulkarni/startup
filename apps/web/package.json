@@ -17,6 +17,7 @@
     "@forge/shared": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/typography": "^0.5.13",
+    "@webcontainer/api": "^1.6.1",
     "autoprefixer": "^10.4.19",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
