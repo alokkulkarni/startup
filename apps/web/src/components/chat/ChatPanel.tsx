@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 
 interface ChatPanelProps {
   projectId: string
+  onFilesChanged?: () => void
 }
 
 function EmptyState() {
@@ -52,7 +53,7 @@ function EmptyState() {
   )
 }
 
-export function ChatPanel({ projectId }: ChatPanelProps) {
+export function ChatPanel({ projectId, onFilesChanged }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
@@ -60,6 +61,7 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
     token,
   )
   const bottomRef = useRef<HTMLDivElement>(null)
+  const prevStreamingRef = useRef(false)
 
   useEffect(() => {
     if (authenticated) {
@@ -70,6 +72,14 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isStreaming])
+
+  // Notify parent when AI finishes streaming (files may have changed)
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming && messages.length > 0) {
+      onFilesChanged?.()
+    }
+    prevStreamingRef.current = isStreaming
+  }, [isStreaming, messages.length, onFilesChanged])
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
