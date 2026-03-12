@@ -53,7 +53,11 @@ cp .env.example .env.local
 | `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | `sk-proj-...` |
 | `FORGE_ENCRYPTION_KEY` | Generate locally (see below) | 32-char random string |
 
-> **AWS Bedrock (primary AI):** If you have AWS credentials with Bedrock access, fill in `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`. Otherwise the system auto-falls back to Anthropic → Gemini → GPT-4o.
+> **AWS Bedrock (primary AI):** Uses **IAM role assumption** — no hardcoded keys required.
+> - **Production (EC2/ECS/EKS):** Attach `ForgeAIBedrockRole` as the instance/task/pod role — no env vars needed.
+> - **Explicit role assumption:** Set `AWS_ROLE_ARN` — the SDK calls `sts:AssumeRole` automatically.
+> - **Local dev:** Use `AWS_PROFILE` (named profile in `~/.aws/config`) or `AWS_ACCESS_KEY_ID`/`SECRET` as a last resort.
+> - See `infra/aws/README.md` for full IAM setup (policy + trust policy + AWS CLI commands).
 
 > **Generate encryption key:**
 > ```bash
@@ -115,9 +119,18 @@ KEYCLOAK_CLIENT_SECRET=forge-api-secret
 APP_URL=http://localhost
 
 # ── AI Providers (primary: Bedrock → Anthropic → Gemini → OpenAI)
+# Bedrock uses IAM role assumption — see infra/aws/README.md for full setup.
+#
+# OPTION A (production): attach ForgeAIBedrockRole as instance/task role — no vars needed
+# OPTION B (explicit role assumption):
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key-here          # optional — leave blank to skip Bedrock
-AWS_SECRET_ACCESS_KEY=your-secret-here  # optional — leave blank to skip Bedrock
+AWS_ROLE_ARN=arn:aws:iam::ACCOUNT_ID:role/ForgeAIBedrockRole
+AWS_ROLE_SESSION_NAME=forge-bedrock-session   # optional
+# OPTION C (local dev — named AWS profile, no plaintext keys):
+# AWS_PROFILE=forge-dev
+# OPTION D (local dev — static keys, last resort, never commit):
+# AWS_ACCESS_KEY_ID=AKIA...
+# AWS_SECRET_ACCESS_KEY=...
 ANTHROPIC_API_KEY=sk-ant-...            # REQUIRED — primary fallback
 GEMINI_API_KEY=AIza...                  # REQUIRED — secondary fallback
 OPENAI_API_KEY=sk-...                   # REQUIRED — tertiary fallback
@@ -977,7 +990,7 @@ open http://localhost
 | Deploy to Vercel | `FORGE_VERCEL_API_KEY` |
 | Deploy to Netlify | `FORGE_NETLIFY_API_KEY` |
 | Deploy to Cloudflare Pages | `FORGE_CF_API_TOKEN` + `FORGE_CF_ACCOUNT_ID` |
-| AWS Bedrock AI (primary) | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_REGION` |
+| AWS Bedrock AI (primary) | IAM role assumption — set `AWS_ROLE_ARN` or attach instance/task role. See `infra/aws/README.md` |
 | Sign in with GitHub | GitHub OAuth App with Keycloak callback (Section 7) |
 | Email notifications | `RESEND_API_KEY` |
 | Error monitoring | `SENTRY_DSN` |

@@ -22,7 +22,7 @@ export const STRIPE_PRICE_IDS = {
 export function getStripeClient(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY not configured')
-  return new Stripe(key, { apiVersion: '2024-12-18.acacia' })
+  return new Stripe(key, { apiVersion: '2024-06-20' })
 }
 
 export async function getOrCreateCustomer(
@@ -100,7 +100,7 @@ function getPlanTierFromPriceId(priceId: string): string {
 
 export async function processWebhookEvent(db: DrizzleDB, event: Stripe.Event): Promise<void> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
-  const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' }) : null
+  const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: '2024-06-20' }) : null
 
   switch (event.type) {
     case 'checkout.session.completed': {

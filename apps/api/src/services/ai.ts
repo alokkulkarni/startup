@@ -2,10 +2,48 @@ import {
   BedrockRuntimeClient,
   InvokeModelWithResponseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime'
+import {
+  fromTemporaryCredentials,
+  fromNodeProviderChain,
+} from '@aws-sdk/credential-providers'
 import Anthropic from '@anthropic-ai/sdk'
 
 const BEDROCK_MODEL = 'anthropic.claude-3-5-sonnet-20241022-v2:0'
 const BEDROCK_REGION = process.env.AWS_REGION ?? 'us-east-1'
+
+/**
+ * Build the AWS credential provider for Bedrock.
+ *
+ * Priority order:
+ *  1. If AWS_ROLE_ARN is set → AssumeRole via STS (recommended for production).
+ *     The base credentials used to assume the role come from the standard chain
+ *     (instance profile, ECS task role, env vars, ~/.aws/credentials).
+ *  2. Otherwise → standard credential provider chain:
+ *     env vars → AWS profile → EC2/ECS instance/task role → container credential URI.
+ *
+ * This means:
+ *  - Local dev: set AWS_PROFILE or AWS_ACCESS_KEY_ID/SECRET in env (no role required)
+ *  - EC2/ECS production: attach an instance/task role — no env vars needed
+ *  - Cross-account / least-privilege: set AWS_ROLE_ARN to the Bedrock-scoped role
+ */
+function getBedrockCredentialProvider() {
+  const roleArn = process.env.AWS_ROLE_ARN
+  const sessionName = process.env.AWS_ROLE_SESSION_NAME ?? 'forge-bedrock-session'
+
+  if (roleArn) {
+    return fromTemporaryCredentials({
+      params: {
+        RoleArn: roleArn,
+        RoleSessionName: sessionName,
+        DurationSeconds: 3600,
+      },
+      // Base credentials come from the standard chain (instance profile etc.)
+      masterCredentials: fromNodeProviderChain(),
+    })
+  }
+
+  return fromNodeProviderChain()
+}
 
 export interface AIStreamChunk {
   type: 'text' | 'done' | 'error'
@@ -24,7 +62,10 @@ async function* streamBedrock(
   systemPrompt: string,
   maxTokens: number,
 ): AsyncGenerator<AIStreamChunk> {
-  const client = new BedrockRuntimeClient({ region: BEDROCK_REGION })
+  const client = new BedrockRuntimeClient({
+    region: BEDROCK_REGION,
+    credentials: getBedrockCredentialProvider(),
+  })
   const body = JSON.stringify({
     anthropic_version: 'bedrock-2023-05-31',
     max_tokens: maxTokens,

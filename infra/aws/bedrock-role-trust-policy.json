@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowEC2AssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    },
+    {
+      "Sid": "AllowECSTaskAssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ecs-tasks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    },
+    {
+      "Sid": "AllowEKSIRSAAssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/oidc.eks.REGION.amazonaws.com/id/OIDC_ID"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.REGION.amazonaws.com/id/OIDC_ID:sub": "system:serviceaccount:forge:forge-api",
+          "oidc.eks.REGION.amazonaws.com/id/OIDC_ID:aud": "sts.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AllowCrossAccountAssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::ACCOUNT_ID:role/forge-instance-role"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
