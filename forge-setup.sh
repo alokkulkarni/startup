@@ -311,46 +311,161 @@ collect_inputs() {
   # ── AWS Bedrock ──────────────────────────────────────────────────────────
   divider
   echo -e "\n${BOLD}AWS Bedrock Setup (primary AI provider)${RESET}\n"
-  echo -e "  ${DIM}Bedrock uses Claude 3.5 Sonnet. If skipped, Anthropic API is used instead.${RESET}\n"
+  echo -e "  ${DIM}Bedrock uses Claude 3.5 Sonnet. If skipped, Anthropic/Gemini/OpenAI is used instead.${RESET}\n"
 
-  prompt_choice AWS_SETUP_CHOICE "How do you want to configure AWS Bedrock?" \
-    "Skip Bedrock — use Anthropic/Gemini/OpenAI only" \
-    "Named AWS profile (~/.aws/config) — recommended for local dev" \
-    "Explicit IAM role ARN (cross-account / assume-role)" \
-    "Static access keys (last resort — never commit)"
+  # Snapshot any pre-existing env-var values before we write script variables
+  local _env_aws_profile="${AWS_PROFILE:-${AWS_DEFAULT_PROFILE:-}}"
+  local _env_aws_role_arn="${AWS_ROLE_ARN:-}"
+  local _env_aws_key_id="${AWS_ACCESS_KEY_ID:-}"
+  local _env_aws_secret="${AWS_SECRET_ACCESS_KEY:-}"
+  local _env_aws_region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
 
+  # Initialise script variables to clean state
   AWS_REGION="us-east-1"
   AWS_PROFILE=""
   AWS_ROLE_ARN=""
   AWS_ACCESS_KEY_ID=""
   AWS_SECRET_ACCESS_KEY=""
   AWS_ROLE_SESSION_NAME="forge-bedrock-session"
+  AWS_SETUP_CHOICE="Skip Bedrock — use Anthropic/Gemini/OpenAI only"
 
-  case "$AWS_SETUP_CHOICE" in
-    "Skip Bedrock"*)
-      info "Skipping Bedrock. App will use Anthropic → Gemini → OpenAI fallback."
-      ;;
-    "Named AWS profile"*)
-      prompt_optional AWS_PROFILE "AWS Profile name" "forge-dev"
-      prompt_optional AWS_REGION "AWS Region" "us-east-1"
-      ok "Will use AWS_PROFILE=$AWS_PROFILE"
-      ;;
-    "Explicit IAM role ARN"*)
-      prompt_required AWS_ROLE_ARN \
-        "AWS Role ARN" \
-        "arn:aws:iam::123456789012:role/ForgeAIBedrockRole"
-      prompt_optional AWS_REGION "AWS Region" "us-east-1"
-      prompt_optional AWS_ROLE_SESSION_NAME "Role Session Name" "forge-bedrock-session"
-      ok "Will assume role: $AWS_ROLE_ARN"
-      ;;
-    "Static access keys"*)
-      warn "Static keys are less secure. Consider using a named profile instead."
-      prompt_required AWS_ACCESS_KEY_ID "AWS Access Key ID" "AKIA..."
-      prompt_secret AWS_SECRET_ACCESS_KEY "AWS Secret Access Key" "wJalrX..."
-      prompt_optional AWS_REGION "AWS Region" "us-east-1"
-      ok "Static AWS credentials configured"
-      ;;
-  esac
+  # ── Auto-detect existing AWS configuration ──────────────────────────────
+  local _aws_detected_type=""
+  local _aws_detected_summary=""
+
+  if [[ -n "$_env_aws_profile" ]]; then
+    _aws_detected_type="profile"
+    AWS_PROFILE="$_env_aws_profile"
+    AWS_REGION="$_env_aws_region"
+    _aws_detected_summary="Named profile '${AWS_PROFILE}' (from \$AWS_PROFILE env var)"
+  elif [[ -n "$_env_aws_role_arn" ]]; then
+    _aws_detected_type="role"
+    AWS_ROLE_ARN="$_env_aws_role_arn"
+    AWS_REGION="$_env_aws_region"
+    _aws_detected_summary="Role ARN '${AWS_ROLE_ARN}' (from \$AWS_ROLE_ARN env var)"
+  elif [[ -n "$_env_aws_key_id" ]]; then
+    _aws_detected_type="static"
+    AWS_ACCESS_KEY_ID="$_env_aws_key_id"
+    AWS_SECRET_ACCESS_KEY="$_env_aws_secret"
+    AWS_REGION="$_env_aws_region"
+    _aws_detected_summary="Static access key '${AWS_ACCESS_KEY_ID:0:8}...' (from env vars)"
+  elif [[ -f "$HOME/.aws/config" ]]; then
+    local _file_profiles
+    _file_profiles=$(grep -E '^\[(profile )?[a-zA-Z0-9_-]+\]' "$HOME/.aws/config" \
+      | sed 's/\[profile //;s/\[//;s/\]//' | head -10)
+    if [[ -n "$_file_profiles" ]]; then
+      _aws_detected_type="profile"
+      if echo "$_file_profiles" | grep -q "^default$"; then
+        AWS_PROFILE="default"
+      else
+        AWS_PROFILE=$(echo "$_file_profiles" | head -1)
+      fi
+      AWS_REGION="$_env_aws_region"
+      local _profile_list
+      _profile_list=$(echo "$_file_profiles" | tr '\n' ', ' | sed 's/, $//')
+      _aws_detected_summary="~/.aws/config found — profiles: ${_profile_list}"
+    fi
+  elif [[ -f "$HOME/.aws/credentials" ]]; then
+    local _cred_profiles
+    _cred_profiles=$(grep '^\[' "$HOME/.aws/credentials" | sed 's/\[//;s/\]//' | head -5)
+    if [[ -n "$_cred_profiles" ]]; then
+      _aws_detected_type="profile"
+      if echo "$_cred_profiles" | grep -q "^default$"; then
+        AWS_PROFILE="default"
+      else
+        AWS_PROFILE=$(echo "$_cred_profiles" | head -1)
+      fi
+      AWS_REGION="$_env_aws_region"
+      local _cred_list
+      _cred_list=$(echo "$_cred_profiles" | tr '\n' ', ' | sed 's/, $//')
+      _aws_detected_summary="~/.aws/credentials found — profiles: ${_cred_list}"
+    fi
+  fi
+
+  local _use_detected_aws="n"
+  if [[ -n "$_aws_detected_type" ]]; then
+    info "Existing AWS configuration detected:"
+    echo -e "  ${GREEN}✔${RESET}  ${_aws_detected_summary}"
+    echo ""
+    prompt_yn _use_detected_aws "Use this existing AWS configuration for Bedrock?" "y"
+  fi
+
+  if [[ "$_use_detected_aws" =~ ^[Yy]$ ]]; then
+    # ── Use detected config ──────────────────────────────────────────────
+    case "$_aws_detected_type" in
+      profile)
+        # If multiple profiles exist, let user confirm/change
+        local _all_profiles=""
+        if [[ -f "$HOME/.aws/config" ]]; then
+          _all_profiles=$(grep -E '^\[(profile )?[a-zA-Z0-9_-]+\]' "$HOME/.aws/config" \
+            | sed 's/\[profile //;s/\[//;s/\]//')
+        elif [[ -f "$HOME/.aws/credentials" ]]; then
+          _all_profiles=$(grep '^\[' "$HOME/.aws/credentials" | sed 's/\[//;s/\]//')
+        fi
+        local _profile_count=1
+        [[ -n "$_all_profiles" ]] && _profile_count=$(echo "$_all_profiles" | wc -l | tr -d ' ')
+        if (( _profile_count > 1 )); then
+          echo -e "  ${DIM}Available profiles: $(echo "$_all_profiles" | tr '\n' ' ')${RESET}"
+          prompt_optional AWS_PROFILE "Which profile to use?" "$AWS_PROFILE"
+        fi
+        prompt_optional AWS_REGION "AWS Region" "$AWS_REGION"
+        AWS_SETUP_CHOICE="Named AWS profile (~/.aws/config) — recommended for local dev"
+        ok "Using AWS profile: ${AWS_PROFILE:-default}, region: ${AWS_REGION}"
+        ;;
+      role)
+        prompt_optional AWS_REGION "AWS Region" "$AWS_REGION"
+        prompt_optional AWS_ROLE_SESSION_NAME "Role Session Name" "forge-bedrock-session"
+        AWS_SETUP_CHOICE="Explicit IAM role ARN (cross-account / assume-role)"
+        ok "Using existing role ARN: ${AWS_ROLE_ARN}, region: ${AWS_REGION}"
+        ;;
+      static)
+        prompt_optional AWS_REGION "AWS Region" "$AWS_REGION"
+        AWS_SETUP_CHOICE="Static access keys (last resort — never commit)"
+        ok "Using existing static credentials, region: ${AWS_REGION}"
+        ;;
+    esac
+  else
+    # ── Manual setup (nothing detected, or user declined existing config) ─
+    [[ -n "$_aws_detected_type" ]] && info "Falling back to manual AWS configuration..."
+    AWS_REGION="us-east-1"
+    AWS_PROFILE=""
+    AWS_ROLE_ARN=""
+    AWS_ACCESS_KEY_ID=""
+    AWS_SECRET_ACCESS_KEY=""
+    AWS_ROLE_SESSION_NAME="forge-bedrock-session"
+
+    prompt_choice AWS_SETUP_CHOICE "How do you want to configure AWS Bedrock?" \
+      "Skip Bedrock — use Anthropic/Gemini/OpenAI only" \
+      "Named AWS profile (~/.aws/config) — recommended for local dev" \
+      "Explicit IAM role ARN (cross-account / assume-role)" \
+      "Static access keys (last resort — never commit)"
+
+    case "$AWS_SETUP_CHOICE" in
+      "Skip Bedrock"*)
+        info "Skipping Bedrock. App will use Anthropic → Gemini → OpenAI fallback."
+        ;;
+      "Named AWS profile"*)
+        prompt_optional AWS_PROFILE "AWS Profile name" "forge-dev"
+        prompt_optional AWS_REGION "AWS Region" "us-east-1"
+        ok "Will use AWS_PROFILE=$AWS_PROFILE"
+        ;;
+      "Explicit IAM role ARN"*)
+        prompt_required AWS_ROLE_ARN \
+          "AWS Role ARN" \
+          "arn:aws:iam::123456789012:role/ForgeAIBedrockRole"
+        prompt_optional AWS_REGION "AWS Region" "us-east-1"
+        prompt_optional AWS_ROLE_SESSION_NAME "Role Session Name" "forge-bedrock-session"
+        ok "Will assume role: $AWS_ROLE_ARN"
+        ;;
+      "Static access keys"*)
+        warn "Static keys are less secure. Consider using a named profile instead."
+        prompt_required AWS_ACCESS_KEY_ID "AWS Access Key ID" "AKIA..."
+        prompt_secret AWS_SECRET_ACCESS_KEY "AWS Secret Access Key" "wJalrX..."
+        prompt_optional AWS_REGION "AWS Region" "us-east-1"
+        ok "Static AWS credentials configured"
+        ;;
+    esac
+  fi
 
   # ── Optional Features ────────────────────────────────────────────────────
   header "Configuration — Optional Features"
