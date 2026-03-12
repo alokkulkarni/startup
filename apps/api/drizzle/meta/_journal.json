@@ -29,6 +29,13 @@
       "when": 1710259200000,
       "tag": "0003_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1710345600000,
+      "tag": "0004_deployments",
+      "breakpoints": true
     }
   ]
 }

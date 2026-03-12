@@ -110,6 +110,8 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   files: many(projectFiles),
   conversations: many(aiConversations),
   snapshots: many(projectSnapshots),
+  deployments: many(deployments),
+  envVars: many(projectEnvVars),
 }))
 
 export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
@@ -158,4 +160,37 @@ export const projectSnapshots = pgTable('project_snapshots', {
 
 export const projectSnapshotsRelations = relations(projectSnapshots, ({ one }) => ({
   project: one(projects, { fields: [projectSnapshots.projectId], references: [projects.id] }),
+}))
+
+// ── Deployments ───────────────────────────────────────────────────────────────
+export const deployments = pgTable('deployments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull().default('vercel'),
+  status: text('status').notNull().default('pending'),
+  providerId: text('provider_id'),
+  deployUrl: text('deploy_url'),
+  errorMessage: text('error_message'),
+  snapshotId: uuid('snapshot_id').references(() => projectSnapshots.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const projectEnvVars = pgTable('project_env_vars', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  key: text('key').notNull(),
+  valueEnc: text('value_enc').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqueKey: uniqueIndex('env_vars_project_key_idx').on(t.projectId, t.key),
+}))
+
+export const deploymentsRelations = relations(deployments, ({ one }) => ({
+  project: one(projects, { fields: [deployments.projectId], references: [projects.id] }),
+}))
+
+export const projectEnvVarsRelations = relations(projectEnvVars, ({ one }) => ({
+  project: one(projects, { fields: [projectEnvVars.projectId], references: [projects.id] }),
 }))
