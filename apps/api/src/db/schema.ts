@@ -302,3 +302,25 @@ export const presenceSessionsRelations = relations(presenceSessions, ({ one }) =
   workspace: one(workspaces, { fields: [presenceSessions.workspaceId], references: [workspaces.id] }),
   user: one(users, { fields: [presenceSessions.userId], references: [users.id] }),
 }))
+
+// ── Analytics Events ──────────────────────────────────────────────────────────
+export const analyticsEvents = pgTable('analytics_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  eventType: text('event_type').notNull(),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  workspaceIdx: index('analytics_events_workspace_idx').on(t.workspaceId),
+  typeIdx: index('analytics_events_type_idx').on(t.eventType),
+  createdIdx: index('analytics_events_created_idx').on(t.createdAt),
+  projectIdx: index('analytics_events_project_idx').on(t.projectId),
+}))
+
+export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => ({
+  workspace: one(workspaces, { fields: [analyticsEvents.workspaceId], references: [workspaces.id] }),
+  project: one(projects, { fields: [analyticsEvents.projectId], references: [projects.id] }),
+  user: one(users, { fields: [analyticsEvents.userId], references: [users.id] }),
+}))

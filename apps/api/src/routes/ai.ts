@@ -7,6 +7,7 @@ import { streamAIResponse } from '../services/ai.js'
 import { buildSystemPrompt, getConversationHistory } from '../services/context.js'
 import { parseAIResponse, applyDiffs } from '../services/diff.js'
 import { getUserPlanLimit } from '../services/stripe.js'
+import { trackEvent } from '../services/analytics.js'
 
 const RATE_LIMIT_TTL_SECONDS = 86400 // 24 hours
 
@@ -149,6 +150,13 @@ export async function aiRoutes(app: FastifyInstance) {
 
             write({ type: 'done' })
             res.end()
+            trackEvent(app.db, {
+              workspaceId: request.user!.workspaceId,
+              projectId: projectId ?? null,
+              userId: user.id,
+              eventType: 'ai_request',
+              metadata: { tokens: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0) },
+            }, app.log)
             return
           } else if (chunk.type === 'error') {
             write({ type: 'error', error: chunk.error })

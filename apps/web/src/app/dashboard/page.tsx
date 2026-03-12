@@ -158,6 +158,9 @@ export default function DashboardPage() {
               Pricing
             </Button>
           </Link>
+          <Link href="/analytics" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+            <span>📊</span> Analytics
+          </Link>
           <Button size="sm" variant="secondary" onClick={() => setShowImportModal(true)}>
             Import from GitHub
           </Button>

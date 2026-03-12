@@ -3,6 +3,7 @@ import { eq, and, desc, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { projects, projectFiles, workspaceMembers } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
+import { trackEvent } from '../services/analytics.js'
 
 // ── Starter templates ──────────────────────────────────────────────────────────
 const STARTER_FILES: Record<string, Record<string, string>> = {
@@ -147,6 +148,14 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     app.log.info({ projectId: project.id, framework }, 'Project created with starter files')
+
+    trackEvent(app.db, {
+      workspaceId: membership.workspaceId,
+      projectId: project.id,
+      userId: user.id,
+      eventType: 'project_created',
+      metadata: { framework: project.framework },
+    }, app.log)
 
     return reply.code(201).send({ success: true, data: project })
   })

@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { restoreSnapshot } from '../services/snapshot.js'
 import { createDeployQueue } from '../workers/deployWorker.js'
 import { encrypt } from '../lib/crypto.js'
+import { trackEvent } from '../services/analytics.js'
 
 const triggerDeployBody = z.object({
   provider: z.enum(['vercel', 'netlify', 'cloudflare']).default('vercel'),
@@ -54,6 +55,14 @@ export async function deploymentRoutes(app: FastifyInstance) {
         projectId: request.params.id,
         provider: parsed.data.provider,
       })
+
+      trackEvent(app.db, {
+        workspaceId: project.workspaceId,
+        projectId: deployment.projectId,
+        userId: user.id,
+        eventType: 'deployment_created',
+        metadata: { provider: deployment.provider, status: deployment.status },
+      }, app.log)
 
       return reply.code(202).send({ success: true, data: { deployment } })
     },

@@ -10,6 +10,7 @@ import {
   projectFiles,
 } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
+import { trackEvent } from '../services/analytics.js'
 
 type TemplateRow = typeof templates.$inferSelect
 
@@ -224,6 +225,14 @@ export async function templateRoutes(app: FastifyInstance) {
       .update(templates)
       .set({ useCount: sql`${templates.useCount} + 1`, updatedAt: new Date() })
       .where(eq(templates.id, id))
+
+    trackEvent(app.db, {
+      workspaceId: membership.workspaceId,
+      projectId: project.id,
+      userId: user.id,
+      eventType: 'template_cloned',
+      metadata: { templateId: id, templateName: template.name },
+    }, app.log)
 
     return reply.send({
       success: true,

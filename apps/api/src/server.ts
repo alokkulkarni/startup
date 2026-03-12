@@ -25,6 +25,7 @@ import { billingRoutes } from './routes/billing.js'
 import websocket from '@fastify/websocket'
 import { collaborationRoutes } from './routes/collaboration.js'
 import { presenceRoutes } from './routes/presence.js'
+import { analyticsRoutes } from './routes/analytics.js'
 import { startSnapshotCleanupWorker } from './workers/snapshotCleanup.js'
 import { startDeployWorker } from './workers/deployWorker.js'
 
@@ -93,6 +94,7 @@ await app.register(templateRoutes, { prefix: '/api/v1' })
 await app.register(billingRoutes, { prefix: '/api/v1' })
 await app.register(collaborationRoutes, { prefix: '/api/v1' })
 await app.register(presenceRoutes, { prefix: '/api/v1' })
+await app.register(analyticsRoutes, { prefix: '/api/v1' })
 
 startSnapshotCleanupWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 startDeployWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)

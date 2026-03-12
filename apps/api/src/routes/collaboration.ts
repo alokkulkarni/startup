@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm'
 import * as schema from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { getWorkspaceMembership, canPerform } from '../middleware/rbac.js'
+import { trackEvent } from '../services/analytics.js'
 
 function generateToken(): string {
   return randomBytes(32).toString('hex')
@@ -189,6 +190,13 @@ export async function collaborationRoutes(app: FastifyInstance) {
         })
 
       app.log.info({ invitationId: invitation.id, email }, 'Invitation created')
+
+      trackEvent(app.db, {
+        workspaceId,
+        userId: request.user.id,
+        eventType: 'member_invited',
+        metadata: { inviteeEmail: email, role },
+      }, app.log)
 
       return reply.code(201).send({ invitation })
     }
