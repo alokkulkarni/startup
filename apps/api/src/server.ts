@@ -15,6 +15,7 @@ import { userRoutes } from './routes/users.js'
 import { workspaceRoutes } from './routes/workspaces.js'
 import { uploadRoutes } from './routes/upload.js'
 import { projectRoutes } from './routes/projects.js'
+import { aiRoutes } from './routes/ai.js'
 
 const app = Fastify({
   logger: {
@@ -71,6 +72,7 @@ await app.register(userRoutes, { prefix: '/api/v1/users' })
 await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' })
 await app.register(uploadRoutes, { prefix: '/api/v1/upload' })
 await app.register(projectRoutes, { prefix: '/api/v1/projects' })
+await app.register(aiRoutes, { prefix: '/api/v1/projects' })
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const start = async () => {
