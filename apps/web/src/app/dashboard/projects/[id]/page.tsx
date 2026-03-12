@@ -11,10 +11,13 @@ import { FileTree } from '@/components/editor/FileTree'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { PreviewPanel } from '@/components/preview/PreviewPanel'
 import { VersionHistoryPanel } from '@/components/history/VersionHistoryPanel'
+import { DeployHistoryPanel } from '@/components/deploy/DeployHistoryPanel'
+import { EnvVarsPanel } from '@/components/deploy/EnvVarsPanel'
 import { useFileTree } from '@/hooks/useFileTree'
 import { useWebContainer } from '@/hooks/useWebContainer'
 import { useSnapshots } from '@/hooks/useSnapshots'
 import { useToast } from '@/hooks/useToast'
+import { useDeployments } from '@/hooks/useDeployments'
 import type { FileNode } from '@/hooks/useFileTree'
 import type { Project } from '@forge/shared'
 import type { Viewport } from '@/components/preview/ViewportToggle'
@@ -41,6 +44,9 @@ export default function ProjectPage() {
   const [showPreview, setShowPreview] = useState(true)
   const [fixPrompt, setFixPrompt] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [deployHistoryOpen, setDeployHistoryOpen] = useState(false)
+  const [envVarsOpen, setEnvVarsOpen] = useState(false)
+  const [deployMenuOpen, setDeployMenuOpen] = useState(false)
   const [healAttempts, setHealAttempts] = useState(0)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -53,6 +59,8 @@ export default function ProjectPage() {
   }, [authenticated])
 
   const { toast } = useToast()
+
+  const { isDeploying, latestDeployUrl, triggerDeploy } = useDeployments(id, token)
 
   // Load panel widths from localStorage
   useEffect(() => {
@@ -277,9 +285,61 @@ export default function ProjectPage() {
           >
             🕐 History
           </button>
-          <button className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-medium transition-all duration-200 opacity-50 cursor-not-allowed">
-            Deploy
+          {/* Deploy history toggle */}
+          <button
+            onClick={() => setDeployHistoryOpen(true)}
+            className="text-xs px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+          >
+            📋 Deploys
           </button>
+          {/* Env vars toggle */}
+          <button
+            onClick={() => setEnvVarsOpen(true)}
+            className="text-xs px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+          >
+            🔧 Env
+          </button>
+          {/* Deploy button */}
+          {latestDeployUrl ? (
+            <a
+              href={latestDeployUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium transition-all flex items-center gap-1.5"
+            >
+              Live ↗
+            </a>
+          ) : isDeploying ? (
+            <button
+              disabled
+              className="text-xs px-3 py-1.5 bg-indigo-600 rounded-lg text-white font-medium flex items-center gap-1.5 opacity-75"
+            >
+              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+              Deploying…
+            </button>
+          ) : (
+            <div className="relative">
+              <button
+                onClick={() => setDeployMenuOpen(v => !v)}
+                className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-medium transition-all"
+              >
+                Deploy ▾
+              </button>
+              {deployMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                  {(['vercel', 'netlify', 'cloudflare'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => { triggerDeploy(p); setDeployMenuOpen(false) }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white capitalize"
+                    >
+                      {p === 'cloudflare' ? 'Cloudflare Pages' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -410,6 +470,18 @@ export default function ProjectPage() {
         isOpen={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onRestored={async () => { await refreshFiles(); await syncFiles(files) }}
+      />
+      <DeployHistoryPanel
+        projectId={id}
+        token={token}
+        isOpen={deployHistoryOpen}
+        onClose={() => setDeployHistoryOpen(false)}
+      />
+      <EnvVarsPanel
+        projectId={id}
+        token={token}
+        isOpen={envVarsOpen}
+        onClose={() => setEnvVarsOpen(false)}
       />
     </div>
   )
