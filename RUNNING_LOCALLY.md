@@ -709,6 +709,9 @@ docker compose exec redis redis-cli
 
 # Run DB migrations inside Docker
 docker compose exec api pnpm db:migrate
+
+# Seed templates (optional — run after migrations)
+docker compose exec api pnpm db:seed
 ```
 
 ---
@@ -730,7 +733,7 @@ docker compose exec api pnpm db:migrate
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Keycloak won't start
 ```bash
@@ -838,7 +841,7 @@ pnpm install
 
 ---
 
-## 13. VS Code Recommended Extensions
+## 14. VS Code Recommended Extensions
 
 ```json
 {
