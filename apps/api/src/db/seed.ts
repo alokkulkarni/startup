@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema.js'
+import { TEMPLATE_SEEDS } from './templateSeeds.js'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error('DATABASE_URL required')
@@ -32,5 +33,13 @@ if (user) {
   }).onConflictDoNothing()
 }
 
+// Seed templates
+console.log('Seeding templates...')
+for (const tmpl of TEMPLATE_SEEDS) {
+  await db.insert(schema.templates).values(tmpl).onConflictDoNothing()
+}
+console.log(`Seeded ${TEMPLATE_SEEDS.length} templates.`)
+
 console.log('Seed complete')
 await pg.end()
+

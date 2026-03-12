@@ -9,14 +9,17 @@ import { ProjectCard } from '@/components/projects/ProjectCard'
 import { NewProjectModal } from '@/components/projects/NewProjectModal'
 import { DeleteProjectModal } from '@/components/projects/DeleteProjectModal'
 import { ImportFromGitHubModal } from '@/components/github/ImportFromGitHubModal'
+import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/useToast'
+import { useOnboarding } from '@/hooks/useOnboarding'
 import type { Project } from '@forge/shared'
 
 export default function DashboardPage() {
   const { user, loading: authLoading, authenticated } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { onboarding } = useOnboarding()
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
@@ -114,6 +117,11 @@ export default function DashboardPage() {
           <Button size="sm" onClick={() => setShowNewModal(true)}>
             + New project
           </Button>
+          <Link href="/templates">
+            <Button size="sm" variant="secondary">
+              Templates
+            </Button>
+          </Link>
           <Button size="sm" variant="secondary" onClick={() => setShowImportModal(true)}>
             Import from GitHub
           </Button>
@@ -213,6 +221,10 @@ export default function DashboardPage() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
       />
+      {/* Onboarding wizard — shown to first-time users */}
+      {onboarding !== null && !onboarding.completed && (
+        <OnboardingWizard onComplete={() => setShowNewModal(false)} />
+      )}
     </div>
   )
 }

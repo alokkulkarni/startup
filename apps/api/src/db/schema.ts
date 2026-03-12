@@ -11,6 +11,8 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   avatarUrl: text('avatar_url'),
   plan: text('plan').notNull().default('free'),
+  onboardingCompleted: boolean('onboarding_completed').notNull().default(false),
+  onboardingStep: integer('onboarding_step').notNull().default(0),
   deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -218,4 +220,42 @@ export const githubConnections = pgTable('github_connections', {
 
 export const githubConnectionsRelations = relations(githubConnections, ({ one }) => ({
   user: one(users, { fields: [githubConnections.userId], references: [users.id] }),
+}))
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+export const templates = pgTable('templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  description: text('description').notNull(),
+  category: text('category').notNull().default('other'),
+  framework: text('framework').notNull().default('react'),
+  filesJson: jsonb('files_json').notNull().default([]),
+  thumbnailUrl: text('thumbnail_url'),
+  useCount: integer('use_count').notNull().default(0),
+  avgRating: text('avg_rating').notNull().default('0'),
+  ratingCount: integer('rating_count').notNull().default(0),
+  isOfficial: boolean('is_official').notNull().default(false),
+  isPublic: boolean('is_public').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+export const templateRatings = pgTable('template_ratings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  templateId: uuid('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  userTemplateUniq: unique().on(t.templateId, t.userId),
+}))
+
+export const templatesRelations = relations(templates, ({ many }) => ({
+  ratings: many(templateRatings),
+}))
+
+export const templateRatingsRelations = relations(templateRatings, ({ one }) => ({
+  template: one(templates, { fields: [templateRatings.templateId], references: [templates.id] }),
+  user: one(users, { fields: [templateRatings.userId], references: [users.id] }),
 }))

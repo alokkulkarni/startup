@@ -1,9 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useTemplates } from '@/hooks/useTemplates'
+import type { Template } from '@/hooks/useTemplates'
 
 interface NewProjectModalProps {
   onClose: () => void
@@ -18,11 +21,24 @@ const FRAMEWORKS = [
   { id: 'vanilla', label: 'Vanilla',  icon: '🟡', desc: 'Vite + TypeScript' },
 ]
 
+type Tab = 'template' | 'blank'
+
 export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
+  const router = useRouter()
+  const { templates, loading: tplLoading, cloneTemplate, fetchTemplates } = useTemplates()
+
+  const [tab, setTab] = useState<Tab>('template')
   const [name, setName] = useState('')
   const [framework, setFramework] = useState('react')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [tplSearch, setTplSearch] = useState('')
+  const [selectedTpl, setSelectedTpl] = useState<Template | null>(null)
+
+  const handleSelectTemplate = (tpl: Template) => {
+    setSelectedTpl(tpl)
+    setName(tpl.name)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,76 +46,169 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
     setLoading(true)
     setError('')
     try {
-      await onCreate(name.trim(), framework)
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to create project')
+      if (tab === 'template' && selectedTpl) {
+        const projectId = await cloneTemplate(selectedTpl.id, name.trim())
+        onClose()
+        if (projectId) router.push(`/dashboard/projects/${projectId}`)
+      } else {
+        await onCreate(name.trim(), framework)
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create project'
+      setError(msg)
       setLoading(false)
     }
   }
+
+  const filteredTemplates = templates.filter(
+    t =>
+      t.name.toLowerCase().includes(tplSearch.toLowerCase()) ||
+      t.description.toLowerCase().includes(tplSearch.toLowerCase()),
+  )
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl">
-        <h2 className="text-xl font-bold mb-1">New project</h2>
-        <p className="text-sm text-gray-400 mb-6">Choose a framework and give your project a name</p>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-2xl w-full mx-4 shadow-2xl overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-800">
+          {([['template', 'From Template'], ['blank', 'Blank Project']] as [Tab, string][]).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                'flex-1 py-3 text-sm font-medium transition-colors',
+                tab === id
+                  ? 'text-white border-b-2 border-violet-500'
+                  : 'text-gray-400 hover:text-white',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-800 bg-red-950/50 px-4 py-2.5 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Framework grid */}
-          <div>
-            <label className="text-sm font-medium text-gray-300 mb-3 block">Framework</label>
-            <div className="grid grid-cols-5 gap-2">
-              {FRAMEWORKS.map(fw => (
-                <button
-                  key={fw.id}
-                  type="button"
-                  onClick={() => setFramework(fw.id)}
-                  className={cn(
-                    'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
-                    framework === fw.id
-                      ? 'border-forge-500 bg-forge-950/60 text-white'
-                      : 'border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white',
-                  )}
-                >
-                  <span className="text-2xl">{fw.icon}</span>
-                  <span className="text-xs font-medium">{fw.label}</span>
-                </button>
-              ))}
+        <div className="p-6">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-800 bg-red-950/50 px-4 py-2.5 text-sm text-red-400">
+              {error}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {FRAMEWORKS.find(f => f.id === framework)?.desc}
-            </p>
-          </div>
+          )}
 
-          {/* Project name */}
-          <Input
-            id="project-name"
-            label="Project name"
-            placeholder="My awesome app"
-            value={name}
-            onChange={e => { setName(e.target.value); setError('') }}
-            autoFocus
-            maxLength={100}
-            error={error && !name.trim() ? error : undefined}
-          />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* From Template tab */}
+            {tab === 'template' && (
+              <div className="space-y-3">
+                <input
+                  type="search"
+                  placeholder="Search templates…"
+                  value={tplSearch}
+                  onChange={e => {
+                    setTplSearch(e.target.value)
+                    fetchTemplates({ search: e.target.value })
+                  }}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500"
+                />
+                {tplLoading && templates.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-gray-500 text-sm">
+                    Loading templates…
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+                    {filteredTemplates.map(tpl => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleSelectTemplate(tpl)}
+                        className={cn(
+                          'text-left p-3 rounded-xl border transition-all',
+                          selectedTpl?.id === tpl.id
+                            ? 'border-violet-500 bg-violet-950/40'
+                            : 'border-gray-700 hover:border-gray-500',
+                        )}
+                      >
+                        <p className="text-sm font-medium text-white truncate">{tpl.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">{tpl.framework} · {tpl.category}</p>
+                      </button>
+                    ))}
+                    {filteredTemplates.length === 0 && (
+                      <p className="col-span-2 text-center text-gray-500 text-sm py-8">No templates found</p>
+                    )}
+                  </div>
+                )}
 
-          <div className="flex gap-3 pt-2">
-            <Button type="submit" loading={loading} className="flex-1">
-              Create project
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={loading}>
-              Cancel
-            </Button>
-          </div>
-        </form>
+                {selectedTpl && (
+                  <Input
+                    id="project-name-tpl"
+                    label="Project name"
+                    value={name}
+                    onChange={e => { setName(e.target.value); setError('') }}
+                    maxLength={100}
+                    error={error && !name.trim() ? error : undefined}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Blank Project tab */}
+            {tab === 'blank' && (
+              <div className="space-y-5">
+                <div>
+                  <label className="text-sm font-medium text-gray-300 mb-3 block">Framework</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {FRAMEWORKS.map(fw => (
+                      <button
+                        key={fw.id}
+                        type="button"
+                        onClick={() => setFramework(fw.id)}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
+                          framework === fw.id
+                            ? 'border-violet-500 bg-violet-950/60 text-white'
+                            : 'border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white',
+                        )}
+                      >
+                        <span className="text-2xl">{fw.icon}</span>
+                        <span className="text-xs font-medium">{fw.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {FRAMEWORKS.find(f => f.id === framework)?.desc}
+                  </p>
+                </div>
+
+                <Input
+                  id="project-name"
+                  label="Project name"
+                  placeholder="My awesome app"
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError('') }}
+                  autoFocus
+                  maxLength={100}
+                  error={error && !name.trim() ? error : undefined}
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <Button
+                type="submit"
+                loading={loading}
+                disabled={tab === 'template' && !selectedTpl}
+                className="flex-1"
+              >
+                Create project
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={loading}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   )
