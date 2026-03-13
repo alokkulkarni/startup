@@ -115,6 +115,17 @@ export async function aiRoutes(app: FastifyInstance) {
       const messages = [...history, { role: 'user' as const, content: prompt }]
       const systemPrompt = await buildSystemPrompt(projectId, app.db)
 
+      // Log the full prompt for debugging (first 2000 chars of system prompt + user prompt)
+      app.log.info({
+        msg: '[AI] Request details',
+        projectId,
+        userId: user.id,
+        userPrompt: prompt,
+        systemPromptLength: systemPrompt.length,
+        systemPromptPreview: systemPrompt.slice(0, 2000),
+        conversationLength: history.length,
+      })
+
       // Hijack and stream via SSE
       reply.hijack()
       const res = reply.raw
@@ -144,6 +155,17 @@ export async function aiRoutes(app: FastifyInstance) {
 
             // Parse and apply any file diffs; notify frontend of changed files
             const { diffs } = parseAIResponse(fullContent)
+
+            // Log response analysis
+            app.log.info({
+              msg: '[AI] Response complete',
+              responseLength: fullContent.length,
+              hasForgeChanges: fullContent.includes('<forge_changes>'),
+              filesDetected: diffs.length,
+              filePaths: diffs.map(d => `${d.isNew ? '+' : d.isDeleted ? '-' : '~'}${d.path}`),
+              tokens: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0),
+            })
+
             if (diffs.length > 0) {
               const changedPaths = await applyDiffs(project.id, diffs, app.db, prompt)
               if (changedPaths.length > 0) {

@@ -723,6 +723,19 @@ GITHUB_LOGIN_CLIENT_SECRET=${GITHUB_LOGIN_CLIENT_SECRET:-}
 # Callback URL: http://localhost/api/v1/auth/google/callback
 GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
 GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+
+# ── AWS Bedrock (primary AI provider) ─────────────────────────────────────────
+AWS_REGION=${AWS_REGION:-us-east-1}
+AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+AWS_ROLE_ARN=${AWS_ROLE_ARN:-}
+AWS_PROFILE=${AWS_PROFILE:-}
+
+# ── AI Fallback Chain ──────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+GEMINI_API_KEY=${GEMINI_API_KEY:-}
+OPENAI_API_KEY=${OPENAI_API_KEY:-}
 EOF
   ok ".env written"
 }
