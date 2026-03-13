@@ -13,6 +13,7 @@ interface ChatPanelProps {
   projectId: string
   onFilesChanged?: () => void
   initialPrompt?: string | null
+  autoSendPrompt?: boolean          // if true, auto-sends initialPrompt instead of just pre-filling
   onPromptConsumed?: () => void
   files?: { path: string }[]
   onRateLimit?: () => void
@@ -97,7 +98,7 @@ function getSuggestions(lastMessage: string): string[] {
   return suggestions.slice(0, 3)
 }
 
-export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptConsumed, files, onRateLimit }: ChatPanelProps) {
+export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPrompt, onPromptConsumed, files, onRateLimit }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
@@ -107,14 +108,20 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, onPromptCo
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevStreamingRef = useRef(false)
   const [input, setInput] = useState('')
+  const autoSentRef = useRef(false)
 
-  // Pre-fill input when an external prompt arrives (e.g., "Fix with AI")
+  // Pre-fill OR auto-send initial prompt (e.g., from onboarding "Start Building")
   useEffect(() => {
-    if (initialPrompt) {
+    if (!initialPrompt) return
+    if (autoSendPrompt && !autoSentRef.current && !isStreaming) {
+      autoSentRef.current = true
+      onPromptConsumed?.()
+      sendMessage(initialPrompt)
+    } else if (!autoSendPrompt) {
       setInput(initialPrompt)
       onPromptConsumed?.()
     }
-  }, [initialPrompt]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialPrompt, autoSendPrompt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (authenticated) {

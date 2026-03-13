@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const { subscription, startCheckout } = useSubscription()
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
@@ -271,9 +272,9 @@ export default function DashboardPage() {
           onUpgrade={priceId => startCheckout(priceId)}
         />
       )}
-      {/* Onboarding wizard — shown to first-time users */}
-      {onboarding !== null && !onboarding.completed && (
-        <OnboardingWizard onComplete={() => setShowNewModal(false)} />
+      {/* Onboarding wizard — shown to first-time users until dismissed */}
+      {onboarding !== null && !onboarding.completed && showOnboarding && (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
       )}
     </div>
   )

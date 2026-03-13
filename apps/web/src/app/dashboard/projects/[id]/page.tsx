@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { getToken } from '@/lib/auth'
@@ -38,6 +38,7 @@ function formatBytes(bytes: number): string {
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { authenticated, loading: authLoading } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,6 +49,8 @@ export default function ProjectPage() {
   const [showConsole, setShowConsole] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [fixPrompt, setFixPrompt] = useState<string | null>(null)
+  // Prompt from onboarding "Start Building" — auto-sent to AI on load
+  const [initialBuildPrompt] = useState<string | null>(() => searchParams.get('prompt'))
   const [historyOpen, setHistoryOpen] = useState(false)
   const [deployHistoryOpen, setDeployHistoryOpen] = useState(false)
   const [envVarsOpen, setEnvVarsOpen] = useState(false)
@@ -401,7 +404,8 @@ export default function ProjectPage() {
           <ChatPanel
             projectId={id}
             onFilesChanged={handleFilesChanged}
-            initialPrompt={fixPrompt}
+            initialPrompt={fixPrompt ?? initialBuildPrompt}
+            autoSendPrompt={!fixPrompt && !!initialBuildPrompt}
             onPromptConsumed={() => setFixPrompt(null)}
             files={files}
             onRateLimit={() => setShowRateLimitPrompt(true)}
