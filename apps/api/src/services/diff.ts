@@ -22,6 +22,11 @@ export function parseAIResponse(content: string): ParsedAIResponse {
   const forgeChangesMatch = content.match(/<forge_changes>([\s\S]*?)<\/forge_changes>/)
 
   if (!forgeChangesMatch) {
+    // Fallback: extract files from markdown code blocks (when AI ignores the format)
+    const mdDiffs = extractMarkdownCodeBlocks(content)
+    if (mdDiffs.length > 0) {
+      return { explanation: stripCodeBlocks(content), diffs: mdDiffs }
+    }
     return { explanation: content.trim(), diffs: [] }
   }
 
@@ -189,4 +194,85 @@ function detectMimeType(path: string): string {
     sql: 'application/sql', sh: 'application/x-sh', yaml: 'text/x-yaml', yml: 'text/x-yaml',
   }
   return map[ext] ?? 'text/plain'
+}
+
+/**
+ * Fallback: extract file path + content from markdown code blocks.
+ * Handles these patterns (in order of preference):
+ *   1. Comment on first line: // src/App.tsx  or  // filename: src/App.tsx
+ *   2. Header just before the block: ### src/App.tsx  or  **src/App.tsx**  or  `src/App.tsx`
+ *   3. Language tag + path in fence: ```jsx src/App.jsx
+ * Code blocks without a detectable path are skipped (unless there's only one block).
+ */
+function extractMarkdownCodeBlocks(content: string): FileDiff[] {
+  const diffs: FileDiff[] = []
+  // Match fenced code blocks: ```lang\ncode\n```
+  const blockRe = /```(?:\w+)?\s*([^\n]*)\n([\s\S]*?)```/g
+  let match: RegExpExecArray | null
+  const seen = new Set<string>()
+
+  while ((match = blockRe.exec(content)) !== null) {
+    const fenceRemainder = match[1].trim()   // text after the lang tag on the opening fence
+    const code = match[2]
+    const blockStart = match.index
+
+    let filePath = ''
+
+    // 1. Path on the fence line itself: ```tsx src/App.tsx
+    if (fenceRemainder && looksLikePath(fenceRemainder)) {
+      filePath = fenceRemainder
+    }
+
+    // 2. First line of code is a comment with the filename
+    if (!filePath) {
+      const firstLine = code.split('\n')[0] ?? ''
+      // matches: // src/App.tsx  or  // filename: src/App.tsx  or  # src/index.css
+      const commentMatch = firstLine.match(/^(?:\/\/|#)\s*(?:filename:\s*)?(.+\.\w+)\s*$/)
+      if (commentMatch && looksLikePath(commentMatch[1])) {
+        filePath = commentMatch[1].trim()
+      }
+    }
+
+    // 3. Heading or bold/code text immediately before the block
+    if (!filePath) {
+      const before = content.slice(Math.max(0, blockStart - 200), blockStart)
+      // ### src/App.tsx  or  ## src/App.tsx
+      const headingMatch = before.match(/(?:^|\n)#{1,4}\s+([^\n]+\.\w+)\s*\n?\s*$/)
+      if (headingMatch && looksLikePath(headingMatch[1].trim())) {
+        filePath = headingMatch[1].trim()
+      }
+      // **src/App.tsx**  or  `src/App.tsx`
+      if (!filePath) {
+        const boldOrCode = before.match(/(?:\*\*|`)([^`*\n]+\.\w+)(?:\*\*|`)[:\s]*\n?\s*$/)
+        if (boldOrCode && looksLikePath(boldOrCode[1])) {
+          filePath = boldOrCode[1].trim()
+        }
+      }
+    }
+
+    if (!filePath || seen.has(filePath)) continue
+    seen.add(filePath)
+
+    // Strip leading comment line if it was the filename comment
+    let fileContent = code
+    const firstLine = code.split('\n')[0] ?? ''
+    if (/^(?:\/\/|#)\s*(?:filename:\s*)?/.test(firstLine)) {
+      fileContent = code.slice(firstLine.length + 1)
+    }
+
+    diffs.push({ path: filePath, diff: fileContent, isNew: true, isDeleted: false })
+  }
+
+  return diffs
+}
+
+/** True if str looks like a relative file path */
+function looksLikePath(str: string): boolean {
+  // Must contain a dot (extension) and no spaces (unless quoted)
+  return /^[\w./-]+\.\w+$/.test(str.trim())
+}
+
+/** Remove all fenced code blocks from a string (for the explanation text) */
+function stripCodeBlocks(content: string): string {
+  return content.replace(/```[\s\S]*?```/g, '').replace(/\n{3,}/g, '\n\n').trim()
 }
