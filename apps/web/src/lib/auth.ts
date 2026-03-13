@@ -1,6 +1,7 @@
 import Keycloak from 'keycloak-js'
 
 let keycloakInstance: Keycloak | null = null
+let initPromise: Promise<{ authenticated: boolean; token?: string }> | null = null
 
 export function getKeycloak(): Keycloak {
   if (!keycloakInstance) {
@@ -13,19 +14,25 @@ export function getKeycloak(): Keycloak {
   return keycloakInstance
 }
 
+// Idempotent — safe to call multiple times; only initialises once.
 export async function initAuth(): Promise<{ authenticated: boolean; token?: string }> {
+  if (initPromise) return initPromise
+
   const kc = getKeycloak()
-  try {
-    const authenticated = await kc.init({
+  initPromise = kc
+    .init({
       onLoad: 'check-sso',
       pkceMethod: 'S256',
       silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
       checkLoginIframe: false,
     })
-    return { authenticated, token: kc.token }
-  } catch {
-    return { authenticated: false }
-  }
+    .then((authenticated) => ({ authenticated, token: kc.token }))
+    .catch(() => {
+      initPromise = null // allow retry on transient failure
+      return { authenticated: false }
+    })
+
+  return initPromise
 }
 
 export function login() {

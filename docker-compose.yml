@@ -161,17 +161,46 @@ services:
         condition: service_healthy
     networks:
       - forge_network
+    environment:
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     entrypoint:
       - bash
       - -c
       - |
-        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=none \
-          --no-config --server http://keycloak:8081 --realm master \
-          --user admin --password admin
-        /opt/keycloak/bin/kcadm.sh update realms/forge -s sslRequired=none \
-          --no-config --server http://keycloak:8081 --realm master \
-          --user admin --password admin
-        echo "Keycloak SSL setup complete"
+        KCADM="/opt/keycloak/bin/kcadm.sh"
+        SERVER="--no-config --server http://keycloak:8081 --realm master --user admin --password admin"
+
+        # Disable SSL requirement for local dev
+        $KCADM update realms/master -s sslRequired=none $SERVER
+        $KCADM update realms/forge  -s sslRequired=none $SERVER
+        echo "✔ SSL requirements disabled"
+
+        # Configure GitHub identity provider (only if credentials are provided)
+        if [ -n "$GITHUB_CLIENT_ID" ] && [ -n "$GITHUB_CLIENT_SECRET" ]; then
+          $KCADM update identity-provider/instances/github -r forge \
+            -s config.clientId=$GITHUB_CLIENT_ID \
+            -s config.clientSecret=$GITHUB_CLIENT_SECRET \
+            $SERVER
+          echo "✔ GitHub IDP credentials configured"
+        else
+          echo "⚠ GITHUB_CLIENT_ID/SECRET not set — GitHub login will not work"
+        fi
+
+        # Configure Google identity provider (only if credentials are provided)
+        if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+          $KCADM update identity-provider/instances/google -r forge \
+            -s config.clientId=$GOOGLE_CLIENT_ID \
+            -s config.clientSecret=$GOOGLE_CLIENT_SECRET \
+            $SERVER
+          echo "✔ Google IDP credentials configured"
+        else
+          echo "⚠ GOOGLE_CLIENT_ID/SECRET not set — Google login will not work"
+        fi
+
+        echo "Keycloak setup complete"
     restart: "no"
 
   # ── Fastify API ───────────────────────────────────────────────────────────
@@ -212,7 +241,7 @@ services:
     networks:
       - forge_network
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/v1/health > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/v1/health > /dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -241,7 +270,7 @@ services:
     networks:
       - forge_network
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 > /dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
