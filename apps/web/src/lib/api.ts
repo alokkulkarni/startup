@@ -1,21 +1,16 @@
-import { getToken } from './auth'
 import type { ApiResponse } from '@forge/shared'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<ApiResponse<T>> {
-  const token = typeof window !== 'undefined' ? getToken() : undefined
+async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   }
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
+    credentials: 'include',
     headers,
   })
 

@@ -14,3 +14,4 @@ reports
 .env.*.local
 *.pem
 .vercel
+.env

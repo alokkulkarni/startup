@@ -10,7 +10,6 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
-  keycloak_data:
 
 services:
   # ── Traefik reverse proxy (file provider — no Docker socket required) ─────
@@ -110,99 +109,6 @@ services:
       - forge_network
     restart: "no"
 
-  # ── Keycloak auth ─────────────────────────────────────────────────────────
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: forge_keycloak
-    restart: unless-stopped
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: forge
-      KC_DB_PASSWORD: forge
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: "8081"
-      KC_HOSTNAME_STRICT: "false"
-      KC_HTTP_ENABLED: "true"
-      KC_HTTP_PORT: "8081"
-      KC_METRICS_ENABLED: "true"
-      KC_HEALTH_ENABLED: "true"
-      GITHUB_KC_CLIENT_ID: ${GITHUB_KC_CLIENT_ID:-}
-      GITHUB_KC_CLIENT_SECRET: ${GITHUB_KC_CLIENT_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-    command: ["start-dev", "--import-realm"]
-    volumes:
-      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-      - keycloak_data:/opt/keycloak/data
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - forge_network
-    healthcheck:
-      # ubi9-micro has no curl/wget/microdnf — use bash built-in TCP check
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8081 2>/dev/null"]
-      interval: 15s
-      timeout: 10s
-      retries: 15
-      start_period: 90s
-
-  # ── Keycloak SSL setup (disables sslRequired for local dev on fresh installs)
-  keycloak-setup:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: forge_keycloak_setup
-    depends_on:
-      keycloak:
-        condition: service_healthy
-    networks:
-      - forge_network
-    environment:
-      GITHUB_KC_CLIENT_ID: ${GITHUB_KC_CLIENT_ID:-}
-      GITHUB_KC_CLIENT_SECRET: ${GITHUB_KC_CLIENT_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-    entrypoint:
-      - bash
-      - -c
-      - |
-        KCADM="/opt/keycloak/bin/kcadm.sh"
-        SERVER="--no-config --server http://keycloak:8081 --realm master --user admin --password admin"
-
-        # Disable SSL requirement for local dev
-        $$KCADM update realms/master -s sslRequired=none $$SERVER
-        $$KCADM update realms/forge  -s sslRequired=none $$SERVER
-        echo "✔ SSL requirements disabled"
-
-        # Configure GitHub identity provider (only if credentials are provided)
-        if [ -n "$$GITHUB_KC_CLIENT_ID" ] && [ -n "$$GITHUB_KC_CLIENT_SECRET" ]; then
-          $$KCADM update identity-provider/instances/github -r forge \
-            -s "config.clientId=$$GITHUB_KC_CLIENT_ID" \
-            -s "config.clientSecret=$$GITHUB_KC_CLIENT_SECRET" \
-            $$SERVER
-          echo "✔ GitHub IDP credentials configured"
-        else
-          echo "⚠ GITHUB_KC_CLIENT_ID/SECRET not set — GitHub social login will not work"
-        fi
-
-        # Configure Google identity provider (only if credentials are provided)
-        if [ -n "$$GOOGLE_CLIENT_ID" ] && [ -n "$$GOOGLE_CLIENT_SECRET" ]; then
-          $$KCADM update identity-provider/instances/google -r forge \
-            -s "config.clientId=$$GOOGLE_CLIENT_ID" \
-            -s "config.clientSecret=$$GOOGLE_CLIENT_SECRET" \
-            $$SERVER
-          echo "✔ Google IDP credentials configured"
-        else
-          echo "⚠ GOOGLE_CLIENT_ID/SECRET not set — Google social login will not work"
-        fi
-
-        echo "Keycloak setup complete"
-    restart: "no"
-
   # ── Fastify API ───────────────────────────────────────────────────────────
   api:
     build:
@@ -221,10 +127,11 @@ services:
       MINIO_USE_SSL: "false"
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
-      KEYCLOAK_URL: http://keycloak:8081
-      KEYCLOAK_REALM: forge
-      KEYCLOAK_CLIENT_ID: forge-api
-      KEYCLOAK_CLIENT_SECRET: forge-api-secret
+      JWT_SECRET: ${JWT_SECRET:-forge-dev-secret-change-in-production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       APP_URL: http://localhost
     volumes:
       - ./apps/api:/app/apps/api
@@ -235,8 +142,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     networks:
       - forge_network
@@ -258,9 +163,6 @@ services:
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost/api
-      NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8081
-      NEXT_PUBLIC_KEYCLOAK_REALM: forge
-      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: forge-web
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages

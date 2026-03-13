@@ -171,7 +171,7 @@ export async function templateRoutes(app: FastifyInstance) {
     }
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
 
     if (!user) {
@@ -271,7 +271,7 @@ export async function templateRoutes(app: FastifyInstance) {
     }
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
 
     if (!user) {
@@ -315,7 +315,7 @@ export async function templateRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
 
     if (!user) {
@@ -365,11 +365,11 @@ export async function templateRoutes(app: FastifyInstance) {
         ...(step !== undefined && { onboardingStep: step }),
         updatedAt: new Date(),
       })
-      .where(eq(users.keycloakId, request.user!.keycloakId))
+      .where(eq(users.id, request.user!.id))
 
     // Fetch updated user
     const updated = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
 
     return reply.send({

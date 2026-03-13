@@ -21,20 +21,20 @@ export async function userRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
 
     if (!user) {
       return reply.code(404).send({
         success: false,
-        error: { code: 'USER_NOT_FOUND', message: 'User not found — call /auth/sync first' },
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
       })
     }
 
-    // Populate id on request.user for downstream use
-    request.user.id = user.id
+    // Omit sensitive fields before returning
+    const { passwordHash: _pw, keycloakId: _kc, authProviderId: _pid, ...safeUser } = user as any
 
-    return reply.send({ success: true, data: user })
+    return reply.send({ success: true, data: safeUser })
   })
 
   // PATCH /api/v1/users/me
@@ -64,7 +64,7 @@ export async function userRoutes(app: FastifyInstance) {
         ...(name && { name }),
         updatedAt: new Date(),
       })
-      .where(eq(users.keycloakId, request.user.keycloakId))
+      .where(eq(users.id, request.user.id))
       .returning()
 
     if (!updated) {
@@ -91,7 +91,7 @@ export async function userRoutes(app: FastifyInstance) {
     const [deactivated] = await app.db
       .update(users)
       .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(eq(users.keycloakId, request.user.keycloakId))
+      .where(eq(users.id, request.user.id))
       .returning({ id: users.id, email: users.email })
 
     if (!deactivated) {

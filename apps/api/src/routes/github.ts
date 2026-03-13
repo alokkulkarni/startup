@@ -93,7 +93,7 @@ export async function githubRoutes(app: FastifyInstance) {
   app.delete('/github/disconnect', async (request, reply) => {
     if (!(await requireAuth(request, reply))) return;
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
     });
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -106,7 +106,7 @@ export async function githubRoutes(app: FastifyInstance) {
   app.get('/github/status', async (request, reply) => {
     if (!(await requireAuth(request, reply))) return;
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
     });
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -136,7 +136,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -162,7 +162,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -184,7 +184,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -241,7 +241,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -300,7 +300,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -341,7 +341,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -408,7 +408,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 
@@ -461,7 +461,7 @@ export async function githubRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return;
       const user = await app.db.query.users.findFirst({
-        where: (u, { eq: eqFn }) => eqFn(u.keycloakId, request.user!.keycloakId),
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
       });
       if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } });
 

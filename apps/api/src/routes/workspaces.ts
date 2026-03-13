@@ -15,7 +15,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
     if (!user) {
       return reply.code(404).send({
@@ -49,7 +49,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
 
     const user = await app.db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.keycloakId, request.user!.keycloakId),
+      where: (u, { eq }) => eq(u.id, request.user!.id),
     })
     if (!user) {
       return reply.code(404).send({

@@ -41,7 +41,7 @@ export async function uploadRoutes(app: FastifyInstance) {
       })
     }
 
-    const key = `${request.user.keycloakId}/avatar-${Date.now()}.${data.mimetype.split('/')[1]}`
+    const key = `${request.user.id}/avatar-${Date.now()}.${data.mimetype.split('/')[1]}`
     const bucket = process.env.MINIO_BUCKET_AVATARS ?? 'avatars'
 
     await app.storage.uploadFile(bucket, key, buffer, data.mimetype)
@@ -51,7 +51,7 @@ export async function uploadRoutes(app: FastifyInstance) {
     await app.db
       .update(users)
       .set({ avatarUrl, updatedAt: new Date() })
-      .where(eq(users.keycloakId, request.user.keycloakId))
+      .where(eq(users.id, request.user.id))
 
     return reply.send({ success: true, data: { avatarUrl } })
   })

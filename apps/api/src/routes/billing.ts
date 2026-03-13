@@ -22,9 +22,9 @@ const portalBodySchema = z.object({
   returnUrl: z.string().optional(),
 })
 
-async function getDbUser(app: FastifyInstance, keycloakId: string) {
+async function getDbUser(app: FastifyInstance, userId: string) {
   return app.db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.keycloakId, keycloakId),
+    where: (u, { eq }) => eq(u.id, userId),
   })
 }
 
@@ -151,7 +151,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.get('/billing/usage', async (request, reply) => {
     if (!(await requireAuth(request, reply))) return
 
-    const dbUser = await getDbUser(app, request.user!.keycloakId)
+    const dbUser = await getDbUser(app, request.user!.id)
     if (!dbUser) {
       return reply.code(404).send({ error: 'User not found. Call /auth/sync first.' })
     }

@@ -6,11 +6,14 @@ import { relations } from 'drizzle-orm'
 // ── Users ────────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  keycloakId: text('keycloak_id').notNull().unique(),
+  keycloakId: text('keycloak_id').unique(), // nullable - for backward compat
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   avatarUrl: text('avatar_url'),
   plan: text('plan').notNull().default('free'),
+  authProvider: text('auth_provider'), // 'github' | 'google' | 'email'
+  authProviderId: text('auth_provider_id'), // OAuth user ID or null for email
+  passwordHash: text('password_hash'), // bcrypt hash, only for email accounts
   onboardingCompleted: boolean('onboarding_completed').notNull().default(false),
   onboardingStep: integer('onboarding_step').notNull().default(0),
   deletedAt: timestamp('deleted_at'),

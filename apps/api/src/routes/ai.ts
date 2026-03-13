@@ -15,9 +15,9 @@ const chatBodySchema = z.object({
   prompt: z.string().min(1, 'Prompt cannot be empty').max(4000, 'Prompt too long'),
 })
 
-async function getDbUser(app: FastifyInstance, keycloakId: string) {
+async function getDbUser(app: FastifyInstance, userId: string) {
   return app.db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.keycloakId, keycloakId),
+    where: (u, { eq }) => eq(u.id, userId),
   })
 }
 
@@ -51,8 +51,8 @@ export async function aiRoutes(app: FastifyInstance) {
       const { prompt } = parseResult.data
       const projectId = request.params.id
 
-      // Get DB user by keycloak ID
-      const user = await getDbUser(app, request.user!.keycloakId)
+      // Get DB user by ID
+      const user = await getDbUser(app, request.user!.id)
       if (!user) {
         return reply.code(404).send({
           success: false,
@@ -185,7 +185,7 @@ export async function aiRoutes(app: FastifyInstance) {
 
       const projectId = request.params.id
 
-      const user = await getDbUser(app, request.user!.keycloakId)
+      const user = await getDbUser(app, request.user!.id)
       if (!user) {
         return reply.code(404).send({
           success: false,

@@ -83,9 +83,9 @@ const UpdateProjectSchema = z.object({
   description: z.string().max(500).optional(),
 })
 
-async function getDbUser(app: FastifyInstance, keycloakId: string) {
+async function getDbUser(app: FastifyInstance, userId: string) {
   return app.db.query.users.findFirst({
-    where: (u, { eq }) => eq(u.keycloakId, keycloakId),
+    where: (u, { eq }) => eq(u.id, userId),
   })
 }
 
@@ -116,7 +116,7 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.code(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.message } })
     }
 
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'Call /auth/sync first' } })
 
     // Get user's first workspace
@@ -167,7 +167,7 @@ export async function projectRoutes(app: FastifyInstance) {
     await requireAuth(request, reply)
     if (!request.user) return
 
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const memberships = await app.db.query.workspaceMembers.findMany({
@@ -196,7 +196,7 @@ export async function projectRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const { id } = request.params as { id: string }
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const project = await assertProjectAccess(app, id, user.id)
@@ -218,7 +218,7 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.code(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.message } })
     }
 
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const existing = await assertProjectAccess(app, id, user.id)
@@ -241,7 +241,7 @@ export async function projectRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const { id } = request.params as { id: string }
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const existing = await assertProjectAccess(app, id, user.id)
@@ -263,7 +263,7 @@ export async function projectRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const { id } = request.params as { id: string }
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const source = await assertProjectAccess(app, id, user.id)
@@ -310,7 +310,7 @@ export async function projectRoutes(app: FastifyInstance) {
     if (!request.user) return
 
     const { id } = request.params as { id: string }
-    const user = await getDbUser(app, request.user.keycloakId)
+    const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
     const project = await assertProjectAccess(app, id, user.id)

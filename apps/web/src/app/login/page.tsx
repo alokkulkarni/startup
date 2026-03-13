@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SocialButton } from '@/components/auth/SocialButton'
-import { login, initAuth, getKeycloak } from '@/lib/auth'
 
 type View = 'login' | 'signup' | 'forgot'
 
@@ -16,16 +15,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const handleSocial = async (idpHint: string) => {
-    setLoading(idpHint)
-    setError('')
-    try {
-      await initAuth() // ensure kc is initialised before redirecting
-      login('/dashboard', idpHint)
-    } catch {
-      setError('Failed to initiate sign in. Please try again.')
-      setLoading(null)
-    }
+  const handleSocial = (provider: 'github' | 'google') => {
+    setLoading(provider)
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'}/v1/auth/${provider}/authorize?next=${encodeURIComponent('/dashboard')}`
   }
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -33,27 +25,25 @@ export default function LoginPage() {
     setLoading('email')
     setError('')
     try {
-      await initAuth()
-      login('/dashboard')
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'
+      const endpoint = view === 'login' ? '/v1/auth/email/login' : '/v1/auth/email/signup'
+      const body: any = { email, password }
+      if (view === 'signup') body.name = email.split('@')[0]
+      const res = await fetch(`${apiUrl}${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setError(err?.error?.message ?? 'Sign in failed')
+        setLoading(null)
+        return
+      }
+      window.location.href = '/dashboard'
     } catch {
       setError('Sign in failed. Check your credentials.')
-      setLoading(null)
-    }
-  }
-
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading('magic')
-    setError('')
-    try {
-      await initAuth()
-      getKeycloak().login({
-        loginHint: email,
-        action: 'email_otp',
-        redirectUri: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/dashboard')}`,
-      })
-    } catch {
-      setError('Failed to send magic link. Please try again.')
       setLoading(null)
     }
   }
@@ -187,39 +177,39 @@ export default function LoginPage() {
                     </div>
                   </>
                 )}
+                {view === 'signup' && (
+                  <Input
+                    id="password"
+                    type="password"
+                    label="Password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoComplete="new-password"
+                  />
+                )}
                 <Button type="submit" size="lg" loading={loading === 'email'} className="w-full">
                   {view === 'login' ? 'Sign in' : 'Create account'}
                 </Button>
               </form>
-
-              {/* Magic link */}
-              <div className="text-center">
-                <button
-                  onClick={handleMagicLink}
-                  disabled={!email || loading !== null}
-                  className="text-sm text-gray-500 hover:text-forge-400 disabled:opacity-40 transition-colors"
-                >
-                  ✉️ Send me a magic link instead
-                </button>
-              </div>
             </>
           )}
 
           {view === 'forgot' && (
-            <form onSubmit={handleMagicLink} className="space-y-4">
-              <Input
-                id="email"
-                type="email"
-                label="Email address"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-              <Button type="submit" size="lg" loading={loading === 'magic'} className="w-full">
-                Send reset link
+            <div className="space-y-4">
+              <p className="text-sm text-gray-400">
+                Password reset is not yet available. Please sign in with GitHub or Google, or contact support.
+              </p>
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={() => setView('login')}
+              >
+                Back to sign in
               </Button>
-            </form>
+            </div>
           )}
 
           <p className="text-center text-xs text-gray-600">

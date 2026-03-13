@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import cookie from '@fastify/cookie'
 import helmet from '@fastify/helmet'
 import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
@@ -75,6 +76,7 @@ await app.register(swaggerUi, { routePrefix: '/api/docs' })
 await app.register(postgresPlugin)
 await app.register(redisPlugin)
 await app.register(storagePlugin)
+await app.register(cookie, { secret: process.env.JWT_SECRET ?? 'forge-dev-secret' })
 await app.register(authPlugin)
 await app.register(websocket)
 

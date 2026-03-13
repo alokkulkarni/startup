@@ -1,66 +1,24 @@
-import Keycloak from 'keycloak-js'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'
 
-let keycloakInstance: Keycloak | null = null
-let initCalled = false  // set to true before kc.init() — never reset
-let initPromise: Promise<{ authenticated: boolean; token?: string }> | null = null
-
-export function getKeycloak(): Keycloak {
-  if (!keycloakInstance) {
-    keycloakInstance = new Keycloak({
-      url: process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? 'http://localhost:8081',
-      realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM ?? 'forge',
-      clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? 'forge-web',
-    })
+export async function initAuth(): Promise<{ authenticated: boolean }> {
+  try {
+    const res = await fetch(`${API}/v1/users/me`, { credentials: 'include' })
+    return { authenticated: res.ok }
+  } catch {
+    return { authenticated: false }
   }
-  return keycloakInstance
 }
 
-/**
- * Initialise Keycloak exactly once. Safe to call from multiple components
- * (AuthProvider + AuthCallbackPage) — subsequent calls return the cached promise.
- * initCalled is NEVER reset so kc.init() is only ever called once per page load.
- */
-export async function initAuth(): Promise<{ authenticated: boolean; token?: string }> {
-  if (initPromise) return initPromise
-
-  // kc.init() was already called but promise was somehow lost — return current state
-  if (initCalled) {
-    const kc = getKeycloak()
-    return { authenticated: kc.authenticated ?? false, token: kc.token }
-  }
-
-  initCalled = true
-  const kc = getKeycloak()
-
-  initPromise = kc
-    .init({
-      onLoad: 'check-sso',
-      pkceMethod: 'S256',
-      silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
-      checkLoginIframe: false,
-    })
-    .then((authenticated) => ({ authenticated, token: kc.token }))
-    .catch((err) => {
-      console.error('[auth] Keycloak init error:', err)
-      // Do NOT clear initPromise — kc.init() cannot be called again
-      return { authenticated: false }
-    })
-
-  return initPromise
+export function login(next = '/dashboard', provider: 'github' | 'google' | 'email' = 'github') {
+  window.location.href = `${API}/v1/auth/${provider}/authorize?next=${encodeURIComponent(next)}`
 }
 
-/**
- * Redirect to Keycloak login, routing the callback through /auth/callback.
- */
-export function login(next = '/dashboard', idpHint?: string) {
-  const callbackUri = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-  getKeycloak().login({ redirectUri: callbackUri, ...(idpHint && { idpHint }) })
+export async function logout(): Promise<void> {
+  await fetch(`${API}/v1/auth/logout`, { method: 'POST', credentials: 'include' })
+  window.location.href = '/'
 }
 
-export function logout() {
-  getKeycloak().logout({ redirectUri: window.location.origin })
-}
-
+// Legacy — cookies are sent automatically; this is only needed for code that explicitly sets the header
 export function getToken(): string | undefined {
-  return getKeycloak().token
+  return undefined
 }
