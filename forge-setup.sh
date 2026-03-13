@@ -473,16 +473,16 @@ collect_inputs() {
 
   # GitHub Integration
   divider
-  echo -e "\n${BOLD}GitHub Integration${RESET} (Sprint 8 — push/pull/import code)\n"
+  echo -e "\n${BOLD}GitHub Integration${RESET}\n"
   echo -e "  ${BOLD}You need TWO separate GitHub OAuth Apps:${RESET}\n"
   echo -e "  ${BOLD}1) Forge GitHub Integration${RESET} (code import/push/pull)"
   echo -e "     Create at:    ${CYAN}https://github.com/settings/developers${RESET}"
   echo -e "     Homepage URL: ${CYAN}http://localhost${RESET}"
   echo -e "     Callback URL: ${CYAN}http://localhost/api/v1/github/callback${RESET}\n"
-  echo -e "  ${BOLD}2) Keycloak Social Login${RESET} (sign in with GitHub)"
+  echo -e "  ${BOLD}2) Social Login${RESET} (sign in with GitHub)"
   echo -e "     Create at:    ${CYAN}https://github.com/settings/developers${RESET}"
   echo -e "     Homepage URL: ${CYAN}http://localhost${RESET}"
-  echo -e "     Callback URL: ${CYAN}http://localhost:8081/realms/forge/broker/github/endpoint${RESET}\n"
+  echo -e "     Callback URL: ${CYAN}http://localhost/api/v1/auth/github/callback${RESET}\n"
   echo -e "  ${DIM}Enter the credentials for BOTH apps below. Both are optional but highly recommended.${RESET}\n"
 
   # App #1 — Forge GitHub Integration (code import/push/pull)
@@ -495,14 +495,27 @@ collect_inputs() {
     info "GitHub code integration skipped (App #1)."
   fi
 
-  # App #2 — Keycloak Social Login (sign in with GitHub)
-  echo -e "\n  ${BOLD}App #2 credentials${RESET} (Keycloak Social Login — sign in with GitHub)\n"
-  prompt_optional GITHUB_KC_CLIENT_ID "GitHub OAuth App Client ID (App #2 — Keycloak login)" ""
-  if [[ -n "$GITHUB_KC_CLIENT_ID" ]]; then
-    prompt_optional_secret GITHUB_KC_CLIENT_SECRET "GitHub OAuth App Client Secret (App #2)"
+  # App #2 — Social Login (sign in with GitHub)
+  echo -e "\n  ${BOLD}App #2 credentials${RESET} (Social Login — sign in with GitHub)\n"
+  prompt_optional GITHUB_LOGIN_CLIENT_ID "GitHub OAuth App Client ID (App #2 — social login)" ""
+  if [[ -n "$GITHUB_LOGIN_CLIENT_ID" ]]; then
+    prompt_optional_secret GITHUB_LOGIN_CLIENT_SECRET "GitHub OAuth App Client Secret (App #2)"
   else
-    GITHUB_KC_CLIENT_SECRET=""
+    GITHUB_LOGIN_CLIENT_SECRET=""
     info "GitHub social login skipped (App #2) — users won't be able to sign in with GitHub."
+  fi
+
+  # Google OAuth
+  divider
+  echo -e "\n${BOLD}Google OAuth${RESET} (sign in with Google — optional)\n"
+  echo -e "  Create at: ${CYAN}https://console.cloud.google.com${RESET} → APIs & Services → Credentials"
+  echo -e "  Callback URL: ${CYAN}http://localhost/api/v1/auth/google/callback${RESET}\n"
+  prompt_optional GOOGLE_CLIENT_ID "Google OAuth Client ID" ""
+  if [[ -n "$GOOGLE_CLIENT_ID" ]]; then
+    prompt_optional_secret GOOGLE_CLIENT_SECRET "Google OAuth Client Secret"
+  else
+    GOOGLE_CLIENT_SECRET=""
+    info "Google social login skipped."
   fi
 
   # Stripe
@@ -614,11 +627,8 @@ MINIO_BUCKET_AVATARS=avatars
 MINIO_BUCKET_SNAPSHOTS=snapshots
 MINIO_BUCKET_ASSETS=assets
 
-# ── Keycloak (auth) ─────────────────────────────────────────────────────────
-KEYCLOAK_URL=http://localhost:8081
-KEYCLOAK_REALM=forge
-KEYCLOAK_CLIENT_ID=forge-api
-KEYCLOAK_CLIENT_SECRET=forge-api-secret
+# ── Auth (JWT) ───────────────────────────────────────────────────────────────
+JWT_SECRET=${JWT_SECRET:-forge-dev-secret-change-in-production}
 APP_URL=http://localhost
 
 # ── AWS Bedrock ──────────────────────────────────────────────────────────────
@@ -632,14 +642,18 @@ OPENAI_API_KEY=${OPENAI_API_KEY}
 # ── Security ─────────────────────────────────────────────────────────────────
 FORGE_ENCRYPTION_KEY=${FORGE_ENCRYPTION_KEY}
 
-# ── GitHub Integration (Sprint 8) ────────────────────────────────────────────
+# ── GitHub Integration ────────────────────────────────────────────────────────
 # App #1: Forge GitHub Integration (code import/push/pull via API)
 GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
 GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
 
-# App #2: Keycloak Social Login (sign in with GitHub — injected into Keycloak IDP)
-GITHUB_KC_CLIENT_ID=${GITHUB_KC_CLIENT_ID:-}
-GITHUB_KC_CLIENT_SECRET=${GITHUB_KC_CLIENT_SECRET:-}
+# App #2: Social Login (sign in with GitHub)
+GITHUB_LOGIN_CLIENT_ID=${GITHUB_LOGIN_CLIENT_ID:-}
+GITHUB_LOGIN_CLIENT_SECRET=${GITHUB_LOGIN_CLIENT_SECRET:-}
+
+# ── Google OAuth — Social Login ───────────────────────────────────────────────
+GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
 
 # ── Stripe (Sprint 10 — optional, billing UI hidden without these) ───────────
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
@@ -688,16 +702,21 @@ _write_root_env() {
     [[ "$OVERWRITE_ROOT_ENV" != "y" ]] && { warn "Skipping .env (keeping existing)"; return; }
   fi
   step "Writing .env (docker-compose variables)"
+  # Generate a random JWT secret if not already set
+  local _jwt_secret="${JWT_SECRET:-$(openssl rand -hex 32 2>/dev/null || LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64)}"
   cat > "$PROJECT_ROOT/.env" << EOF
 # ── Generated by forge-setup.sh — read by docker-compose ──────────────────────
 
-# ── GitHub App #2 — Keycloak Social Login ─────────────────────────────────────
-# Callback URL: http://localhost:8081/realms/forge/broker/github/endpoint
-GITHUB_KC_CLIENT_ID=${GITHUB_KC_CLIENT_ID:-}
-GITHUB_KC_CLIENT_SECRET=${GITHUB_KC_CLIENT_SECRET:-}
+# ── JWT (session signing) ─────────────────────────────────────────────────────
+JWT_SECRET=${_jwt_secret}
 
-# ── Google OAuth — Keycloak Social Login ──────────────────────────────────────
-# Callback URL: http://localhost:8081/realms/forge/broker/google/endpoint
+# ── GitHub OAuth App #2 — Social Login ────────────────────────────────────────
+# Callback URL: http://localhost/api/v1/auth/github/callback
+GITHUB_LOGIN_CLIENT_ID=${GITHUB_LOGIN_CLIENT_ID:-}
+GITHUB_LOGIN_CLIENT_SECRET=${GITHUB_LOGIN_CLIENT_SECRET:-}
+
+# ── Google OAuth — Social Login ───────────────────────────────────────────────
+# Callback URL: http://localhost/api/v1/auth/google/callback
 GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
 GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
 EOF
@@ -709,9 +728,6 @@ _write_web_env() {
   cat > "$PROJECT_ROOT/apps/web/.env.local" << 'EOF'
 # ── Generated by forge-setup.sh ──────────────────────────────────────────────
 NEXT_PUBLIC_API_URL=http://localhost/api
-NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8081
-NEXT_PUBLIC_KEYCLOAK_REALM=forge
-NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=forge-web
 EOF
   ok "apps/web/.env.local written"
 }
@@ -780,8 +796,8 @@ start_docker() {
   fi
 
   # ── Port conflict check (uses bash /dev/tcp — no lsof needed) ────────────
-  local _ports=(80 443 5432 6379 9000 8081 5050)
-  local _port_names=(Traefik/HTTP Traefik/HTTPS PostgreSQL Redis MinIO Keycloak pgAdmin)
+  local _ports=(80 443 5432 6379 9000 5050)
+  local _port_names=(Traefik/HTTP Traefik/HTTPS PostgreSQL Redis MinIO pgAdmin)
   local _conflicts=()
   for i in "${!_ports[@]}"; do
     if (echo >/dev/tcp/localhost/${_ports[$i]}) 2>/dev/null; then
@@ -804,12 +820,11 @@ start_docker() {
 
   echo ""
   step "Waiting for services to become healthy..."
-  echo -e "  ${DIM}(Keycloak takes ~60s to boot)${RESET}\n"
+  echo ""
 
   wait_for_postgres 60
   wait_for_redis 30
   wait_for_url "http://localhost:9000/minio/health/live" "MinIO" 30
-  wait_for_url "http://localhost:8081/health/ready" "Keycloak" 180
   wait_for_url "http://localhost:8080/ping" "Traefik" 20
 
   echo ""
@@ -938,13 +953,12 @@ print_summary() {
   echo -e "  ${CYAN}Team Members:${RESET}      http://localhost/settings/members"
   echo ""
   echo -e "  ${BOLD}${WHITE}Infrastructure:${RESET}"
-  echo -e "  ${CYAN}Keycloak Admin:${RESET}    http://localhost:8081/admin  (admin / admin)"
   echo -e "  ${CYAN}MinIO Console:${RESET}     http://localhost:9001  (minioadmin / minioadmin)"
   echo -e "  ${CYAN}Traefik Dashboard:${RESET} http://localhost:8080"
   echo ""
   echo -e "  ${BOLD}${WHITE}First-time login:${RESET}"
   echo -e "  1. Open ${CYAN}http://localhost${RESET}"
-  echo -e "  2. Click ${BOLD}Get Started${RESET} → Register a new account via Keycloak"
+  echo -e "  2. Sign up with email/password or sign in with GitHub/Google"
   echo -e "  3. You'll land on the dashboard — create your first project!"
   echo ""
   echo -e "  ${BOLD}${WHITE}Useful commands:${RESET}"

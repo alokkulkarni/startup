@@ -128,10 +128,11 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       JWT_SECRET: ${JWT_SECRET:-forge-dev-secret-change-in-production}
+      # Social login OAuth (separate from code-integration GITHUB_CLIENT_ID in apps/api/.env)
+      GITHUB_LOGIN_CLIENT_ID: ${GITHUB_LOGIN_CLIENT_ID:-}
+      GITHUB_LOGIN_CLIENT_SECRET: ${GITHUB_LOGIN_CLIENT_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       APP_URL: http://localhost
     volumes:
       - ./apps/api:/app/apps/api

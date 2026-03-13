@@ -102,7 +102,7 @@ export async function authRoutes(app: FastifyInstance) {
     const next = (request.query as any).next ?? '/dashboard'
     const state = await signState(next)
     const params = new URLSearchParams({
-      client_id: process.env.GITHUB_CLIENT_ID ?? '',
+      client_id: process.env.GITHUB_LOGIN_CLIENT_ID ?? '',
       redirect_uri: `${APP_URL}/api/v1/auth/github/callback`,
       scope: 'user:email',
       state,
@@ -119,7 +119,7 @@ export async function authRoutes(app: FastifyInstance) {
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code }),
+      body: JSON.stringify({ client_id: process.env.GITHUB_LOGIN_CLIENT_ID, client_secret: process.env.GITHUB_LOGIN_CLIENT_SECRET, code }),
     })
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string }
     if (!tokenData.access_token) return reply.redirect(`${APP_URL}/login?error=github_token_failed`)
