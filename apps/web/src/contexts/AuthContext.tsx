@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { initAuth, getKeycloak } from '@/lib/auth'
 import { api } from '@/lib/api'
 
@@ -30,21 +30,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
+  // Guard against React Strict Mode double-invoke
+  const ran = useRef(false)
 
   useEffect(() => {
-    initAuth().then(async ({ authenticated: auth }) => {
-      setAuthenticated(auth)
-      if (auth) {
-        try {
-          await api.post('/v1/auth/sync', {})
-          const res = await api.get<AuthUser>('/v1/users/me')
-          if (res.data) setUser(res.data)
-        } catch (err) {
-          console.error('Auth sync failed', err)
+    if (ran.current) return
+    ran.current = true
+
+    initAuth()
+      .then(async ({ authenticated: auth }) => {
+        setAuthenticated(auth)
+        if (auth) {
+          try {
+            await api.post('/v1/auth/sync', {})
+            const res = await api.get<AuthUser>('/v1/users/me')
+            if (res.data) setUser(res.data)
+          } catch (err) {
+            console.error('[AuthProvider] sync failed:', err)
+          }
         }
-      }
-      setLoading(false)
-    })
+        setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+      })
   }, [])
 
   const logout = () => {

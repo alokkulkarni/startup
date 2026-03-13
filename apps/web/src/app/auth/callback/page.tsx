@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getKeycloak } from '@/lib/auth'
+import { initAuth } from '@/lib/auth'
 
 /**
  * Dedicated OAuth callback page.
  * Keycloak redirects here after login/social-login with ?code=&state=.
- * We call kc.init() here so the adapter can exchange the code for tokens
- * in a controlled environment, then redirect to the intended destination.
+ * We call initAuth() (which sets the module-level initPromise cache) so that
+ * when AuthProvider mounts on the next page it reuses the already-resolved
+ * promise instead of calling kc.init() a second time (which would hang).
  */
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -21,14 +22,8 @@ export default function AuthCallbackPage() {
 
     const next = searchParams.get('next') ?? '/dashboard'
 
-    const kc = getKeycloak()
-    kc.init({
-      onLoad: 'check-sso',
-      pkceMethod: 'S256',
-      checkLoginIframe: false,
-      // No silentCheckSsoRedirectUri here — we want the code exchange only
-    })
-      .then((authenticated) => {
+    initAuth()
+      .then(({ authenticated }) => {
         if (authenticated) {
           router.replace(next)
         } else {

@@ -1,6 +1,7 @@
 import Keycloak from 'keycloak-js'
 
 let keycloakInstance: Keycloak | null = null
+let initCalled = false  // set to true before kc.init() — never reset
 let initPromise: Promise<{ authenticated: boolean; token?: string }> | null = null
 
 export function getKeycloak(): Keycloak {
@@ -14,11 +15,23 @@ export function getKeycloak(): Keycloak {
   return keycloakInstance
 }
 
-// Idempotent — safe to call multiple times; only initialises once.
+/**
+ * Initialise Keycloak exactly once. Safe to call from multiple components
+ * (AuthProvider + AuthCallbackPage) — subsequent calls return the cached promise.
+ * initCalled is NEVER reset so kc.init() is only ever called once per page load.
+ */
 export async function initAuth(): Promise<{ authenticated: boolean; token?: string }> {
   if (initPromise) return initPromise
 
+  // kc.init() was already called but promise was somehow lost — return current state
+  if (initCalled) {
+    const kc = getKeycloak()
+    return { authenticated: kc.authenticated ?? false, token: kc.token }
+  }
+
+  initCalled = true
   const kc = getKeycloak()
+
   initPromise = kc
     .init({
       onLoad: 'check-sso',
@@ -27,8 +40,9 @@ export async function initAuth(): Promise<{ authenticated: boolean; token?: stri
       checkLoginIframe: false,
     })
     .then((authenticated) => ({ authenticated, token: kc.token }))
-    .catch(() => {
-      initPromise = null // allow retry on transient failure
+    .catch((err) => {
+      console.error('[auth] Keycloak init error:', err)
+      // Do NOT clear initPromise — kc.init() cannot be called again
       return { authenticated: false }
     })
 
@@ -36,8 +50,7 @@ export async function initAuth(): Promise<{ authenticated: boolean; token?: stri
 }
 
 /**
- * Redirect to Keycloak login, sending the user back to /auth/callback after.
- * The callback page exchanges the code and redirects to `next` (default /dashboard).
+ * Redirect to Keycloak login, routing the callback through /auth/callback.
  */
 export function login(next = '/dashboard', idpHint?: string) {
   const callbackUri = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
