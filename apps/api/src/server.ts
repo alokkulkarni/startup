@@ -1,3 +1,8 @@
+import { drizzle as drizzleMigrate } from 'drizzle-orm/postgres-js'
+import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import postgres from 'postgres'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import cookie from '@fastify/cookie'
@@ -101,8 +106,42 @@ await app.register(analyticsRoutes, { prefix: '/api/v1' })
 startSnapshotCleanupWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 startDeployWorker(process.env.REDIS_URL ?? 'redis://localhost:6379', app)
 
+// ── Auto-migrate on startup ───────────────────────────────────────────────────
+// Runs every time the server starts; Drizzle tracks which migrations have
+// already been applied via the __drizzle_migrations table, so this is safe
+// to run on every restart (idempotent).
+async function runMigrationsOnStartup(): Promise<void> {
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString) {
+    console.error('[migrate] DATABASE_URL not set — skipping migrations')
+    return
+  }
+  const pg = postgres(connectionString, { max: 1 })
+  try {
+    const db = drizzleMigrate(pg)
+    // Resolve the drizzle folder from cwd (container workdir is /app/apps/api)
+    // Fallback chain: process.cwd()/drizzle → __dirname/../drizzle
+    const candidates = [
+      join(process.cwd(), 'drizzle'),
+      join(dirname(fileURLToPath(import.meta.url)), '..', 'drizzle'),
+      join(dirname(fileURLToPath(import.meta.url)), '../../', 'drizzle'),
+    ]
+    const { existsSync } = await import('fs')
+    const migrationsFolder = candidates.find(p => existsSync(p)) ?? candidates[0]
+    console.log(`[migrate] Running migrations from ${migrationsFolder}`)
+    await migrate(db, { migrationsFolder })
+    console.log('[migrate] All migrations applied successfully')
+  } catch (err) {
+    console.error('[migrate] Migration failed:', err)
+    process.exit(1)  // Hard fail — do NOT start with an incomplete schema
+  } finally {
+    await pg.end()
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 const start = async () => {
+  await runMigrationsOnStartup()
   try {
     const port = Number(process.env.PORT ?? 3001)
     await app.listen({ port, host: '0.0.0.0' })

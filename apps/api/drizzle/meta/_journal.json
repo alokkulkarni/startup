@@ -71,6 +71,13 @@
       "when": 1741791600000,
       "tag": "0009_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1741870800000,
+      "tag": "0010_native_auth",
+      "breakpoints": true
     }
   ]
 }

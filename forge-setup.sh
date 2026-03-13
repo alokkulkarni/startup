@@ -852,8 +852,19 @@ start_docker() {
 run_migrations() {
   header "Running Database Migrations"
   cd "$PROJECT_ROOT"
-  step "Applying database migrations..."
-  pnpm --filter @forge/api db:migrate 2>&1 | tail -10
+
+  # Prefer running migrations inside the Docker container (uses internal DB URL)
+  # Fall back to host-side pnpm if containers aren't up yet
+  if docker compose ps api 2>/dev/null | grep -q "Up"; then
+    step "Applying migrations via forge_api container..."
+    docker compose exec -T api sh -c \
+      "cd /app/apps/api && DATABASE_URL=postgres://forge:forge@postgres:5432/forge pnpm db:migrate 2>&1" \
+      | tail -10
+  else
+    step "Applying migrations from host (container not running)..."
+    export DATABASE_URL="${DATABASE_URL:-postgres://forge:forge@localhost:5432/forge}"
+    pnpm --filter @forge/api db:migrate 2>&1 | tail -10
+  fi
   ok "Migrations complete"
 }
 
@@ -862,7 +873,14 @@ seed_db() {
   header "Seeding Database"
   step "Seeding template marketplace (10 starter templates)..."
   cd "$PROJECT_ROOT"
-  pnpm --filter @forge/api db:seed 2>&1 | tail -5 || warn "Seed script not found or already seeded — continuing"
+  if docker compose ps api 2>/dev/null | grep -q "Up"; then
+    docker compose exec -T api sh -c \
+      "cd /app/apps/api && DATABASE_URL=postgres://forge:forge@postgres:5432/forge pnpm db:seed 2>&1" \
+      | tail -5 || warn "Seed script not found or already seeded — continuing"
+  else
+    export DATABASE_URL="${DATABASE_URL:-postgres://forge:forge@localhost:5432/forge}"
+    pnpm --filter @forge/api db:seed 2>&1 | tail -5 || warn "Seed script not found or already seeded — continuing"
+  fi
   ok "Database seed complete"
 }
 
