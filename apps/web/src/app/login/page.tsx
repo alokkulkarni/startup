@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SocialButton } from '@/components/auth/SocialButton'
-import { getKeycloak, initAuth } from '@/lib/auth'
+import { login, initAuth, getKeycloak } from '@/lib/auth'
 
 type View = 'login' | 'signup' | 'forgot'
 
@@ -20,11 +20,8 @@ export default function LoginPage() {
     setLoading(idpHint)
     setError('')
     try {
-      await initAuth() // idempotent — no-op if already initialised by AuthProvider
-      await getKeycloak().login({
-        idpHint,
-        redirectUri: `${window.location.origin}/dashboard`,
-      })
+      await initAuth() // ensure kc is initialised before redirecting
+      login('/dashboard', idpHint)
     } catch {
       setError('Failed to initiate sign in. Please try again.')
       setLoading(null)
@@ -37,10 +34,7 @@ export default function LoginPage() {
     setError('')
     try {
       await initAuth()
-      await getKeycloak().login({
-        loginHint: email,
-        redirectUri: `${window.location.origin}/dashboard`,
-      })
+      login('/dashboard')
     } catch {
       setError('Sign in failed. Check your credentials.')
       setLoading(null)
@@ -53,10 +47,10 @@ export default function LoginPage() {
     setError('')
     try {
       await initAuth()
-      await getKeycloak().login({
+      getKeycloak().login({
         loginHint: email,
         action: 'email_otp',
-        redirectUri: `${window.location.origin}/dashboard`,
+        redirectUri: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/dashboard')}`,
       })
     } catch {
       setError('Failed to send magic link. Please try again.')

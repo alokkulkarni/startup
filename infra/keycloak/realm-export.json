@@ -37,7 +37,8 @@
       "redirectUris": [
         "http://localhost/*",
         "http://localhost:3000/*",
-        "https://*.forge.ai/*"
+        "https://*.forge.ai/*",
+        "http://localhost/auth/callback"
       ],
       "webOrigins": [
         "http://localhost",

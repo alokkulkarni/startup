@@ -35,8 +35,13 @@ export async function initAuth(): Promise<{ authenticated: boolean; token?: stri
   return initPromise
 }
 
-export function login() {
-  getKeycloak().login({ redirectUri: `${window.location.origin}/dashboard` })
+/**
+ * Redirect to Keycloak login, sending the user back to /auth/callback after.
+ * The callback page exchanges the code and redirects to `next` (default /dashboard).
+ */
+export function login(next = '/dashboard', idpHint?: string) {
+  const callbackUri = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+  getKeycloak().login({ redirectUri: callbackUri, ...(idpHint && { idpHint }) })
 }
 
 export function logout() {
