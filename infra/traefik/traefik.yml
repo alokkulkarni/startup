@@ -5,6 +5,8 @@ api:
 log:
   level: INFO
 
+ping: {}
+
 accessLog: {}
 
 entryPoints:
@@ -14,10 +16,9 @@ entryPoints:
     address: ":443"
 
 providers:
-  docker:
-    endpoint: "tcp://socket-proxy:2375"
-    exposedByDefault: false
-    network: forge_network
+  file:
+    filename: /etc/traefik/routes.yml
+    watch: false
 
 metrics:
   prometheus:

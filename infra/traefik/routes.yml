@@ -1,0 +1,26 @@
+http:
+  routers:
+    # API: all /api/* requests → forge_api on port 3001
+    api:
+      rule: "Host(`localhost`) && PathPrefix(`/api`)"
+      service: api
+      entryPoints:
+        - web
+
+    # Web: all other requests → forge_web on port 3000
+    web:
+      rule: "Host(`localhost`)"
+      service: web
+      entryPoints:
+        - web
+
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: "http://forge_api:3001"
+
+    web:
+      loadBalancer:
+        servers:
+          - url: "http://forge_web:3000"
