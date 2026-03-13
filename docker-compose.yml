@@ -13,6 +13,21 @@ volumes:
   keycloak_data:
 
 services:
+  # ── Docker socket proxy (fixes macOS Docker Desktop socket permission issue) ─
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: forge_socket_proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      SERVICES: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - forge_network
+
   # ── Traefik reverse proxy ─────────────────────────────────────────────────
   traefik:
     image: traefik:v3.0
@@ -23,8 +38,9 @@ services:
       - "443:443"
       - "8080:8080"   # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+    depends_on:
+      - socket-proxy
     networks:
       - forge_network
     healthcheck:
