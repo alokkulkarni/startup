@@ -32,7 +32,11 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-export function useAIChat(projectId: string, token: string | null): UseAIChatReturn {
+export function useAIChat(
+  projectId: string,
+  token: string | null,
+  onFilesChanged?: () => void,
+): UseAIChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,7 +108,7 @@ export function useAIChat(projectId: string, token: string | null): UseAIChatRet
       const parser = createParser({
         onEvent(event) {
           try {
-            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string }
+            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[] }
 
             if (data.type === 'text' && data.text) {
               setMessages(prev =>
@@ -112,11 +116,16 @@ export function useAIChat(projectId: string, token: string | null): UseAIChatRet
                   m.id === assistantId ? { ...m, content: m.content + data.text } : m,
                 ),
               )
+            } else if (data.type === 'files_changed') {
+              // Trigger file tree refresh
+              onFilesChanged?.()
             } else if (data.type === 'done') {
               setMessages(prev =>
                 prev.map(m => (m.id === assistantId ? { ...m, isStreaming: false } : m)),
               )
               setIsStreaming(false)
+              // Also refresh files on done in case files_changed wasn't received
+              onFilesChanged?.()
             } else if (data.type === 'error') {
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
@@ -144,7 +153,7 @@ export function useAIChat(projectId: string, token: string | null): UseAIChatRet
       setMessages(prev => prev.filter(m => m.id !== assistantId))
       setIsStreaming(false)
     }
-  }, [projectId, token, isStreaming])
+  }, [projectId, token, isStreaming, onFilesChanged])
 
   return { messages, isStreaming, error, rateLimit, sendMessage, loadHistory }
 }

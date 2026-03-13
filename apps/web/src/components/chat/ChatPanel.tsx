@@ -104,6 +104,7 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
   const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
     projectId,
     token,
+    onFilesChanged,
   )
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevStreamingRef = useRef(false)

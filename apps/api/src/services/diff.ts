@@ -32,25 +32,46 @@ export function parseAIResponse(content: string): ParsedAIResponse {
   const forgeBlock = forgeChangesMatch[1]
   const diffs: FileDiff[] = []
 
-  // Match each <file path="...">...</file> block
-  const fileRegex = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g
+  // Match each <file path="..." action="...">...</file> block
+  const fileRegex = /<file\s+path="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/file>/g
   let match: RegExpExecArray | null
 
   while ((match = fileRegex.exec(forgeBlock)) !== null) {
     const path = match[1].trim()
-    const fileContent = match[2]
+    const action = (match[2] ?? '').trim().toLowerCase() // create | modify | delete | ''
+    const fileContent = match[3] ?? ''
 
-    // Extract the diff block (between ```diff and ```)
+    // action="delete" — mark for deletion
+    if (action === 'delete') {
+      diffs.push({ path, diff: '', isNew: false, isDeleted: true })
+      continue
+    }
+
+    // action="create" or content has no diff fences → treat as full file content
+    if (action === 'create' || (!fileContent.includes('```diff') && !fileContent.includes('--- ') && fileContent.trim().length > 0)) {
+      // Store full content in diff field with a sentinel prefix so applyDiffs can detect it
+      const rawContent = fileContent.trimStart().replace(/^\n/, '')
+      diffs.push({ path, diff: rawContent, isNew: true, isDeleted: false })
+      continue
+    }
+
+    // action="modify" or legacy format — extract the unified diff block
     const diffMatch = fileContent.match(/```diff\n([\s\S]*?)```/)
-    if (!diffMatch) continue
+    if (diffMatch) {
+      const diff = diffMatch[1]
+      const isNew = diff.includes('--- /dev/null') || diff.includes('--- a/dev/null')
+      const isDeleted = diff.includes('+++ /dev/null') || diff.includes('+++ b/dev/null')
+      diffs.push({ path, diff, isNew, isDeleted })
+      continue
+    }
 
-    const diff = diffMatch[1]
-
-    // Detect new/deleted files from diff headers
-    const isNew = diff.includes('--- /dev/null') || diff.includes('--- a/dev/null')
-    const isDeleted = diff.includes('+++ /dev/null') || diff.includes('+++ b/dev/null')
-
-    diffs.push({ path, diff, isNew, isDeleted })
+    // Raw diff without fences
+    const rawDiff = fileContent.trim()
+    if (rawDiff.startsWith('---') || rawDiff.startsWith('@@')) {
+      const isNew = rawDiff.includes('--- /dev/null')
+      const isDeleted = rawDiff.includes('+++ /dev/null')
+      diffs.push({ path, diff: rawDiff, isNew, isDeleted })
+    }
   }
 
   return { explanation, diffs }
@@ -61,8 +82,8 @@ export async function applyDiffs(
   diffs: FileDiff[],
   db: DrizzleDB,
   description?: string,
-): Promise<void> {
-  if (diffs.length === 0) return
+): Promise<string[]> {
+  if (diffs.length === 0) return []
 
   // Auto-snapshot before applying AI changes
   await createSnapshot(projectId, db, 'ai', description)
@@ -82,15 +103,22 @@ export async function applyDiffs(
       }
 
       if (fileDiff.isNew) {
-        // Extract content from the diff (all + lines without the + prefix)
-        const patches = parsePatch(fileDiff.diff)
-        let newContent = ''
-        for (const patch of patches) {
-          for (const hunk of patch.hunks) {
-            for (const line of hunk.lines) {
-              if (line.startsWith('+')) newContent += line.slice(1) + '\n'
+        // Full content format (action="create") — use diff field directly as content
+        // Unified diff format (--- /dev/null) — extract + lines
+        let newContent: string
+        if (fileDiff.diff.startsWith('---') || fileDiff.diff.includes('@@ ')) {
+          const patches = parsePatch(fileDiff.diff)
+          newContent = ''
+          for (const patch of patches) {
+            for (const hunk of patch.hunks) {
+              for (const line of hunk.lines) {
+                if (line.startsWith('+')) newContent += line.slice(1) + '\n'
+              }
             }
           }
+        } else {
+          // Full raw content (action="create" format)
+          newContent = fileDiff.diff
         }
         const mimeType = detectMimeType(fileDiff.path)
         await tx
@@ -147,6 +175,9 @@ export async function applyDiffs(
         )
     }
   })
+
+  // Return list of changed file paths
+  return diffs.map(d => d.path)
 }
 
 function detectMimeType(path: string): string {

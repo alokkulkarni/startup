@@ -142,10 +142,13 @@ export async function aiRoutes(app: FastifyInstance) {
               tokensUsed: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0),
             })
 
-            // Parse and apply any file diffs
+            // Parse and apply any file diffs; notify frontend of changed files
             const { diffs } = parseAIResponse(fullContent)
             if (diffs.length > 0) {
-              await applyDiffs(project.id, diffs, app.db, prompt)
+              const changedPaths = await applyDiffs(project.id, diffs, app.db, prompt)
+              if (changedPaths.length > 0) {
+                write({ type: 'files_changed', paths: changedPaths })
+              }
             }
 
             write({ type: 'done' })

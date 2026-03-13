@@ -27,7 +27,7 @@ function formatRelativeTime(dateStr: string): string {
 
 interface ParsedContent {
   explanation: string
-  diffs: Array<{ filePath: string; diff: string }>
+  diffs: Array<{ filePath: string; diff: string; action: string }>
   trailing: string
 }
 
@@ -35,17 +35,17 @@ function parseForgeChanges(content: string): ParsedContent {
   const result: ParsedContent = { explanation: '', diffs: [], trailing: '' }
   const tagPattern = /<forge_changes>([\s\S]*?)<\/forge_changes>/g
   let lastIndex = 0
-  let explanationParts: string[] = []
+  const explanationParts: string[] = []
   let match: RegExpExecArray | null
 
   while ((match = tagPattern.exec(content)) !== null) {
     explanationParts.push(content.slice(lastIndex, match.index))
     const inner = match[1]
-    // Expect: <file path="...">diff content</file>
-    const filePattern = /<file\s+path="([^"]+)">([\s\S]*?)<\/file>/g
+    const filePattern = /<file\s+path="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/file>/g
     let fileMatch: RegExpExecArray | null
     while ((fileMatch = filePattern.exec(inner)) !== null) {
-      result.diffs.push({ filePath: fileMatch[1], diff: fileMatch[2].trim() })
+      const action = (fileMatch[2] ?? '').toLowerCase() || 'modify'
+      result.diffs.push({ filePath: fileMatch[1], diff: fileMatch[3].trim(), action })
     }
     lastIndex = match.index + match[0].length
   }
@@ -103,9 +103,28 @@ export function MessageBubble({ role, content, createdAt, isStreaming }: Message
                   {parsed.explanation}
                 </p>
               )}
-              {parsed.diffs.map((d, i) => (
-                <DiffViewer key={i} filePath={d.filePath} diff={d.diff} />
-              ))}
+              {parsed.diffs.length > 0 && (
+                <div className="space-y-1.5 mt-2">
+                  {parsed.diffs.map((d, i) => (
+                    d.action === 'create' ? (
+                      // New file — show as a badge, not a diff
+                      <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-green-950/50 border border-green-800/50 rounded-lg">
+                        <span className="text-green-400 text-xs">✚</span>
+                        <span className="text-xs font-mono text-green-300 truncate">{d.filePath}</span>
+                        <span className="text-xs text-green-600 ml-auto shrink-0">created</span>
+                      </div>
+                    ) : d.action === 'delete' ? (
+                      <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-red-950/50 border border-red-800/50 rounded-lg">
+                        <span className="text-red-400 text-xs">✕</span>
+                        <span className="text-xs font-mono text-red-300 truncate">{d.filePath}</span>
+                        <span className="text-xs text-red-600 ml-auto shrink-0">deleted</span>
+                      </div>
+                    ) : (
+                      <DiffViewer key={i} filePath={d.filePath} diff={d.diff} />
+                    )
+                  ))}
+                </div>
+              )}
               {parsed.trailing && (
                 <p className="text-sm whitespace-pre-wrap break-words leading-relaxed mt-3">
                   {parsed.trailing}
@@ -114,8 +133,15 @@ export function MessageBubble({ role, content, createdAt, isStreaming }: Message
             </>
           ) : (
             <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-              {content}
-              {isStreaming && (
+              {/* Strip any partial/complete forge_changes XML from display */}
+              {content.replace(/<forge_changes>[\s\S]*?<\/forge_changes>/g, '').replace(/<forge_changes>[\s\S]*/g, '').trim()}
+              {isStreaming && content.includes('<forge_changes>') && !content.includes('</forge_changes>') && (
+                <span className="inline-flex items-center gap-1.5 ml-2 text-xs text-violet-400">
+                  <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  Writing files…
+                </span>
+              )}
+              {isStreaming && !content.includes('<forge_changes>') && (
                 <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
               )}
             </p>
