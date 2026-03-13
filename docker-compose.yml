@@ -174,27 +174,27 @@ services:
         SERVER="--no-config --server http://keycloak:8081 --realm master --user admin --password admin"
 
         # Disable SSL requirement for local dev
-        $KCADM update realms/master -s sslRequired=none $SERVER
-        $KCADM update realms/forge  -s sslRequired=none $SERVER
+        $$KCADM update realms/master -s sslRequired=none $$SERVER
+        $$KCADM update realms/forge  -s sslRequired=none $$SERVER
         echo "✔ SSL requirements disabled"
 
         # Configure GitHub identity provider (only if credentials are provided)
-        if [ -n "$GITHUB_KC_CLIENT_ID" ] && [ -n "$GITHUB_KC_CLIENT_SECRET" ]; then
-          $KCADM update identity-provider/instances/github -r forge \
-            -s config.clientId=$GITHUB_KC_CLIENT_ID \
-            -s config.clientSecret=$GITHUB_KC_CLIENT_SECRET \
-            $SERVER
+        if [ -n "$$GITHUB_KC_CLIENT_ID" ] && [ -n "$$GITHUB_KC_CLIENT_SECRET" ]; then
+          $$KCADM update identity-provider/instances/github -r forge \
+            -s "config.clientId=$$GITHUB_KC_CLIENT_ID" \
+            -s "config.clientSecret=$$GITHUB_KC_CLIENT_SECRET" \
+            $$SERVER
           echo "✔ GitHub IDP credentials configured"
         else
           echo "⚠ GITHUB_KC_CLIENT_ID/SECRET not set — GitHub social login will not work"
         fi
 
         # Configure Google identity provider (only if credentials are provided)
-        if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-          $KCADM update identity-provider/instances/google -r forge \
-            -s config.clientId=$GOOGLE_CLIENT_ID \
-            -s config.clientSecret=$GOOGLE_CLIENT_SECRET \
-            $SERVER
+        if [ -n "$$GOOGLE_CLIENT_ID" ] && [ -n "$$GOOGLE_CLIENT_SECRET" ]; then
+          $$KCADM update identity-provider/instances/google -r forge \
+            -s "config.clientId=$$GOOGLE_CLIENT_ID" \
+            -s "config.clientSecret=$$GOOGLE_CLIENT_SECRET" \
+            $$SERVER
           echo "✔ Google IDP credentials configured"
         else
           echo "⚠ GOOGLE_CLIENT_ID/SECRET not set — Google social login will not work"
