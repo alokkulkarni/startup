@@ -483,15 +483,26 @@ collect_inputs() {
   echo -e "     Create at:    ${CYAN}https://github.com/settings/developers${RESET}"
   echo -e "     Homepage URL: ${CYAN}http://localhost${RESET}"
   echo -e "     Callback URL: ${CYAN}http://localhost:8081/realms/forge/broker/github/endpoint${RESET}\n"
-  echo -e "  ${DIM}Enter the credentials for App #1 (Forge GitHub Integration) below.${RESET}"
-  echo -e "  ${DIM}App #2 (Keycloak) is configured in the Keycloak admin console after startup.${RESET}\n"
+  echo -e "  ${DIM}Enter the credentials for BOTH apps below. Both are optional but highly recommended.${RESET}\n"
 
-  prompt_optional GITHUB_CLIENT_ID "GitHub OAuth App Client ID (App #1)" ""
+  # App #1 — Forge GitHub Integration (code import/push/pull)
+  echo -e "  ${BOLD}App #1 credentials${RESET} (Forge GitHub Integration)\n"
+  prompt_optional GITHUB_CLIENT_ID "GitHub OAuth App Client ID (App #1 — code integration)" ""
   if [[ -n "$GITHUB_CLIENT_ID" ]]; then
     prompt_optional_secret GITHUB_CLIENT_SECRET "GitHub OAuth App Client Secret (App #1)"
   else
     GITHUB_CLIENT_SECRET=""
-    info "GitHub integration skipped."
+    info "GitHub code integration skipped (App #1)."
+  fi
+
+  # App #2 — Keycloak Social Login (sign in with GitHub)
+  echo -e "\n  ${BOLD}App #2 credentials${RESET} (Keycloak Social Login — sign in with GitHub)\n"
+  prompt_optional GITHUB_KC_CLIENT_ID "GitHub OAuth App Client ID (App #2 — Keycloak login)" ""
+  if [[ -n "$GITHUB_KC_CLIENT_ID" ]]; then
+    prompt_optional_secret GITHUB_KC_CLIENT_SECRET "GitHub OAuth App Client Secret (App #2)"
+  else
+    GITHUB_KC_CLIENT_SECRET=""
+    info "GitHub social login skipped (App #2) — users won't be able to sign in with GitHub."
   fi
 
   # Stripe
@@ -622,8 +633,13 @@ OPENAI_API_KEY=${OPENAI_API_KEY}
 FORGE_ENCRYPTION_KEY=${FORGE_ENCRYPTION_KEY}
 
 # ── GitHub Integration (Sprint 8) ────────────────────────────────────────────
+# App #1: Forge GitHub Integration (code import/push/pull via API)
 GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
 GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+
+# App #2: Keycloak Social Login (sign in with GitHub — injected into Keycloak IDP)
+GITHUB_KC_CLIENT_ID=${GITHUB_KC_CLIENT_ID:-}
+GITHUB_KC_CLIENT_SECRET=${GITHUB_KC_CLIENT_SECRET:-}
 
 # ── Stripe (Sprint 10 — optional, billing UI hidden without these) ───────────
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}

@@ -129,8 +129,8 @@ services:
       KC_HTTP_PORT: "8081"
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_KC_CLIENT_ID: ${GITHUB_KC_CLIENT_ID:-}
+      GITHUB_KC_CLIENT_SECRET: ${GITHUB_KC_CLIENT_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     command: ["start-dev", "--import-realm"]
@@ -162,8 +162,8 @@ services:
     networks:
       - forge_network
     environment:
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_KC_CLIENT_ID: ${GITHUB_KC_CLIENT_ID:-}
+      GITHUB_KC_CLIENT_SECRET: ${GITHUB_KC_CLIENT_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     entrypoint:
@@ -179,14 +179,14 @@ services:
         echo "✔ SSL requirements disabled"
 
         # Configure GitHub identity provider (only if credentials are provided)
-        if [ -n "$GITHUB_CLIENT_ID" ] && [ -n "$GITHUB_CLIENT_SECRET" ]; then
+        if [ -n "$GITHUB_KC_CLIENT_ID" ] && [ -n "$GITHUB_KC_CLIENT_SECRET" ]; then
           $KCADM update identity-provider/instances/github -r forge \
-            -s config.clientId=$GITHUB_CLIENT_ID \
-            -s config.clientSecret=$GITHUB_CLIENT_SECRET \
+            -s config.clientId=$GITHUB_KC_CLIENT_ID \
+            -s config.clientSecret=$GITHUB_KC_CLIENT_SECRET \
             $SERVER
           echo "✔ GitHub IDP credentials configured"
         else
-          echo "⚠ GITHUB_CLIENT_ID/SECRET not set — GitHub login will not work"
+          echo "⚠ GITHUB_KC_CLIENT_ID/SECRET not set — GitHub social login will not work"
         fi
 
         # Configure Google identity provider (only if credentials are provided)
@@ -197,7 +197,7 @@ services:
             $SERVER
           echo "✔ Google IDP credentials configured"
         else
-          echo "⚠ GOOGLE_CLIENT_ID/SECRET not set — Google login will not work"
+          echo "⚠ GOOGLE_CLIENT_ID/SECRET not set — Google social login will not work"
         fi
 
         echo "Keycloak setup complete"
