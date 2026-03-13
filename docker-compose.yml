@@ -152,6 +152,28 @@ services:
       retries: 15
       start_period: 90s
 
+  # ── Keycloak SSL setup (disables sslRequired for local dev on fresh installs)
+  keycloak-setup:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: forge_keycloak_setup
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - forge_network
+    entrypoint:
+      - bash
+      - -c
+      - |
+        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=none \
+          --no-config --server http://keycloak:8081 --realm master \
+          --user admin --password admin
+        /opt/keycloak/bin/kcadm.sh update realms/forge -s sslRequired=none \
+          --no-config --server http://keycloak:8081 --realm master \
+          --user admin --password admin
+        echo "Keycloak SSL setup complete"
+    restart: "no"
+
   # ── Fastify API ───────────────────────────────────────────────────────────
   api:
     build:
