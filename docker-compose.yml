@@ -134,11 +134,25 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       APP_URL: http://localhost
+      # ── AWS Bedrock (primary AI provider) ─────────────────────────────────
+      # Set these in .env — the container cannot reach the host ~/.aws directory
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+      # ── AI Fallback Chain ──────────────────────────────────────────────────
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages:/app/packages
       - /app/apps/api/node_modules
       - /app/node_modules
+      # Mount host AWS credentials so the container can use named profiles / SSO
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy

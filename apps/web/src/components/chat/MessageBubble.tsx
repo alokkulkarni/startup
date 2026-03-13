@@ -59,6 +59,15 @@ function hasForgeChanges(content: string): boolean {
   return content.includes('<forge_changes>')
 }
 
+/** Strip complete and partial markdown code fences from assistant chat display. */
+function stripCodeBlocksForDisplay(text: string): string {
+  return text
+    .replace(/```[\w.\-/ ]*\n[\s\S]*?```/g, '')  // complete fences
+    .replace(/```[\w.\-/ ]*\n[\s\S]*/g, '')        // partial fence (still streaming)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function MessageBubble({ role, content, createdAt, isStreaming }: MessageBubbleProps) {
   const isUser = role === 'user'
 
@@ -132,19 +141,45 @@ export function MessageBubble({ role, content, createdAt, isStreaming }: Message
               )}
             </>
           ) : (
-            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-              {/* Strip any partial/complete forge_changes XML from display */}
-              {content.replace(/<forge_changes>[\s\S]*?<\/forge_changes>/g, '').replace(/<forge_changes>[\s\S]*/g, '').trim()}
-              {isStreaming && content.includes('<forge_changes>') && !content.includes('</forge_changes>') && (
-                <span className="inline-flex items-center gap-1.5 ml-2 text-xs text-violet-400">
-                  <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
-                  Writing files…
-                </span>
-              )}
-              {isStreaming && !content.includes('<forge_changes>') && (
-                <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
-              )}
-            </p>
+            <>
+              {(() => {
+                const hasCodeBlocks = /```[\w.\-/ ]*\n/.test(content)
+                const displayText = stripCodeBlocksForDisplay(
+                  content
+                    .replace(/<forge_changes>[\s\S]*?<\/forge_changes>/g, '')
+                    .replace(/<forge_changes>[\s\S]*/g, ''),
+                )
+                const isWritingFiles = isStreaming && hasCodeBlocks
+
+                return (
+                  <>
+                    {displayText && (
+                      <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                        {displayText}
+                      </p>
+                    )}
+                    {isWritingFiles && (
+                      <span className="inline-flex items-center gap-1.5 mt-2 text-xs text-violet-400">
+                        <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+                        Writing files…
+                      </span>
+                    )}
+                    {!isStreaming && hasCodeBlocks && !displayText && (
+                      <p className="text-sm text-gray-400 italic">✓ Files written to project</p>
+                    )}
+                    {isStreaming && !hasCodeBlocks && !content.includes('<forge_changes>') && (
+                      <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
+                    )}
+                    {isStreaming && content.includes('<forge_changes>') && !content.includes('</forge_changes>') && (
+                      <span className="inline-flex items-center gap-1.5 mt-2 text-xs text-violet-400">
+                        <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+                        Writing files…
+                      </span>
+                    )}
+                  </>
+                )
+              })()}
+            </>
           )}
         </div>
         <p className="text-xs text-gray-500 mt-1 pl-1">{formatRelativeTime(createdAt)}</p>
