@@ -1642,8 +1642,11 @@ body { font-family: system-ui, -apple-system, sans-serif; }`,
       {
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-export default defineConfig({ plugins: [svelte()], server: { host: true, port: 5173 } })`,
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte'
+export default defineConfig({
+  plugins: [svelte({ preprocess: vitePreprocess() })],
+  server: { host: true, port: 5173 },
+})`,
       },
       {
         path: 'tsconfig.json',
