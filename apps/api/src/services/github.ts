@@ -55,57 +55,52 @@ export async function createRepoAndPush(
 ): Promise<{ repoUrl: string; owner: string; repo: string; sha: string }> {
   const octokit = getOctokit(encryptedToken);
 
-  // 1. Create the repo (empty, no auto-init)
+  // 1. Create repo with auto_init so git objects exist (avoids "Git Repository
+  //    is empty" error when calling createTree on a truly empty repo)
   const { data: repoData } = await octokit.rest.repos.createForAuthenticatedUser({
     name: repoName,
     private: options?.private ?? false,
     description: options?.description ?? 'Created with Forge AI',
-    auto_init: false,
+    auto_init: true,
   });
 
   const owner = repoData.owner.login;
   const repo = repoData.name;
+  const branch = repoData.default_branch ?? 'main';
 
-  // 2. Create individual blobs (more reliable than inline content in createTree)
-  const blobs = await Promise.all(
-    files.map(async (f) => {
-      const { data } = await octokit.rest.git.createBlob({
-        owner,
-        repo,
-        content: Buffer.from(f.content, 'utf8').toString('base64'),
-        encoding: 'base64',
-      });
-      return { path: f.path, sha: data.sha };
-    }),
-  );
+  // 2. Get the auto-init commit SHA so we can use it as parent
+  const { data: refData } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+  const parentSha = refData.object.sha;
 
-  // 3. Create tree referencing blob SHAs
+  // 3. Create tree with ALL files in one API call (inline content, no base_tree
+  //    so the result contains ONLY our files, not the auto-init README)
   const { data: treeData } = await octokit.rest.git.createTree({
     owner,
     repo,
-    tree: blobs.map((b) => ({
-      path: b.path,
+    tree: files.map((f) => ({
+      path: f.path,
       mode: '100644' as const,
       type: 'blob' as const,
-      sha: b.sha,
+      content: f.content,
     })),
   });
 
-  // 4. Create initial commit with no parents
+  // 4. Create commit with the auto-init commit as parent
   const { data: commitData } = await octokit.rest.git.createCommit({
     owner,
     repo,
     message: 'Initial commit from Forge AI',
     tree: treeData.sha,
-    parents: [],
+    parents: [parentSha],
   });
 
-  // 5. Create the main branch ref
-  await octokit.rest.git.createRef({
+  // 5. Force-update ref to point at our commit (replaces the auto-init commit)
+  await octokit.rest.git.updateRef({
     owner,
     repo,
-    ref: 'refs/heads/main',
+    ref: `heads/${branch}`,
     sha: commitData.sha,
+    force: true,
   });
 
   return { repoUrl: repoData.html_url, owner, repo, sha: commitData.sha };
