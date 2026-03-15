@@ -75,6 +75,72 @@ function jsonHighlight(json: string) {
     })
 }
 
+// Build a contextual example value from a JSON Schema node
+function schemaToExample(schema: unknown, propName?: string): unknown {
+  if (!schema || typeof schema !== 'object') return null
+  const s = schema as Record<string, unknown>
+
+  if ('example' in s) return s.example
+  if ('default' in s) return s.default
+  if ('enum' in s && Array.isArray(s.enum) && s.enum.length > 0) return s.enum[0]
+
+  const type = s.type as string | undefined
+
+  if (type === 'object' || s.properties) {
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries((s.properties ?? {}) as Record<string, unknown>)) {
+      result[k] = schemaToExample(v, k)
+    }
+    return result
+  }
+
+  if (type === 'array') {
+    return s.items ? [schemaToExample(s.items, propName)] : []
+  }
+
+  const name = (propName ?? '').toLowerCase()
+  if (type === 'string') {
+    if (name.includes('email')) return 'user@example.com'
+    if (name === 'name' || name.includes('username')) return 'Widget Pro'
+    if (name.includes('title')) return 'My Title'
+    if (name.includes('desc')) return 'A detailed description of the item'
+    if (name.includes('url') || name.includes('href') || name.includes('link')) return 'https://example.com'
+    if (name.includes('id')) return 'a1b2c3d4-0001-4000-8000-000000000001'
+    if (name.includes('date') || name.includes('time') || name.includes('at')) return new Date().toISOString()
+    if (name.includes('password') || name.includes('secret')) return 'p@ssw0rd!'
+    if (name.includes('token') || name.includes('key')) return 'ey...'
+    if (name.includes('phone') || name.includes('tel')) return '+1-555-0100'
+    if (name.includes('status')) return 'active'
+    if (name.includes('color') || name.includes('colour')) return '#6366f1'
+    return 'string'
+  }
+
+  if (type === 'number' || type === 'integer') {
+    if (name.includes('price') || name.includes('amount') || name.includes('cost') || name.includes('fee')) return 29.99
+    if (name.includes('age')) return 25
+    if (name.includes('count') || name.includes('total') || name.includes('quantity')) return 3
+    if (name.includes('port')) return 3000
+    if (name.includes('rating') || name.includes('score')) return 4.5
+    return type === 'integer' ? 1 : 1.0
+  }
+
+  if (type === 'boolean') return true
+
+  return null
+}
+
+// Extract the request body schema from an OpenAPI path item and generate an example
+function buildExampleBody(route: RouteEntry): string {
+  const schema = route.requestBody?.content?.['application/json']?.schema
+  if (!schema) return '{\n  \n}'
+  try {
+    const example = schemaToExample(schema)
+    return JSON.stringify(example, null, 2)
+  } catch {
+    return '{\n  \n}'
+  }
+}
+
 interface Props {
   baseUrl: string
 }
@@ -154,14 +220,19 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
     setResponseHtml(null)
     setResponseDuration(null)
     setReqState('idle')
-    // Pre-fill path params
+
+    // Pre-fill path params — use seed IDs for 'id' params so user can test immediately
     const params: Record<string, string> = {}
     const matches = route.path.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)/g)
-    for (const m of matches) params[m[1]] = ''
+    for (const m of matches) {
+      const key = m[1]
+      params[key] = key === 'id' ? 'a1b2c3d4-0001-4000-8000-000000000001' : ''
+    }
     setPathParams(params)
-    // Default body for methods with body
+
+    // For methods with a body: generate an example from the OpenAPI schema
     if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
-      setReqBody('{\n  \n}')
+      setReqBody(buildExampleBody(route))
       setActiveTab('body')
     } else {
       setReqBody('')

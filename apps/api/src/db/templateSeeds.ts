@@ -1287,7 +1287,14 @@ const UpdateItemSchema = CreateItemSchema.partial()
 
 interface Item { id: string; name: string; description?: string; price: number; createdAt: string }
 
-const db = new Map<string, Item>()
+// Pre-seeded sample data so GET /api/v1/items returns results immediately
+const SEED_ITEMS: Item[] = [
+  { id: 'a1b2c3d4-0001-4000-8000-000000000001', name: 'Widget Pro', description: 'A high-quality widget for professionals', price: 29.99, createdAt: '2024-01-15T09:00:00.000Z' },
+  { id: 'a1b2c3d4-0002-4000-8000-000000000002', name: 'Gadget Plus', description: 'Advanced gadget with extended features', price: 49.99, createdAt: '2024-01-16T10:30:00.000Z' },
+  { id: 'a1b2c3d4-0003-4000-8000-000000000003', name: 'Starter Pack', description: 'Perfect bundle for getting started', price: 9.99, createdAt: '2024-01-17T14:00:00.000Z' },
+]
+
+const db = new Map<string, Item>(SEED_ITEMS.map(i => [i.id, i]))
 
 export async function itemRoutes(app: FastifyInstance) {
   // GET /items
