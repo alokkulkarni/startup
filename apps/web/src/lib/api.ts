@@ -19,6 +19,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
     throw new Error(err?.error?.message ?? `HTTP ${response.status}`)
   }
 
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return {} as ApiResponse<T>
+  }
+
   return response.json()
 }
 
