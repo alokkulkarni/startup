@@ -46,9 +46,9 @@ export function useSubscription() {
     try {
       const res = await api.get<SubscriptionInfo>('/v1/billing/subscription')
       setSubscription(res.data ?? DEFAULT_FREE_SUBSCRIPTION)
-    } catch (err) {
+    } catch {
+      // On any error, silently fall back to free tier so the page still renders
       setSubscription(DEFAULT_FREE_SUBSCRIPTION)
-      setError(err instanceof Error ? err.message : 'Failed to fetch subscription')
     } finally {
       setLoading(false)
     }
@@ -56,12 +56,11 @@ export function useSubscription() {
 
   const fetchUsage = async () => {
     setLoading(true)
-    setError(null)
     try {
       const res = await api.get<UsageInfo>('/v1/billing/usage')
       setUsage(res.data ?? null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch usage')
+    } catch {
+      // Non-critical — leave usage null
     } finally {
       setLoading(false)
     }

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type Stripe from 'stripe'
 import { z } from 'zod'
-import { subscriptions } from '../db/schema.js'
+import { subscriptions, workspaceMembers } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import {
   getStripeClient,
@@ -28,6 +28,15 @@ async function getDbUser(app: FastifyInstance, userId: string) {
   })
 }
 
+/** Resolve the primary workspace ID for a user from the DB (JWT does not carry workspaceId). */
+async function getPrimaryWorkspaceId(app: FastifyInstance, userId: string): Promise<string | null> {
+  const membership = await app.db.query.workspaceMembers.findFirst({
+    where: (m, { eq }) => eq(m.userId, userId),
+    orderBy: (m, { asc }) => asc(m.joinedAt),
+  })
+  return membership?.workspaceId ?? null
+}
+
 export async function billingRoutes(app: FastifyInstance) {
   // POST /billing/checkout — Create Stripe checkout session
   app.post<{ Body: { priceId: string; successUrl: string; cancelUrl: string } }>(
@@ -42,9 +51,13 @@ export async function billingRoutes(app: FastifyInstance) {
         })
       }
       const { priceId, successUrl, cancelUrl } = parsed.data
-      const workspaceId = (request.user as any).workspaceId as string
       const userId = request.user!.id
       const email = request.user!.email
+
+      const workspaceId = await getPrimaryWorkspaceId(app, userId)
+      if (!workspaceId) {
+        return reply.code(400).send({ error: 'No workspace found. Create a workspace first.' })
+      }
 
       const stripe = getStripeClient()
       const customerId = await getOrCreateCustomer(stripe, userId, email)
@@ -77,12 +90,14 @@ export async function billingRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!(await requireAuth(request, reply))) return
 
-      const workspaceId = (request.user as any).workspaceId as string
+      const workspaceId = await getPrimaryWorkspaceId(app, request.user!.id)
       const returnUrl = (request.body as any)?.returnUrl ?? (process.env.APP_URL ?? 'http://localhost')
 
-      const sub = await app.db.query.subscriptions.findFirst({
-        where: (s, { eq }) => eq(s.workspaceId, workspaceId),
-      })
+      const sub = workspaceId
+        ? await app.db.query.subscriptions.findFirst({
+            where: (s, { eq }) => eq(s.workspaceId, workspaceId),
+          })
+        : null
 
       if (!sub?.stripeCustomerId) {
         return reply.code(400).send({
@@ -128,11 +143,13 @@ export async function billingRoutes(app: FastifyInstance) {
   app.get('/billing/subscription', async (request, reply) => {
     if (!(await requireAuth(request, reply))) return
 
-    const workspaceId = (request.user as any).workspaceId as string
+    const workspaceId = await getPrimaryWorkspaceId(app, request.user!.id)
 
-    const sub = await app.db.query.subscriptions.findFirst({
-      where: (s, { eq }) => eq(s.workspaceId, workspaceId),
-    })
+    const sub = workspaceId
+      ? await app.db.query.subscriptions.findFirst({
+          where: (s, { eq }) => eq(s.workspaceId, workspaceId),
+        })
+      : null
 
     const tier = ((sub?.planTier ?? sub?.plan ?? 'free') as string) as keyof typeof PLAN_LIMITS
     const limits = PLAN_LIMITS[tier] ?? PLAN_LIMITS.free
@@ -163,10 +180,12 @@ export async function billingRoutes(app: FastifyInstance) {
     ])
     const used = usedStr ? parseInt(usedStr, 10) : 0
 
-    const workspaceId = (request.user as any).workspaceId as string
-    const sub = await app.db.query.subscriptions.findFirst({
-      where: (s, { eq }) => eq(s.workspaceId, workspaceId),
-    })
+    const workspaceId = await getPrimaryWorkspaceId(app, request.user!.id)
+    const sub = workspaceId
+      ? await app.db.query.subscriptions.findFirst({
+          where: (s, { eq }) => eq(s.workspaceId, workspaceId),
+        })
+      : null
 
     const tier = ((sub?.planTier ?? sub?.plan ?? 'free') as string) as keyof typeof PLAN_LIMITS
     const limit = (PLAN_LIMITS[tier] ?? PLAN_LIMITS.free).aiRequestsPerDay
