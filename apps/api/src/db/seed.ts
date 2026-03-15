@@ -36,7 +36,19 @@ if (user) {
 // Seed templates
 console.log('Seeding templates...')
 for (const tmpl of TEMPLATE_SEEDS) {
-  await db.insert(schema.templates).values(tmpl).onConflictDoNothing()
+  await db.insert(schema.templates).values(tmpl).onConflictDoUpdate({
+    target: schema.templates.slug,
+    set: {
+      name: tmpl.name,
+      description: tmpl.description,
+      category: tmpl.category,
+      framework: tmpl.framework,
+      filesJson: tmpl.filesJson,
+      isOfficial: tmpl.isOfficial,
+      isPublic: tmpl.isPublic,
+      updatedAt: new Date(),
+    },
+  })
 }
 console.log(`Seeded ${TEMPLATE_SEEDS.length} templates.`)
 

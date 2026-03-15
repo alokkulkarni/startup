@@ -72,7 +72,7 @@ button:hover { background: #4f46e5; }`,
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`,
+export default defineConfig({ plugins: [react()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -198,7 +198,7 @@ h1 { font-size: 2rem; margin-bottom: 1.5rem; color: #1e293b; }
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`,
+export default defineConfig({ plugins: [react()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -218,7 +218,7 @@ export default defineConfig({ plugins: [react()] })`,
         content: JSON.stringify({
           name: 'nextjs-saas-starter',
           version: '1.0.0',
-          scripts: { dev: 'next dev', build: 'next build', start: 'next start' },
+          scripts: { dev: 'next dev -H 0.0.0.0 -p 5173', build: 'next build', start: 'next start -H 0.0.0.0 -p 5173' },
           dependencies: { next: '^14.2.0', react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
         }, null, 2),
@@ -547,7 +547,7 @@ footer { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.875rem;
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`,
+export default defineConfig({ plugins: [react()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -567,7 +567,7 @@ export default defineConfig({ plugins: [react()] })`,
         content: JSON.stringify({
           name: 'nextjs-blog',
           version: '1.0.0',
-          scripts: { dev: 'next dev', build: 'next build', start: 'next start' },
+          scripts: { dev: 'next dev -H 0.0.0.0 -p 5173', build: 'next build', start: 'next start -H 0.0.0.0 -p 5173' },
           dependencies: { next: '^14.2.0', react: '^18.2.0', 'react-dom': '^18.2.0', 'gray-matter': '^4.0.3', 'remark': '^15.0.0', 'remark-html': '^16.0.1' },
           devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
         }, null, 2),
@@ -899,7 +899,7 @@ body { font-family: system-ui; background: #f8fafc; }
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`,
+export default defineConfig({ plugins: [react()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -1120,7 +1120,7 @@ body { font-family: system-ui; background: #f1f5f9; color: #1e293b; }
         path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-export default defineConfig({ plugins: [react()] })`,
+export default defineConfig({ plugins: [react()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -1165,7 +1165,7 @@ app.setErrorHandler((error, _request, reply) => {
   })
 })
 
-const port = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT ?? 5173)
 await app.listen({ port, host: '0.0.0.0' })
 app.log.info(\`Server running on http://localhost:\${port}\`)`,
       },
@@ -1426,7 +1426,7 @@ body { font-family: system-ui; background: #f0f4ff; min-height: 100vh; padding: 
         path: 'vite.config.ts',
         content: `import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-export default defineConfig({ plugins: [vue()] })`,
+export default defineConfig({ plugins: [vue()], server: { host: true, port: 5173 } })`,
       },
     ],
   },
@@ -1560,7 +1560,7 @@ body { font-family: system-ui, -apple-system, sans-serif; }`,
         path: 'vite.config.ts',
         content: `import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-export default defineConfig({ plugins: [svelte()] })`,
+export default defineConfig({ plugins: [svelte()], server: { host: true, port: 5173 } })`,
       },
     ],
   },

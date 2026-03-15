@@ -203,7 +203,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
         ' && npm run dev 2>&1',
       ],
       WorkingDir: '/app',
-      Env: ['NODE_ENV=development', 'FORCE_COLOR=0'],
+      Env: ['NODE_ENV=development', 'FORCE_COLOR=0', 'PORT=5173'],
       ExposedPorts: { '5173/tcp': {} },
       HostConfig: {
         PortBindings: { '5173/tcp': [{ HostPort: String(port) }] },

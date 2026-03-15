@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTemplates } from '@/hooks/useTemplates'
@@ -9,6 +9,70 @@ import { TemplateCard } from '@/components/templates/TemplateCard'
 import { CategoryFilter } from '@/components/templates/CategoryFilter'
 import { TemplatePreviewModal } from '@/components/templates/TemplatePreviewModal'
 import { Button } from '@/components/ui/button'
+
+/** Small modal that asks for a project name before cloning a template */
+function UseTemplateModal({
+  template,
+  isCreating,
+  onConfirm,
+  onClose,
+}: {
+  template: Template
+  isCreating: boolean
+  onConfirm: (name: string) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState(template.name)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.select() }, [])
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl p-6 flex flex-col gap-5">
+        <div>
+          <h2 className="text-lg font-bold text-white">Name your project</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            Starting from <span className="text-white font-medium">{template.name}</span>
+          </p>
+        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="My awesome project"
+          className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 text-sm"
+          onKeyDown={e => {
+            if (e.key === 'Enter' && name.trim()) onConfirm(name.trim())
+            if (e.key === 'Escape') onClose()
+          }}
+        />
+        <div className="flex gap-3">
+          <button
+            onClick={() => name.trim() && onConfirm(name.trim())}
+            disabled={!name.trim() || isCreating}
+            className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-sm"
+          >
+            {isCreating ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating…
+              </span>
+            ) : 'Create project'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={isCreating}
+            className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl transition-all text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function TemplatesPage() {
   const router = useRouter()
@@ -19,6 +83,8 @@ export default function TemplatesPage() {
   const [sort, setSort] = useState<'popular' | 'newest' | 'top_rated'>('popular')
   const [page, setPage] = useState(1)
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null)
+  const [pendingTemplate, setPendingTemplate] = useState<Template | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
   const PER_PAGE = 12
 
@@ -46,13 +112,23 @@ export default function TemplatesPage() {
     fetchTemplates({ search, category, sort, page: next, perPage: PER_PAGE })
   }
 
-  const handleUse = async (id: string) => {
+  const handleUse = (id: string) => {
+    const tpl = templates.find(t => t.id === id) ?? previewTemplate
+    if (tpl) {
+      setPreviewTemplate(null)  // close preview modal if open
+      setPendingTemplate(tpl)   // open name modal
+    }
+  }
+
+  const handleConfirmName = async (projectName: string) => {
+    if (!pendingTemplate) return
+    setIsCreating(true)
     try {
-      const projectId = await cloneTemplate(id)
-      setPreviewTemplate(null)
+      const projectId = await cloneTemplate(pendingTemplate.id, projectName)
+      setPendingTemplate(null)
       if (projectId) router.push(`/dashboard/projects/${projectId}`)
-    } catch {
-      // toast handled elsewhere
+    } finally {
+      setIsCreating(false)
     }
   }
 
@@ -176,6 +252,16 @@ export default function TemplatesPage() {
         onUse={handleUse}
         onRate={handleRate}
       />
+
+      {/* Name modal — shown before cloning */}
+      {pendingTemplate && (
+        <UseTemplateModal
+          template={pendingTemplate}
+          isCreating={isCreating}
+          onConfirm={handleConfirmName}
+          onClose={() => !isCreating && setPendingTemplate(null)}
+        />
+      )}
     </div>
   )
 }

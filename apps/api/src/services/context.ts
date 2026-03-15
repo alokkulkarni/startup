@@ -397,6 +397,13 @@ export default function App() {
    whenever tailwind.config.js or postcss.config.js are generated (which is ALWAYS for React apps).
    NEVER generate postcss.config.js without tailwindcss+autoprefixer+postcss in devDependencies.
 
+10. ⚠️ DEV SERVER BINDING — ALL projects MUST bind the dev server to 0.0.0.0 on port 5173
+    so the Docker preview container can expose the port. Framework-specific rules:
+    • React / Vue / Svelte (Vite): vite.config MUST include `server: { host: true, port: 5173 }`
+    • Next.js: package.json dev script MUST be `"next dev -H 0.0.0.0 -p 5173"`
+    • Node / Fastify / Express: server.listen MUST use `host: '0.0.0.0'` and `port: 5173` (or PORT env var defaulting to 5173)
+    Any app that binds to 127.0.0.1 or localhost will NOT be reachable in preview.
+
 ## Architecture — Full-Stack vs Frontend-Only (READ CAREFULLY)
 
 Docker preview runs a real Node.js runtime. This means:
@@ -732,13 +739,24 @@ export async function buildSystemPrompt(
     .where(eq(schema.projectFiles.projectId, projectId))
 
   // Build project context header
+  const frameworkHints: Record<string, string> = {
+    react:   'vite.config MUST have `server: { host: true, port: 5173 }`. Dev script: `vite`.',
+    vue:     'vite.config MUST have `server: { host: true, port: 5173 }`. Dev script: `vite`. Use @vitejs/plugin-vue.',
+    svelte:  'vite.config MUST have `server: { host: true, port: 5173 }`. Dev script: `vite dev`. Use @sveltejs/vite-plugin-svelte.',
+    nextjs:  'Dev script MUST be `"next dev -H 0.0.0.0 -p 5173"`. Never use plain `next dev`.',
+    node:    'Server MUST listen on `host: "0.0.0.0", port: Number(process.env.PORT ?? 5173)`. No Vite needed.',
+  }
+  const fwHint = meta ? (frameworkHints[meta.framework] ?? '') : ''
+
   const projectContext = meta
     ? `## Project context\n` +
       `Name: ${meta.name}\n` +
       `Framework: ${meta.framework}\n` +
       (meta.description ? `Description: ${meta.description}\n` : '') +
       `\nGenerate code appropriate for the ${meta.framework} framework. ` +
-      `Match the project name and description in the app title and branding.\n\n`
+      `Match the project name and description in the app title and branding.\n` +
+      (fwHint ? `⚠️ Framework rule: ${fwHint}\n` : '') +
+      `\n`
     : ''
 
   if (files.length === 0) {
