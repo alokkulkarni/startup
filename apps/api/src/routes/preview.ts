@@ -28,7 +28,7 @@ export async function previewRoutes(app: FastifyInstance) {
       if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
 
       try {
-        const port = await previewManager.start(id, app.db)
+        const port = await previewManager.start(id, user.id, app.db)
         return reply.send({ success: true, data: { port, previewUrl: `http://localhost:${port}/` } })
       } catch (err) {
         const msg = (err as Error).message

@@ -1,6 +1,15 @@
 /**
  * previewManager — server-side Docker container lifecycle for per-project previews.
  *
+ * Isolation model: one container per project (keyed by projectId UUID). Two different users
+ * each get their own project → their own container → their own port. Users sharing the same
+ * workspace project share the same container, which is the correct collaborative behaviour.
+ *
+ * Idle teardown: the preview container is automatically stopped after 10 minutes of inactivity.
+ * "Inactive" means no SSE log-stream subscriber is connected (i.e. no browser tab has the
+ * preview open) AND no file-sync occurred in the last 10 minutes. The timer is cancelled the
+ * moment a subscriber connects and restarted when the last subscriber disconnects.
+ *
  * Each project preview runs in an isolated `node:20-alpine` container:
  *   • Container starts, runs `npm install` then `npm run dev`
  *   • Vite dev server listens on 0.0.0.0:5173 inside the container
@@ -26,6 +35,7 @@ export type PreviewStatus = 'starting' | 'installing' | 'running' | 'error' | 's
 
 export interface PreviewInstance {
   projectId: string
+  userId: string
   containerId: string
   containerName: string
   hostPort: number
@@ -33,7 +43,10 @@ export interface PreviewInstance {
   error?: string
   logs: string[]
   subscribers: Set<(log: string) => void>
-  ttlTimer: ReturnType<typeof setTimeout> | null
+  /** Timestamp of last observed activity (subscribe / syncFiles / start). */
+  lastActivityAt: number
+  /** Handle for the 10-minute inactivity teardown timer. */
+  idleTimer: ReturnType<typeof setTimeout> | null
   readySent?: boolean
 }
 
@@ -48,7 +61,8 @@ const PORT_END = Number(process.env.PREVIEW_PORT_END ?? 40999)
 const MEMORY_LIMIT   = 512 * 1024 * 1024       // 512 MB (Node.js projects)
 const FLUTTER_MEMORY = 2 * 1024 * 1024 * 1024  // 2 GB  (Flutter compilation)
 const CPU_LIMIT = 1_000_000_000                 // 1 vCPU (nanocpus)
-const TTL_MS = 30 * 60 * 1000            // 30 minutes auto-cleanup
+/** Idle timeout: container is stopped 10 minutes after the last subscriber disconnects. */
+const IDLE_TTL_MS = 10 * 60 * 1000
 
 // ── In-memory state ───────────────────────────────────────────────────────────
 
@@ -79,6 +93,39 @@ function pushLog(instance: PreviewInstance, text: string) {
   for (const cb of instance.subscribers) {
     try { cb(trimmed) } catch {}
   }
+}
+
+// ── Idle-timer helpers ────────────────────────────────────────────────────────
+
+/** Cancel the pending idle-teardown timer (if any). */
+function clearIdleTimer(instance: PreviewInstance) {
+  if (instance.idleTimer) {
+    clearTimeout(instance.idleTimer)
+    instance.idleTimer = null
+  }
+}
+
+/**
+ * (Re)schedule the 10-minute idle teardown.
+ * Call this whenever activity stops (last subscriber disconnects, etc.)
+ */
+function scheduleIdleCleanup(instance: PreviewInstance) {
+  clearIdleTimer(instance)
+  instance.idleTimer = setTimeout(() => {
+    pushLog(instance, '⏱ Preview idle for 10 minutes — stopping container')
+    stop(instance.projectId)
+  }, IDLE_TTL_MS)
+}
+
+/**
+ * Record activity and cancel any pending idle teardown.
+ * Call this whenever the preview is actively being used.
+ */
+function touchActivity(instance: PreviewInstance) {
+  instance.lastActivityAt = Date.now()
+  // Only cancel the timer — don't reschedule yet. The timer will be rescheduled
+  // when the last subscriber disconnects (or stays cancelled if subs are active).
+  clearIdleTimer(instance)
 }
 
 /**
@@ -158,7 +205,7 @@ export async function initialize(): Promise<void> {
 }
 
 /** Start (or restart) a preview container for the given project. */
-export async function start(projectId: string, db: DrizzleDB): Promise<number> {
+export async function start(projectId: string, userId: string, db: DrizzleDB): Promise<number> {
   // Stop any existing container first
   await stop(projectId)
 
@@ -178,13 +225,15 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
 
   const instance: PreviewInstance = {
     projectId,
+    userId,
     containerId: '',
     containerName: name,
     hostPort: port,
     status: 'starting',
     logs: [],
     subscribers: new Set(),
-    ttlTimer: null,
+    lastActivityAt: Date.now(),
+    idleTimer: null,
   }
   instances.set(projectId, instance)
 
@@ -217,7 +266,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
         NanoCpus: CPU_LIMIT,
         AutoRemove: false,
       },
-      Labels: { 'forge.preview': 'true', 'forge.project': projectId },
+      Labels: { 'forge.preview': 'true', 'forge.project': projectId, 'forge.user': userId },
     } : {
       name,
       Image: PREVIEW_IMAGE,
@@ -242,7 +291,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
         NanoCpus: CPU_LIMIT,
         AutoRemove: false,
       },
-      Labels: { 'forge.preview': 'true', 'forge.project': projectId },
+      Labels: { 'forge.preview': 'true', 'forge.project': projectId, 'forge.user': userId },
     })
 
     instance.containerId = container.id
@@ -333,11 +382,11 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
       }
     })
 
-    // Auto-cleanup after TTL
-    instance.ttlTimer = setTimeout(() => {
-      pushLog(instance, '⏱ Preview timed out after 30 minutes — stopping')
-      stop(projectId)
-    }, TTL_MS)
+    // Start the 10-minute idle countdown immediately. It will be cancelled the moment
+    // the first browser tab opens an SSE log-stream connection (subscribeToLogs) and
+    // restarted when the last tab closes. This prevents orphaned containers when a user
+    // starts a preview but never opens / quickly closes the browser.
+    scheduleIdleCleanup(instance)
 
     return port
   } catch (err) {
@@ -356,7 +405,7 @@ export async function stop(projectId: string): Promise<void> {
   const instance = instances.get(projectId)
   if (!instance) return
 
-  if (instance.ttlTimer) clearTimeout(instance.ttlTimer)
+  clearIdleTimer(instance)
   usedPorts.delete(instance.hostPort)
   instances.delete(projectId)
   instance.status = 'stopped'
@@ -373,6 +422,11 @@ export async function stop(projectId: string): Promise<void> {
 export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void> {
   const instance = instances.get(projectId)
   if (!instance || instance.status === 'stopped') return
+
+  // Treat file sync as activity — reset the idle countdown.
+  touchActivity(instance)
+  // If nobody is subscribed, reschedule cleanup from now (not from last sync).
+  if (instance.subscribers.size === 0) scheduleIdleCleanup(instance)
 
   const files = await db
     .select({ path: schema.projectFiles.path, content: schema.projectFiles.content })
@@ -396,8 +450,20 @@ export function subscribeToLogs(
 ): () => void {
   const instance = instances.get(projectId)
   if (!instance) return () => {}
+
+  // A browser tab opened the preview — treat as activity and cancel idle teardown.
+  touchActivity(instance)
   instance.subscribers.add(callback)
-  return () => instance.subscribers.delete(callback)
+
+  return () => {
+    instance.subscribers.delete(callback)
+    // Last subscriber disconnected (browser tab closed / navigated away).
+    // Start the 10-minute idle countdown — the container will be stopped if nobody
+    // reconnects within that window.
+    if (instance.subscribers.size === 0) {
+      scheduleIdleCleanup(instance)
+    }
+  }
 }
 
 // Clean up on process exit
