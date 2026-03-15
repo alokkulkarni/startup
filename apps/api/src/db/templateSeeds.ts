@@ -1247,6 +1247,9 @@ await app.register(swaggerUi, { routePrefix: '/docs' })
 // Routes
 await app.register(itemRoutes, { prefix: '/api/v1' })
 
+// Expose spec at /openapi.json for the Forge API Explorer
+app.get('/openapi.json', { schema: { hide: true } }, () => app.swagger())
+
 app.get('/health', {
   schema: {
     tags: ['system'],

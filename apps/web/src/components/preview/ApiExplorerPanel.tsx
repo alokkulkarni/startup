@@ -105,26 +105,41 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
   // Normalise baseUrl — strip trailing slash and query params
   const origin = baseUrl.split('?')[0].replace(/\/$/, '')
 
+  // Candidate spec URLs tried in order — covers Forge convention, @fastify/swagger-ui,
+  // express/swagger-jsdoc, swagger-ui-express, hapi-swagger
+  const SPEC_CANDIDATES = [
+    `${origin}/openapi.json`,
+    `${origin}/docs/json`,
+    `${origin}/swagger.json`,
+    `${origin}/api-docs`,
+    `${origin}/documentation/json`,
+  ]
+
   const loadSpec = useCallback(async () => {
     setLoadError(null)
-    try {
-      const res = await fetch(`${origin}/openapi.json`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: OpenApiSpec = await res.json()
-      setSpec(data)
-      const discovered: RouteEntry[] = []
-      for (const [path, methods] of Object.entries(data.paths ?? {})) {
-        for (const [method, item] of Object.entries(methods)) {
-          if (['get', 'post', 'put', 'patch', 'delete', 'options', 'head'].includes(method.toLowerCase())) {
-            discovered.push({ method: method.toUpperCase(), path, ...item })
+    let lastError = ''
+    for (const url of SPEC_CANDIDATES) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
+        if (!res.ok) { lastError = `${url} → HTTP ${res.status}`; continue }
+        const data: OpenApiSpec = await res.json()
+        setSpec(data)
+        const discovered: RouteEntry[] = []
+        for (const [path, methods] of Object.entries(data.paths ?? {})) {
+          for (const [method, item] of Object.entries(methods)) {
+            if (['get', 'post', 'put', 'patch', 'delete', 'options', 'head'].includes(method.toLowerCase())) {
+              discovered.push({ method: method.toUpperCase(), path, ...item })
+            }
           }
         }
+        setRoutes(discovered)
+        if (discovered.length > 0) handleSelect(discovered[0])
+        return
+      } catch {
+        lastError = `${url} → no response`
       }
-      setRoutes(discovered)
-      if (discovered.length > 0) handleSelect(discovered[0])
-    } catch (err) {
-      setLoadError((err as Error).message)
     }
+    setLoadError(lastError || 'No OpenAPI spec found')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin])
 
@@ -226,11 +241,11 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-950 text-gray-400 gap-4 p-6">
         <div className="text-lg text-gray-300 font-semibold">API Explorer</div>
-        <p className="text-sm text-center max-w-sm">
-          Could not load OpenAPI spec from <code className="text-indigo-400">{origin}/openapi.json</code>
-          <br /><span className="text-red-400">{loadError}</span>
+        <p className="text-sm text-center max-w-sm text-gray-500">
+          Tried <span className="text-gray-400">{SPEC_CANDIDATES.length}</span> spec URLs — none responded with a valid OpenAPI spec.
+          <br /><span className="text-red-400 text-xs mt-1 block">{loadError}</span>
         </p>
-        <p className="text-xs text-gray-600 text-center">Make sure the server is running and exposes <code className="text-gray-500">/openapi.json</code>.</p>
+        <p className="text-xs text-gray-600 text-center">Make sure the server exposes <code className="text-gray-500">/openapi.json</code> or <code className="text-gray-500">/docs/json</code>.</p>
         <button
           onClick={loadSpec}
           className="mt-2 px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors"
