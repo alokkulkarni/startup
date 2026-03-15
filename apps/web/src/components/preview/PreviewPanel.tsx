@@ -172,6 +172,7 @@ export function PreviewPanel({
         {status === 'ready' && previewUrl && !isApiProject && (
           <div className="w-full h-full flex justify-center overflow-auto bg-gray-200">
             <iframe
+              key={previewUrl}
               src={previewUrl}
               title="Preview"
               className="h-full border-0 bg-white shadow-xl"

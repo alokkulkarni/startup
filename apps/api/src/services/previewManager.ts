@@ -225,7 +225,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
       // Echo a sentinel after install so we can detect the phase transition.
       Cmd: ['sh', '-c',
         // 1. Install project dependencies from package.json
-        'npm install --no-fund --no-audit --loglevel=error 2>&1' +
+        'npm install --no-fund --no-audit --loglevel=warn 2>&1' +
         // 2. Safety net: if postcss.config.js exists, ensure tailwindcss/autoprefixer/postcss
         //    are installed even if the AI forgot to put them in devDependencies.
         ' && ([ ! -f postcss.config.js ] || node -e "require(\'tailwindcss\')" 2>/dev/null' +
@@ -274,11 +274,15 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
           pushLog(instance, '✅ Packages installed — dev server starting…')
         } else {
           // Detect server-ready across all frameworks:
-          //  Vite:    "ready in", "Local:"
+          //  Vite/Angular: "ready in", "Local:"
           //  Node/Fastify: "listening at/on" in pino JSON logs
           //  Next.js: "✓ Ready", "started server on"
-          //  Angular: "Compiled successfully", "Angular Live Development Server is listening"
+          //  Angular: "Angular Live Development Server is listening"
+          //    NOTE: "watching for file changes" is intentionally NOT here — Angular
+          //    prints that BEFORE the HTTP server starts listening. Using it would cause
+          //    the iframe to load before the server accepts connections (ERR_CONNECTION_RESET).
           //  Flutter: "is being served at", "flutter run key commands"
+          //  CRA/webpack: "compiled successfully"
           //  Express/Hapi/etc: common "listening" patterns
           const lower = text.toLowerCase()
           const isReady =
@@ -290,7 +294,6 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
             lower.includes('flutter run key commands') ||
             lower.includes('compiled successfully') ||
             lower.includes('angular live development server is listening') ||
-            lower.includes('watching for file changes') ||
             lower.includes('listening at') ||
             lower.includes('listening on') ||
             lower.includes('server listening') ||
@@ -301,7 +304,11 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
 
           if (isReady && !instance.readySent) {
             instance.readySent = true
-            pushLog(instance, '__FORGE_SERVER_READY__')
+            // 500ms grace period: some servers print their "ready" line slightly before
+            // the TCP listener is fully bound (e.g. Angular prints "Local:" and then the
+            // OS completes the bind). A short delay prevents ERR_CONNECTION_RESET in the
+            // iframe on the very first load.
+            setTimeout(() => pushLog(instance, '__FORGE_SERVER_READY__'), 500)
           }
         }
         cb()

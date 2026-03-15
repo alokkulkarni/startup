@@ -1922,7 +1922,7 @@ export default defineConfig({
                 },
                 serve: {
                   builder: '@angular-devkit/build-angular:dev-server',
-                  options: { host: '0.0.0.0', port: 5173 },
+                  options: { host: '0.0.0.0', port: 5173, allowedHosts: ['all'] },
                   configurations: {
                     production: { buildTarget: 'app:build:production' },
                     development: { buildTarget: 'app:build:development' },
@@ -2640,7 +2640,7 @@ export class CounterService {
                 },
                 serve: {
                   builder: '@angular-devkit/build-angular:dev-server',
-                  options: { host: '0.0.0.0', port: 5173 },
+                  options: { host: '0.0.0.0', port: 5173, allowedHosts: ['all'] },
                   configurations: {
                     production: { buildTarget: 'app:build:production' },
                     development: { buildTarget: 'app:build:development' },
@@ -3250,7 +3250,7 @@ export class DashboardService {
                 },
                 serve: {
                   builder: '@angular-devkit/build-angular:dev-server',
-                  options: { host: '0.0.0.0', port: 5173 },
+                  options: { host: '0.0.0.0', port: 5173, allowedHosts: ['all'] },
                   configurations: {
                     production: { buildTarget: 'app:build:production' },
                     development: { buildTarget: 'app:build:development' },
@@ -3443,7 +3443,7 @@ export class TodoStore {
     this.totalCount() > 0 ? Math.round((this.completedCount() / this.totalCount()) * 100) : 0
   )
 
-  private undoStack: Todo[][] = []
+  private undoStack = signal<Todo[][]>([])
 
   constructor() {
     // effect() logs state changes for debugging
@@ -3477,15 +3477,20 @@ export class TodoStore {
   }
 
   undo() {
-    const prev = this.undoStack.pop()
-    if (prev) this.todos.set(prev)
+    const stack = this.undoStack()
+    if (stack.length) {
+      this.todos.set(stack[stack.length - 1])
+      this.undoStack.set(stack.slice(0, -1))
+    }
   }
 
-  canUndo = computed(() => this.undoStack.length > 0)
+  canUndo = computed(() => this.undoStack().length > 0)
 
   private _snapshot() {
-    this.undoStack.push([...this.todos()])
-    if (this.undoStack.length > 20) this.undoStack.shift()
+    this.undoStack.update(stack => {
+      const next = [...stack, [...this.todos()]]
+      return next.length > 20 ? next.slice(-20) : next
+    })
   }
 }`,
       },

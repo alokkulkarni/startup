@@ -152,7 +152,8 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
           text.toLowerCase().includes('flutter run key commands') ||
           text.toLowerCase().includes('compiled successfully') ||
           text.toLowerCase().includes('angular live development server is listening') ||
-          text.toLowerCase().includes('watching for file changes') ||
+          // NOTE: 'watching for file changes' is intentionally omitted — Angular prints it
+          // before the HTTP server is ready, which causes a premature iframe load.
           text.toLowerCase().includes('listening at') || text.toLowerCase().includes('listening on') ||
           text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')) {
         setStatus('ready')
