@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { workspaceMembers } from '../db/schema.js'
+import { workspaces, workspaceMembers } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 
 export async function workspaceRoutes(app: FastifyInstance) {
@@ -74,6 +74,66 @@ export async function workspaceRoutes(app: FastifyInstance) {
     return reply.send({
       success: true,
       data: { ...membership.workspace, role: membership.role },
+    })
+  })
+
+  // POST /api/v1/workspaces — create a new workspace
+  app.post('/', {
+    schema: {
+      tags: ['workspaces'],
+      summary: 'Create a new workspace',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (request, reply) => {
+    await requireAuth(request, reply)
+    if (!request.user) return
+
+    const user = await app.db.query.users.findFirst({
+      where: (u, { eq }) => eq(u.id, request.user!.id),
+    })
+    if (!user) {
+      return reply.code(404).send({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
+      })
+    }
+
+    const { name } = request.body as { name?: string }
+    if (!name?.trim()) {
+      return reply.code(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Workspace name is required' },
+      })
+    }
+
+    // Generate a unique slug from the name
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'
+    let slug = base
+    let suffix = 1
+    while (true) {
+      const existing = await app.db.query.workspaces.findFirst({
+        where: (w, { eq }) => eq(w.slug, slug),
+      })
+      if (!existing) break
+      slug = `${base}-${suffix++}`
+    }
+
+    const [workspace] = await app.db.insert(workspaces).values({
+      name: name.trim(),
+      slug,
+      ownerId: user.id,
+      plan: 'free',
+    }).returning()
+
+    await app.db.insert(workspaceMembers).values({
+      workspaceId: workspace.id,
+      userId: user.id,
+      role: 'owner',
+    })
+
+    return reply.code(201).send({
+      success: true,
+      data: { ...workspace, role: 'owner' },
     })
   })
 }

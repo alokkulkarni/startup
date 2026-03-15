@@ -67,11 +67,11 @@ export function useTemplates() {
     }
   }
 
-  const cloneTemplate = async (id: string, projectName?: string): Promise<string | undefined> => {
+  const cloneTemplate = async (id: string, projectName?: string, workspaceId?: string): Promise<string | undefined> => {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.post<{ projectId: string }>(`/v1/templates/${id}/clone`, { projectName })
+      const res = await api.post<{ projectId: string }>(`/v1/templates/${id}/clone`, { projectName, workspaceId })
       return res.data?.projectId
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clone template')

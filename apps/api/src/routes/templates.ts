@@ -26,6 +26,7 @@ const RateSchema = z.object({
 
 const CloneSchema = z.object({
   projectName: z.string().min(1).max(100).optional(),
+  workspaceId: z.string().uuid().optional(),
 })
 
 const SuggestSchema = z.object({
@@ -181,14 +182,23 @@ export async function templateRoutes(app: FastifyInstance) {
       })
     }
 
-    const membership = await app.db.query.workspaceMembers.findFirst({
-      where: (wm, { eq }) => eq(wm.userId, user.id),
-    })
+    const membership = await (async () => {
+      if (bodyResult.data.workspaceId) {
+        const m = await app.db.query.workspaceMembers.findFirst({
+          where: (wm, { and, eq }) => and(eq(wm.workspaceId, bodyResult.data.workspaceId!), eq(wm.userId, user.id)),
+        })
+        if (!m) return null
+        return m
+      }
+      return app.db.query.workspaceMembers.findFirst({
+        where: (wm, { eq }) => eq(wm.userId, user.id),
+      })
+    })()
 
     if (!membership) {
       return reply.code(400).send({
         success: false,
-        error: { code: 'NO_WORKSPACE', message: 'User has no workspace' },
+        error: { code: 'NO_WORKSPACE', message: 'Create a workspace before cloning a template' },
       })
     }
 

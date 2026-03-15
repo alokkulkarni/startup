@@ -91,8 +91,8 @@ export default function DashboardPage() {
     setShowNewModal(true)
   }
 
-  const handleCreate = async (name: string, framework: string) => {
-    const res = await api.post<Project>('/v1/projects', { name, framework })
+  const handleCreate = async (name: string, framework: string, workspaceId: string) => {
+    const res = await api.post<Project>('/v1/projects', { name, framework, workspaceId })
     if (res.data) {
       setProjects(prev => [res.data!, ...prev])
       setShowNewModal(false)
@@ -294,7 +294,7 @@ export default function DashboardPage() {
 
       {/* Modals */}
       {showNewModal && (
-        <NewProjectModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} />
+        <NewProjectModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} activeWorkspaceId={activeWorkspaceId} />
       )}
       {deleteTarget && (
         <DeleteProjectModal
