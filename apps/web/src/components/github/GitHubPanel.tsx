@@ -99,13 +99,18 @@ export function GitHubPanel({ projectId, isOpen, onClose }: GitHubPanelProps) {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={connect}
-                className="flex items-center gap-1.5 text-xs px-3 py-2 bg-gray-800 border border-gray-700 hover:border-gray-500 rounded-lg text-gray-300 hover:text-white transition-all w-full justify-center"
-              >
-                <GitHubIcon />
-                Connect GitHub
-              </button>
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">
+                  Link your GitHub account to push and sync this project to your own repositories.
+                </p>
+                <button
+                  onClick={connect}
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white transition-all w-full justify-center font-medium"
+                >
+                  <GitHubIcon />
+                  Connect your GitHub account
+                </button>
+              </div>
             )}
           </section>
 

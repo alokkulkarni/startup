@@ -115,16 +115,15 @@ export async function githubRoutes(app: FastifyInstance) {
     });
 
     if (!connection) {
-      return reply.send({ success: true, data: { connected: false } });
+      return reply.send({ success: true, data: null });
     }
 
     return reply.send({
       success: true,
       data: {
-        connected: true,
-        login: connection.githubLogin,
-        name: connection.githubName,
-        avatarUrl: connection.githubAvatarUrl,
+        githubLogin: connection.githubLogin,
+        githubName: connection.githubName,
+        githubAvatarUrl: connection.githubAvatarUrl,
         connectedAt: connection.connectedAt,
       },
     });
