@@ -17,6 +17,7 @@ interface OpenApiPathItem {
   responses?: Record<string, {
     description?: string
     content?: { 'application/json'?: { schema?: unknown } }
+    schema?: unknown
     // Fastify also inlines schema properties directly on the response object
     type?: string
     properties?: Record<string, unknown>
@@ -251,9 +252,9 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
     setResponseDuration(null)
     setReqState('idle')
 
-    // Pre-fill path params — use seed IDs for 'id' params so user can test immediately
+    // Pre-fill path params — OpenAPI uses {param} style (not Fastify's :param style)
     const params: Record<string, string> = {}
-    const matches = route.path.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)/g)
+    const matches = route.path.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g)
     for (const m of matches) {
       const key = m[1]
       params[key] = key === 'id' ? 'a1b2c3d4-0001-4000-8000-000000000001' : ''
@@ -273,7 +274,8 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
   function buildUrl(route: RouteEntry): string {
     let path = route.path
     for (const [k, v] of Object.entries(pathParams)) {
-      path = path.replace(`:${k}`, encodeURIComponent(v) || `:${k}`)
+      // OpenAPI uses {param} style — replace with actual value
+      path = path.replace(`{${k}}`, encodeURIComponent(v) || `{${k}}`)
     }
     return `${origin}${path}`
   }
@@ -566,8 +568,12 @@ function SpecResponsesPanel({
         const isError = num >= 400
         const isSuccess = num >= 200 && num < 300
 
-        // Extract schema — Fastify inlines it directly; OpenAPI wraps in content
+        // Extract schema — try all formats:
+        // 1. Standard OpenAPI: content['application/json'].schema
+        // 2. @fastify/swagger v8 inline: resp.schema
+        // 3. Fastify legacy inline: resp directly has type+properties
         const schema = resp.content?.['application/json']?.schema
+          ?? resp.schema
           ?? (resp.type ? resp : undefined)
 
         let exampleJson: string | null = null
