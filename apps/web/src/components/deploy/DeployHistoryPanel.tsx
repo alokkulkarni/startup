@@ -48,9 +48,11 @@ export function DeployHistoryPanel({
   isOpen,
   onClose,
 }: DeployHistoryPanelProps) {
-  const { deployments, isDeploying, isLoading, triggerDeploy, rollback, refresh } =
+  const { deployments, isDeploying, isLoading, triggerDeploy, rollback, refresh, clearHistory } =
     useDeployments(projectId, token)
   const [deployMenuOpen, setDeployMenuOpen] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
   // tick forces a re-render every 5s so isWarmingUp() is rechecked per row
   const [, setTick] = useState(0)
 
@@ -79,13 +81,47 @@ export function DeployHistoryPanel({
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-700">
           <h2 className="text-sm font-semibold text-white">Deploy History</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close deploy history"
-            className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {deployments.length > 0 && !confirmClear && (
+              <button
+                onClick={() => setConfirmClear(true)}
+                className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            {confirmClear && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-400">Clear all?</span>
+                <button
+                  onClick={async () => {
+                    setIsClearing(true)
+                    try { await clearHistory() } finally {
+                      setIsClearing(false)
+                      setConfirmClear(false)
+                    }
+                  }}
+                  disabled={isClearing}
+                  className="text-xs px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors disabled:opacity-50"
+                >
+                  {isClearing ? '…' : 'Yes'}
+                </button>
+                <button
+                  onClick={() => setConfirmClear(false)}
+                  className="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded transition-colors"
+                >
+                  No
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Close deploy history"
+              className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Quick Deploy */}

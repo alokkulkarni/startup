@@ -76,6 +76,22 @@ export async function snapshotRoutes(app: FastifyInstance) {
     },
   )
 
+  // DELETE /:id/snapshots — clear all snapshot history for a project
+  app.delete<{ Params: { id: string } }>('/:id/snapshots', async (request, reply) => {
+    if (!(await requireAuth(request, reply))) return
+    const user = await app.db.query.users.findFirst({
+      where: (u, { eq }) => eq(u.id, request.user!.id),
+    })
+    if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } })
+    const project = await assertAccess(request.params.id, user.id)
+    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
+
+    await app.db.delete(schema.projectSnapshots)
+      .where(eq(schema.projectSnapshots.projectId, request.params.id))
+
+    return reply.code(204).send()
+  })
+
   // POST /:id/snapshots/:snapshotId/restore
   app.post<{ Params: { id: string; snapshotId: string } }>(
     '/:id/snapshots/:snapshotId/restore',

@@ -17,6 +17,7 @@ interface UseSnapshotsReturn {
   createSnapshot: (label?: string) => Promise<void>
   restoreSnapshot: (snapshotId: string) => Promise<void>
   undoLast: () => Promise<boolean>
+  clearHistory: () => Promise<void>
 }
 
 export function useSnapshots(
@@ -67,5 +68,10 @@ export function useSnapshots(
     return true
   }, [snapshots, projectId, restoreSnapshot])
 
-  return { snapshots, isLoading, fetchSnapshots, createSnapshot, restoreSnapshot, undoLast }
+  const clearHistory = useCallback(async () => {
+    await api.delete(`/v1/projects/${projectId}/snapshots`)
+    setSnapshots([])
+  }, [projectId])
+
+  return { snapshots, isLoading, fetchSnapshots, createSnapshot, restoreSnapshot, undoLast, clearHistory }
 }

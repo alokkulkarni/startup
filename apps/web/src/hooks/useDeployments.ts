@@ -21,6 +21,7 @@ interface UseDeploymentsReturn {
   triggerDeploy: (provider: 'vercel' | 'netlify' | 'cloudflare') => Promise<void>
   rollback: (deploymentId: string) => Promise<void>
   refresh: () => Promise<void>
+  clearHistory: () => Promise<void>
 }
 
 const POLL_INTERVAL_MS = 4000
@@ -157,6 +158,11 @@ export function useDeployments(
     [projectId, refresh],
   )
 
+  const clearHistory = useCallback(async () => {
+    await api.delete(`/v1/projects/${projectId}/deployments`)
+    setDeployments([])
+  }, [projectId])
+
   const latestDeployUrl =
     deployments.find(d => d.status === 'deployed')?.deployUrl ?? null
 
@@ -169,5 +175,6 @@ export function useDeployments(
     triggerDeploy,
     rollback,
     refresh,
+    clearHistory,
   }
 }

@@ -6,11 +6,13 @@ vi.mock('@/hooks/useDeployments', () => ({
   useDeployments: vi.fn(() => ({
     deployments: [],
     isDeploying: false,
+    isWarmingUp: false,
     isLoading: false,
     latestDeployUrl: null,
     triggerDeploy: vi.fn(),
     rollback: vi.fn(),
     refresh: vi.fn(),
+    clearHistory: vi.fn(),
   })),
 }))
 
@@ -31,11 +33,13 @@ describe('DeployHistoryPanel', () => {
     mockUseDeployments.mockReturnValue({
       deployments: [],
       isDeploying: false,
+      isWarmingUp: false,
       isLoading: false,
       latestDeployUrl: null,
       triggerDeploy: vi.fn(),
       rollback: vi.fn(),
       refresh: vi.fn(),
+      clearHistory: vi.fn(),
     })
   })
 
@@ -55,14 +59,17 @@ describe('DeployHistoryPanel', () => {
           deployUrl: 'https://my-app.vercel.app',
           errorMessage: null,
           createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          updatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
         },
       ],
       isDeploying: false,
+      isWarmingUp: false,
       isLoading: false,
       latestDeployUrl: 'https://my-app.vercel.app',
       triggerDeploy: vi.fn(),
       rollback: vi.fn(),
       refresh: vi.fn(),
+      clearHistory: vi.fn(),
     })
     render(<DeployHistoryPanel {...baseProps} />)
     expect(screen.getByText('Vercel')).toBeInTheDocument()

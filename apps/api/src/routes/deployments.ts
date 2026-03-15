@@ -168,6 +168,22 @@ export async function deploymentRoutes(app: FastifyInstance) {
     },
   )
 
+  // DELETE /:id/deployments — clear all deployment history for a project
+  app.delete<{ Params: { id: string } }>('/:id/deployments', async (request, reply) => {
+    if (!(await requireAuth(request, reply))) return
+    const user = await app.db.query.users.findFirst({
+      where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
+    })
+    if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } })
+    const project = await assertAccess(request.params.id, user.id)
+    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
+
+    await app.db.delete(schema.deployments)
+      .where(eq(schema.deployments.projectId, request.params.id))
+
+    return reply.code(204).send()
+  })
+
   // GET /:id/env — list env var keys only (no values)
   app.get<{ Params: { id: string } }>('/:id/env', async (request, reply) => {
     if (!(await requireAuth(request, reply))) return

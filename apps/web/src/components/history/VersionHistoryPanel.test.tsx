@@ -10,6 +10,7 @@ vi.mock('@/hooks/useSnapshots', () => ({
     createSnapshot: vi.fn(),
     restoreSnapshot: vi.fn(),
     undoLast: vi.fn(),
+    clearHistory: vi.fn(),
   })),
 }))
 
@@ -35,6 +36,7 @@ describe('VersionHistoryPanel', () => {
       createSnapshot: vi.fn(),
       restoreSnapshot: vi.fn(),
       undoLast: vi.fn(),
+      clearHistory: vi.fn(),
     })
   })
 
@@ -67,6 +69,7 @@ describe('VersionHistoryPanel', () => {
       createSnapshot: vi.fn(),
       restoreSnapshot: vi.fn(),
       undoLast: vi.fn(),
+      clearHistory: vi.fn(),
     })
     render(<VersionHistoryPanel {...baseProps} />)
     expect(screen.getByText('Added login form')).toBeInTheDocument()
