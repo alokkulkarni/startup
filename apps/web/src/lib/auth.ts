@@ -15,7 +15,7 @@ export function login(next = '/dashboard', provider: 'github' | 'google' | 'emai
 
 export async function logout(): Promise<void> {
   await fetch(`${API}/v1/auth/logout`, { method: 'POST', credentials: 'include' })
-  window.location.href = '/'
+  window.location.href = '/logged-out'
 }
 
 // Legacy — cookies are sent automatically; this is only needed for code that explicitly sets the header

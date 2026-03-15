@@ -14,7 +14,7 @@ export default function LandingPage() {
             Sign in
           </Link>
           <Link
-            href="/login"
+            href="/signup"
             className="text-sm px-4 py-2 bg-forge-500 hover:bg-forge-600 text-white rounded-lg transition-colors font-medium"
           >
             Get started free
@@ -42,7 +42,7 @@ export default function LandingPage() {
 
         <div className="flex flex-col sm:flex-row gap-3">
           <Link
-            href="/login"
+            href="/signup"
             className="px-8 py-4 bg-forge-500 hover:bg-forge-600 text-white rounded-xl text-lg font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             Start building for free

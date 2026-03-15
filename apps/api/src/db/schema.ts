@@ -14,6 +14,7 @@ export const users = pgTable('users', {
   authProvider: text('auth_provider'), // 'github' | 'google' | 'email'
   authProviderId: text('auth_provider_id'), // OAuth user ID or null for email
   passwordHash: text('password_hash'), // bcrypt hash, only for email accounts
+  emailVerified: boolean('email_verified').notNull().default(false),
   onboardingCompleted: boolean('onboarding_completed').notNull().default(false),
   onboardingStep: integer('onboarding_step').notNull().default(0),
   deletedAt: timestamp('deleted_at'),

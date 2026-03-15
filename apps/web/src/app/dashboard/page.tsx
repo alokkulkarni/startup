@@ -63,7 +63,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!authLoading && !authenticated) router.push('/login')
-  }, [authLoading, authenticated, router])
+    if (!authLoading && authenticated && user && !(user as any).emailVerified) router.push('/verify-email')
+  }, [authLoading, authenticated, user, router])
 
   const fetchProjects = useCallback(async () => {
     try {

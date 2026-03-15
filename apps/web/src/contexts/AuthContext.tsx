@@ -10,6 +10,7 @@ interface AuthUser {
   name: string
   avatarUrl: string | null
   plan: string
+  emailVerified: boolean
 }
 
 interface AuthContextValue {
