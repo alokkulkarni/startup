@@ -176,11 +176,6 @@ export default function DashboardPage() {
               Pricing
             </Button>
           </Link>
-          <Link href="/analytics">
-            <Button size="sm" variant="secondary">
-              Analytics
-            </Button>
-          </Link>
           <Button size="sm" variant="secondary" onClick={() => setShowImportModal(true)}>
             Import from GitHub
           </Button>
