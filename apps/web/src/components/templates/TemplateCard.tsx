@@ -20,6 +20,7 @@ const FRAMEWORK_COLORS: Record<string, string> = {
   svelte:  'bg-orange-500 text-white',
   node:    'bg-green-700 text-white',
   angular: 'bg-red-600 text-white',
+  flutter: 'bg-sky-500 text-white',
 }
 
 interface TemplateCardProps {

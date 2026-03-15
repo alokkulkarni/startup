@@ -3763,4 +3763,1131 @@ export class TodoAppComponent {
       },
     ],
   },
+
+  // ── Flutter Starter ──────────────────────────────────────────────────────────
+  {
+    name: 'Flutter Starter',
+    slug: 'flutter-starter',
+    description: 'Material 3 Flutter web app with navigation bar, animated counter, dark/light theme toggle, and responsive layout.',
+    category: 'starter',
+    framework: 'flutter',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'pubspec.yaml',
+        content: `name: flutter_starter
+description: A Material 3 Flutter starter app.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true`,
+      },
+      {
+        path: 'lib/main.dart',
+        content: `import 'package:flutter/material.dart';
+
+void main() => runApp(const FlutterStarterApp());
+
+class FlutterStarterApp extends StatefulWidget {
+  const FlutterStarterApp({super.key});
+
+  @override
+  State<FlutterStarterApp> createState() => _FlutterStarterAppState();
+}
+
+class _FlutterStarterAppState extends State<FlutterStarterApp> {
+  ThemeMode _mode = ThemeMode.dark;
+
+  void _toggle() => setState(() {
+        _mode = _mode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final lightScheme = ColorScheme.fromSeed(seedColor: const Color(0xFF818CF8));
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF818CF8),
+      brightness: Brightness.dark,
+    );
+    return MaterialApp(
+      title: 'Flutter Starter',
+      debugShowCheckedModeBanner: false,
+      themeMode: _mode,
+      theme: ThemeData(colorScheme: lightScheme, useMaterial3: true),
+      darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+      home: _HomeScreen(onToggleTheme: _toggle, isDark: _mode == ThemeMode.dark),
+    );
+  }
+}
+
+class _HomeScreen extends StatefulWidget {
+  final VoidCallback onToggleTheme;
+  final bool isDark;
+
+  const _HomeScreen({required this.onToggleTheme, required this.isDark});
+
+  @override
+  State<_HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<_HomeScreen> {
+  int _tab = 0;
+  int _count = 0;
+  int _step = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Flutter Starter'),
+        actions: [
+          IconButton(
+            icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
+            onPressed: widget.onToggleTheme,
+            tooltip: 'Toggle theme',
+          ),
+        ],
+      ),
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          _CounterView(
+            count: _count,
+            step: _step,
+            onIncrement: () => setState(() => _count += _step),
+            onDecrement: () => setState(() => _count -= _step),
+            onReset: () => setState(() => _count = 0),
+            onStepChanged: (s) => setState(() => _step = s),
+          ),
+          const _FeaturesView(),
+          const _AboutView(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.add_circle_outline),
+            selectedIcon: Icon(Icons.add_circle),
+            label: 'Counter',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'Features',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.info_outline),
+            selectedIcon: Icon(Icons.info),
+            label: 'About',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CounterView extends StatelessWidget {
+  final int count;
+  final int step;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final VoidCallback onReset;
+  final ValueChanged<int> onStepChanged;
+
+  const _CounterView({
+    required this.count,
+    required this.step,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onReset,
+    required this.onStepChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = count >= 0 ? cs.primary : cs.error;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Count', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            '$count',
+            style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 24),
+          Wrap(
+            spacing: 8,
+            children: [1, 5, 10]
+                .map(
+                  (s) => FilterChip(
+                    label: Text('Step $s'),
+                    selected: step == s,
+                    onSelected: (_) => onStepChanged(s),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FloatingActionButton(
+                heroTag: 'dec',
+                onPressed: onDecrement,
+                child: const Icon(Icons.remove),
+              ),
+              const SizedBox(width: 16),
+              FloatingActionButton(
+                heroTag: 'reset',
+                backgroundColor: cs.errorContainer,
+                onPressed: onReset,
+                child: const Icon(Icons.refresh),
+              ),
+              const SizedBox(width: 16),
+              FloatingActionButton(
+                heroTag: 'inc',
+                onPressed: onIncrement,
+                child: const Icon(Icons.add),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeaturesView extends StatelessWidget {
+  const _FeaturesView();
+
+  @override
+  Widget build(BuildContext context) {
+    const features = <(IconData, String, String)>[
+      (Icons.palette, 'Material 3', 'Dynamic color theming'),
+      (Icons.web, 'Flutter Web', 'Runs in any browser'),
+      (Icons.speed, 'Performance', '60fps animations'),
+      (Icons.dark_mode, 'Dark/Light', 'Theme toggle built-in'),
+      (Icons.widgets, 'Widgets', 'Rich widget library'),
+      (Icons.code, 'Dart', 'Strongly typed language'),
+    ];
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 240,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.2,
+      ),
+      itemCount: features.length,
+      itemBuilder: (ctx, i) {
+        final (icon, title, desc) = features[i];
+        final cs = Theme.of(ctx).colorScheme;
+        return Card(
+          color: cs.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 32, color: cs.primary),
+                const SizedBox(height: 8),
+                Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  desc,
+                  style: Theme.of(ctx).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AboutView extends StatelessWidget {
+  const _AboutView();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.flutter_dash, size: 80, color: cs.primary),
+            const SizedBox(height: 16),
+            Text('Flutter Starter', style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 8),
+            Text(
+              'A Material 3 Flutter web app demonstrating navigation, theming, state management, and responsive layouts.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ['Flutter 3.x', 'Dart 3', 'Material 3', 'Web']
+                  .map((t) => Chip(label: Text(t)))
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}`,
+      },
+      {
+        path: 'web/index.html',
+        content: `<!DOCTYPE html>
+<html>
+  <head>
+    <base href="$FLUTTER_BASE_HREF">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flutter Starter</title>
+  </head>
+  <body style="background-color:#1c1b1f">
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
+</html>`,
+      },
+      {
+        path: 'analysis_options.yaml',
+        content: `include: package:flutter_lints/flutter.yaml`,
+      },
+    ],
+  },
+
+  // ── Flutter Web Dashboard ─────────────────────────────────────────────────────
+  {
+    name: 'Flutter Web Dashboard',
+    slug: 'flutter-web-responsive',
+    description: 'Responsive Flutter web dashboard with NavigationRail on desktop, bottom nav on mobile, stats cards, activity feed, and animated charts.',
+    category: 'dashboard',
+    framework: 'flutter',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'pubspec.yaml',
+        content: `name: flutter_dashboard
+description: A responsive Flutter web dashboard.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true`,
+      },
+      {
+        path: 'lib/main.dart',
+        content: `import 'package:flutter/material.dart';
+
+void main() => runApp(const FlutterDashboardApp());
+
+class FlutterDashboardApp extends StatelessWidget {
+  const FlutterDashboardApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flutter Dashboard',
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF0EA5E9),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: const _AppShell(),
+    );
+  }
+}
+
+class _AppShell extends StatefulWidget {
+  const _AppShell();
+
+  @override
+  State<_AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<_AppShell> {
+  int _index = 0;
+
+  static const _labels = ['Dashboard', 'Analytics', 'Users', 'Settings'];
+  static const _icons = [
+    (Icons.grid_view_outlined, Icons.grid_view),
+    (Icons.show_chart, Icons.stacked_bar_chart),
+    (Icons.people_outline, Icons.people),
+    (Icons.settings_outlined, Icons.settings),
+  ];
+
+  Widget get _page => switch (_index) {
+        0 => const _DashboardPage(),
+        1 => const _AnalyticsPage(),
+        2 => const _UsersPage(),
+        _ => const _SettingsPage(),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= 720) {
+      return Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              extended: width >= 1100,
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              leading: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Icon(Icons.flutter_dash, size: 32),
+              ),
+              destinations: List.generate(
+                _labels.length,
+                (i) => NavigationRailDestination(
+                  icon: Icon(_icons[i].$1),
+                  selectedIcon: Icon(_icons[i].$2),
+                  label: Text(_labels[i]),
+                ),
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: _page),
+          ],
+        ),
+      );
+    }
+    return Scaffold(
+      body: _page,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: List.generate(
+          _labels.length,
+          (i) => NavigationDestination(
+            icon: Icon(_icons[i].$1),
+            selectedIcon: Icon(_icons[i].$2),
+            label: _labels[i],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+typedef _Stat = ({IconData icon, String label, String value, String delta, bool up});
+
+class _DashboardPage extends StatelessWidget {
+  const _DashboardPage();
+
+  @override
+  Widget build(BuildContext context) {
+    const stats = <_Stat>[
+      (icon: Icons.people, label: 'Users', value: '12,489', delta: '+8.2%', up: true),
+      (icon: Icons.trending_up, label: 'Revenue', value: '48,320', delta: '+12.5%', up: true),
+      (icon: Icons.shopping_cart, label: 'Orders', value: '3,842', delta: '-2.1%', up: false),
+      (icon: Icons.show_chart, label: 'Growth', value: '24.6%', delta: '+4.3%', up: true),
+    ];
+    const activity = [
+      ('Alice signed up', '2 min ago', Icons.person_add),
+      ('New order placed', '5 min ago', Icons.shopping_bag),
+      ('Server health OK', '12 min ago', Icons.check_circle),
+      ('Report generated', '1 hr ago', Icons.description),
+      ('Bob updated profile', '2 hr ago', Icons.edit),
+    ];
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar(title: Text('Overview'), floating: true),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) {
+                final s = stats[i];
+                final cs = Theme.of(ctx).colorScheme;
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(s.icon, color: cs.primary),
+                            const SizedBox(width: 8),
+                            Text(s.label, style: Theme.of(ctx).textTheme.labelLarge),
+                            const Spacer(),
+                            Icon(
+                              s.up ? Icons.arrow_upward : Icons.arrow_downward,
+                              size: 16,
+                              color: s.up ? Colors.green : Colors.red,
+                            ),
+                            Text(
+                              s.delta,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: s.up ? Colors.green : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(
+                          s.value,
+                          style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              childCount: stats.length,
+            ),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 260,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.6,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          sliver: SliverToBoxAdapter(
+            child: Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Text('Recent Activity',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  ...activity.map(
+                    (a) => ListTile(
+                      leading: Icon(a.$3),
+                      title: Text(a.$1),
+                      trailing: Text(a.$2,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AnalyticsPage extends StatelessWidget {
+  const _AnalyticsPage();
+
+  @override
+  Widget build(BuildContext context) {
+    const data = [65.0, 72.0, 58.0, 80.0, 91.0, 76.0, 85.0, 95.0, 88.0, 79.0, 92.0, 98.0];
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar(title: Text('Analytics'), floating: true),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverToBoxAdapter(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Monthly Activity',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text('Requests over the last 12 months',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 200,
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _BarChartPainter(
+                          data: data,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BarChartPainter extends CustomPainter {
+  final List<double> data;
+  final Color color;
+
+  _BarChartPainter({required this.data, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+    final maxVal = data.reduce((a, b) => a > b ? a : b);
+    final barWidth = size.width / (data.length * 1.5);
+    final gap = barWidth * 0.5;
+    final paint = Paint()..color = color;
+    for (var i = 0; i < data.length; i++) {
+      final barHeight = (data[i] / maxVal) * size.height;
+      final left = i * (barWidth + gap) + gap;
+      final top = size.height - barHeight;
+      canvas.drawRRect(
+        RRect.fromLTRBR(left, top, left + barWidth, size.height,
+            const Radius.circular(4)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BarChartPainter old) => old.data != data;
+}
+
+class _UsersPage extends StatelessWidget {
+  const _UsersPage();
+
+  @override
+  Widget build(BuildContext context) {
+    const users = [
+      ('Alice Martin', 'alice@example.com', 'Admin'),
+      ('Bob Chen', 'bob@example.com', 'Editor'),
+      ('Carol White', 'carol@example.com', 'Viewer'),
+      ('David Kim', 'david@example.com', 'Editor'),
+      ('Eve Johnson', 'eve@example.com', 'Viewer'),
+    ];
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar(title: Text('Users'), floating: true),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) {
+                final (name, email, role) = users[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(child: Text(name[0])),
+                    title: Text(name),
+                    subtitle: Text(email),
+                    trailing: Chip(label: Text(role)),
+                  ),
+                );
+              },
+              childCount: users.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsPage extends StatefulWidget {
+  const _SettingsPage();
+
+  @override
+  State<_SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<_SettingsPage> {
+  bool _notifications = true;
+  bool _analytics = false;
+  bool _darkMode = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar(title: Text('Settings'), floating: true),
+        SliverList(
+          delegate: SliverChildListDelegate([
+            SwitchListTile(
+              title: const Text('Notifications'),
+              subtitle: const Text('Enable push notifications'),
+              value: _notifications,
+              onChanged: (v) => setState(() => _notifications = v),
+            ),
+            SwitchListTile(
+              title: const Text('Analytics'),
+              subtitle: const Text('Share usage data'),
+              value: _analytics,
+              onChanged: (v) => setState(() => _analytics = v),
+            ),
+            SwitchListTile(
+              title: const Text('Dark Mode'),
+              subtitle: const Text('Use dark theme'),
+              value: _darkMode,
+              onChanged: (v) => setState(() => _darkMode = v),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About'),
+              subtitle: const Text('Flutter Dashboard v1.0.0'),
+              onTap: () {},
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+}`,
+      },
+      {
+        path: 'web/index.html',
+        content: `<!DOCTYPE html>
+<html>
+  <head>
+    <base href="$FLUTTER_BASE_HREF">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flutter Dashboard</title>
+  </head>
+  <body style="background-color:#1c1b1f">
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
+</html>`,
+      },
+      {
+        path: 'analysis_options.yaml',
+        content: `include: package:flutter_lints/flutter.yaml`,
+      },
+    ],
+  },
+
+  // ── Flutter WASM Canvas ───────────────────────────────────────────────────────
+  {
+    name: 'Flutter WASM Canvas',
+    slug: 'flutter-wasm',
+    description: 'Flutter WebAssembly app with smooth particle canvas animation, performance metrics, and WASM build configuration. Uses CustomPainter for GPU-accelerated rendering.',
+    category: 'starter',
+    framework: 'flutter',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'pubspec.yaml',
+        content: `name: flutter_wasm
+description: Flutter WASM Canvas animation.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true`,
+      },
+      {
+        path: 'lib/main.dart',
+        content: `import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+
+void main() => runApp(const FlutterWasmApp());
+
+class FlutterWasmApp extends StatelessWidget {
+  const FlutterWasmApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flutter WASM Canvas',
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: const _MainPage(),
+    );
+  }
+}
+
+class _MainPage extends StatefulWidget {
+  const _MainPage();
+
+  @override
+  State<_MainPage> createState() => _MainPageState();
+}
+
+class _MainPageState extends State<_MainPage> {
+  int _tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _tab,
+        children: const [
+          _ParticlesPage(),
+          _WasmInfoPage(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome),
+            label: 'Canvas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.info_outline),
+            selectedIcon: Icon(Icons.info),
+            label: 'About WASM',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Particle {
+  double x, y, vx, vy, radius;
+  Color color;
+
+  _Particle({
+    required this.x,
+    required this.y,
+    required this.vx,
+    required this.vy,
+    required this.radius,
+    required this.color,
+  });
+}
+
+class _FrameCounter {
+  int fps = 0;
+  int _frames = 0;
+  DateTime _last = DateTime.now();
+
+  void tick() {
+    _frames++;
+    final now = DateTime.now();
+    if (now.difference(_last).inSeconds >= 1) {
+      fps = _frames;
+      _frames = 0;
+      _last = now;
+    }
+  }
+}
+
+class _ParticlesPage extends StatefulWidget {
+  const _ParticlesPage();
+
+  @override
+  State<_ParticlesPage> createState() => _ParticlesPageState();
+}
+
+class _ParticlesPageState extends State<_ParticlesPage>
+    with TickerProviderStateMixin {
+  final _rng = Random();
+  final List<_Particle> _particles = [];
+  final _counter = _FrameCounter();
+  Size _size = Size.zero;
+  Ticker? _ticker;
+  Duration _lastElapsed = Duration.zero;
+
+  static const _colors = [
+    Color(0xFF818CF8),
+    Color(0xFF34D399),
+    Color(0xFFF472B6),
+    Color(0xFFFBBF24),
+    Color(0xFF38BDF8),
+    Color(0xFFA78BFA),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick)..start();
+  }
+
+  void _onTick(Duration elapsed) {
+    final dt = (elapsed - _lastElapsed).inMilliseconds / 1000.0;
+    _lastElapsed = elapsed;
+    _counter.tick();
+    if (_size == Size.zero) return;
+    if (_particles.isEmpty) {
+      for (var i = 0; i < 60; i++) {
+        _particles.add(_Particle(
+          x: _rng.nextDouble() * _size.width,
+          y: _rng.nextDouble() * _size.height,
+          vx: (_rng.nextDouble() - 0.5) * 120,
+          vy: (_rng.nextDouble() - 0.5) * 120,
+          radius: 4 + _rng.nextDouble() * 8,
+          color: _colors[_rng.nextInt(_colors.length)],
+        ));
+      }
+    }
+    for (final p in _particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.x - p.radius < 0) {
+        p.x = p.radius;
+        p.vx = p.vx.abs();
+      }
+      if (p.x + p.radius > _size.width) {
+        p.x = _size.width - p.radius;
+        p.vx = -p.vx.abs();
+      }
+      if (p.y - p.radius < 0) {
+        p.y = p.radius;
+        p.vy = p.vy.abs();
+      }
+      if (p.y + p.radius > _size.height) {
+        p.y = _size.height - p.radius;
+        p.vy = -p.vy.abs();
+      }
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _size = Size(constraints.maxWidth, constraints.maxHeight);
+        return Stack(
+          children: [
+            CustomPaint(
+              size: _size,
+              painter: _ParticlesPainter(_particles),
+            ),
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(160),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '\${_counter.fps} FPS',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ParticlesPainter extends CustomPainter {
+  final List<_Particle> particles;
+
+  _ParticlesPainter(this.particles);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final p in particles) {
+      canvas.drawCircle(
+        Offset(p.x, p.y),
+        p.radius,
+        Paint()..color = p.color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParticlesPainter old) => true;
+}
+
+class _WasmInfoPage extends StatelessWidget {
+  const _WasmInfoPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          'Flutter WebAssembly',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 24),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('What is Flutter WASM?',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                const Text(
+                  'Flutter can compile Dart to WebAssembly using the '
+                  'flutter build web --wasm flag. This enables near-native '
+                  'performance by running Dart code directly in a WASM VM '
+                  'instead of transpiling to JavaScript.',
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Benefits', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                ...[
+                  (Icons.speed, 'Up to 2x faster execution than JS'),
+                  (Icons.link_off, 'No JS interop overhead'),
+                  (Icons.memory, 'Direct hardware access via Skia/Impeller'),
+                ].map(
+                  (item) => ListTile(
+                    leading: Icon(item.$1, color: cs.primary),
+                    title: Text(item.$2),
+                    dense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Build for WASM',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'flutter build web --wasm',
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}`,
+      },
+      {
+        path: 'web/index.html',
+        content: `<!DOCTYPE html>
+<html>
+  <head>
+    <base href="$FLUTTER_BASE_HREF">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flutter WASM Canvas</title>
+  </head>
+  <body style="background-color:#1c1b1f">
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
+</html>`,
+      },
+      {
+        path: 'analysis_options.yaml',
+        content: `include: package:flutter_lints/flutter.yaml`,
+      },
+    ],
+  },
 ]

@@ -21,6 +21,7 @@ const FRAMEWORKS = [
   { id: 'vanilla', label: 'Vanilla',  icon: '🟡', desc: 'Vite + TypeScript' },
   { id: 'angular', label: 'Angular',  icon: '🅰',  desc: 'Angular 18 + TypeScript' },
   { id: 'node',    label: 'Node.js',  icon: '🟢', desc: 'Fastify + Swagger REST API' },
+  { id: 'flutter', label: 'Flutter',  icon: '🐦', desc: 'Flutter 3 Web + Material 3' },
 ]
 
 type Tab = 'template' | 'blank'

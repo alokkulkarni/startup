@@ -41,11 +41,13 @@ export interface PreviewInstance {
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' })
 
-const PREVIEW_IMAGE = 'node:20-alpine'
+const PREVIEW_IMAGE  = 'node:20-alpine'
+const FLUTTER_IMAGE  = 'ghcr.io/cirruslabs/flutter:stable'
 const PORT_START = Number(process.env.PREVIEW_PORT_START ?? 40000)
 const PORT_END = Number(process.env.PREVIEW_PORT_END ?? 40999)
-const MEMORY_LIMIT = 512 * 1024 * 1024   // 512 MB
-const CPU_LIMIT = 1_000_000_000           // 1 vCPU (nanocpus)
+const MEMORY_LIMIT   = 512 * 1024 * 1024       // 512 MB (Node.js projects)
+const FLUTTER_MEMORY = 2 * 1024 * 1024 * 1024  // 2 GB  (Flutter compilation)
+const CPU_LIMIT = 1_000_000_000                 // 1 vCPU (nanocpus)
 const TTL_MS = 30 * 60 * 1000            // 30 minutes auto-cleanup
 
 // ── In-memory state ───────────────────────────────────────────────────────────
@@ -146,8 +148,9 @@ export async function initialize(): Promise<void> {
     if (orphans.length) {
       console.info(`[preview] Cleaned up ${orphans.length} orphaned preview container(s)`)
     }
-    // Pre-pull the image in the background so first preview starts faster
+    // Pre-pull images in the background so first preview starts faster
     docker.pull(PREVIEW_IMAGE).catch(() => {/* ignore if already present */})
+    docker.pull(FLUTTER_IMAGE).catch(() => {/* ignore – large image, best-effort only */})
   } catch (err) {
     // Docker not available (e.g. CI, no socket) — preview will degrade gracefully
     console.warn('[preview] Docker not available:', (err as Error).message)
@@ -188,7 +191,34 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
   pushLog(instance, '⚙ Creating preview container…')
 
   try {
-    const container = await docker.createContainer({
+    // Detect Flutter project by presence of pubspec.yaml
+    const isFlutter = files.some(f => f.path === 'pubspec.yaml')
+
+    if (isFlutter) {
+      pushLog(instance, '🐦 Flutter project detected — using Flutter web-server mode…')
+      pushLog(instance, '💡 First Flutter preview pulls a ~2 GB Docker image; this may take a few minutes.')
+    }
+
+    const container = await docker.createContainer(isFlutter ? {
+      name,
+      Image: FLUTTER_IMAGE,
+      // flutter pub get fetches Dart packages; then flutter run starts the dev web-server.
+      Cmd: ['sh', '-c',
+        'flutter pub get --no-color 2>&1' +
+        ' && echo "__FORGE_INSTALL_DONE__"' +
+        ' && flutter run -d web-server --web-hostname 0.0.0.0 --web-port 5173 --no-color 2>&1',
+      ],
+      WorkingDir: '/app',
+      Env: [],   // Flutter image ships its own environment
+      ExposedPorts: { '5173/tcp': {} },
+      HostConfig: {
+        PortBindings: { '5173/tcp': [{ HostPort: String(port) }] },
+        Memory: FLUTTER_MEMORY,
+        NanoCpus: CPU_LIMIT,
+        AutoRemove: false,
+      },
+      Labels: { 'forge.preview': 'true', 'forge.project': projectId },
+    } : {
       name,
       Image: PREVIEW_IMAGE,
       // npm install first, then npm run dev.
@@ -223,7 +253,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
     // (node:20-alpine has no /app directory by default).
     const tar = buildTar(files.map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
     await container.putArchive(tar, { path: '/' })
-    pushLog(instance, `📦 Mounted ${files.length} file(s) — running npm install…`)
+    pushLog(instance, `📦 Mounted ${files.length} file(s) — running ${isFlutter ? 'flutter pub get' : 'npm install'}…`)
 
     await container.start()
 
@@ -248,6 +278,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
           //  Node/Fastify: "listening at/on" in pino JSON logs
           //  Next.js: "✓ Ready", "started server on"
           //  Angular: "Compiled successfully", "Angular Live Development Server is listening"
+          //  Flutter: "is being served at", "flutter run key commands"
           //  Express/Hapi/etc: common "listening" patterns
           const lower = text.toLowerCase()
           const isReady =
@@ -255,6 +286,8 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
             text.includes('Local:') ||
             text.includes('✓ Ready') ||
             text.includes('started server on') ||
+            lower.includes('is being served at') ||
+            lower.includes('flutter run key commands') ||
             lower.includes('compiled successfully') ||
             lower.includes('angular live development server is listening') ||
             lower.includes('watching for file changes') ||

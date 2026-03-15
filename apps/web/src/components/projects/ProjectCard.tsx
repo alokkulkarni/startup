@@ -20,10 +20,11 @@ const frameworkColors: Record<string, string> = {
   vanilla: 'text-yellow-400 bg-yellow-950/60 border-yellow-800',
   node:    'text-emerald-400 bg-emerald-950/60 border-emerald-800',
   angular: 'text-red-400 bg-red-950/60 border-red-800',
+  flutter: 'text-sky-400 bg-sky-950/60 border-sky-800',
 }
 
 const frameworkIcons: Record<string, string> = {
-  react: '⚛', nextjs: '▲', vue: '💚', svelte: '🔥', vanilla: '🟡', node: '🟢', angular: '🅰',
+  react: '⚛', nextjs: '▲', vue: '💚', svelte: '🔥', vanilla: '🟡', node: '🟢', angular: '🅰', flutter: '🐦',
 }
 
 function timeAgo(date: string) {

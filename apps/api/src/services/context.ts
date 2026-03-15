@@ -746,6 +746,7 @@ export async function buildSystemPrompt(
     nextjs:  'Dev script MUST be `"next dev -H 0.0.0.0 -p 5173"`. Never use plain `next dev`.',
     node:    'Server MUST listen on `host: "0.0.0.0", port: Number(process.env.PORT ?? 5173)`. No Vite needed. ALWAYS register @fastify/cors (origin: true), @fastify/swagger (openapi spec at /openapi.json), and @fastify/swagger-ui (Swagger UI at /docs). Add schema tags to ALL routes so they appear in the OpenAPI spec. This enables the built-in API Explorer preview.',
     angular: 'Dev script MUST be `"ng serve --host 0.0.0.0 --port 5173"`. angular.json serve options MUST set `"host": "0.0.0.0"` and `"port": 5173`. Use standalone components (Angular 17+). Builder MUST be `@angular-devkit/build-angular:application` for build and `@angular-devkit/build-angular:dev-server` for serve. Always include zone.js in polyfills.',
+    flutter: 'Flutter web project. MUST include pubspec.yaml, lib/main.dart, and web/index.html. The web/index.html MUST have `<base href="$FLUTTER_BASE_HREF">` and `<script src="flutter_bootstrap.js" async></script>` as the only body script. Use sdk: ">=3.4.0 <4.0.0" in pubspec.yaml. The preview server runs `flutter run -d web-server --web-hostname 0.0.0.0 --web-port 5173` automatically — do NOT add a scripts section. Use Flutter 3 Material 3 (useMaterial3: true). Write Dart 3 code with records, pattern matching, and switch expressions. Avoid dollar signs in string literals to prevent interpolation issues.',
   }
   const fwHint = meta ? (frameworkHints[meta.framework] ?? '') : ''
 
