@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import * as schema from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
+import { getWorkspaceMembership, canPerform } from '../middleware/rbac.js'
 
 const MIME_MAP: Record<string, string> = {
   ts: 'application/typescript', tsx: 'application/typescript',
@@ -46,6 +47,12 @@ export async function fileRoutes(app: FastifyInstance) {
     })
     if (!project) return reply.status(404).send({ error: 'Project not found' })
 
+    const member = await getWorkspaceMembership(app.db, request.user.id, project.workspaceId)
+    if (!member) return reply.status(403).send({ error: 'Access denied' })
+    if (!canPerform(member.role, 'editor')) {
+      return reply.code(403).send({ error: 'Requires editor role or higher to modify files' })
+    }
+
     const { content } = parsed.data
     const mimeType = getMimeType(path)
     const sizeBytes = Buffer.byteLength(content, 'utf8')
@@ -75,6 +82,12 @@ export async function fileRoutes(app: FastifyInstance) {
       where: (p, { eq: peq, and: pand, ne }) => pand(peq(p.id, projectId), ne(p.status, 'deleted')),
     })
     if (!project) return reply.status(404).send({ error: 'Project not found' })
+
+    const member = await getWorkspaceMembership(app.db, request.user.id, project.workspaceId)
+    if (!member) return reply.status(403).send({ error: 'Access denied' })
+    if (!canPerform(member.role, 'editor')) {
+      return reply.code(403).send({ error: 'Requires editor role or higher to delete files' })
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result: any = await app.db.delete(schema.projectFiles)

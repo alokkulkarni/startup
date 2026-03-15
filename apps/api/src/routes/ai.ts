@@ -9,6 +9,7 @@ import { parseAIResponse, applyDiffs, applyDiffsNoSnapshot, extractNewlyComplete
 import { createSnapshot } from '../services/snapshot.js'
 import { getUserPlanLimit } from '../services/stripe.js'
 import { trackEvent } from '../services/analytics.js'
+import { canPerform } from '../middleware/rbac.js'
 
 const RATE_LIMIT_TTL_SECONDS = 86400 // 24 hours
 
@@ -32,7 +33,8 @@ async function assertProjectAccess(app: FastifyInstance, projectId: string, user
     where: (m, { and, eq }) =>
       and(eq(m.workspaceId, project.workspaceId), eq(m.userId, userId)),
   })
-  return member ? project : null
+  if (!member) return null
+  return { project, member }
 }
 
 export async function aiRoutes(app: FastifyInstance) {
@@ -81,13 +83,20 @@ export async function aiRoutes(app: FastifyInstance) {
       }
 
       // Assert project belongs to user's workspace
-      const project = await assertProjectAccess(app, projectId, user.id)
-      if (!project) {
+      const access = await assertProjectAccess(app, projectId, user.id)
+      if (!access) {
         return reply.code(404).send({
           success: false,
           error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or access denied' },
         })
       }
+      if (!canPerform(access.member.role, 'editor')) {
+        return reply.code(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Viewer role cannot send AI prompts' },
+        })
+      }
+      const project = access.project
 
       // Get or create conversation
       let conversation = await app.db.query.aiConversations.findFirst({
@@ -254,13 +263,15 @@ export async function aiRoutes(app: FastifyInstance) {
         })
       }
 
-      const project = await assertProjectAccess(app, projectId, user.id)
-      if (!project) {
+      const access = await assertProjectAccess(app, projectId, user.id)
+      if (!access) {
         return reply.code(404).send({
           success: false,
           error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or access denied' },
         })
       }
+      // viewer+ can read history (all workspace members qualify)
+      const project = access.project
 
       const conversation = await app.db.query.aiConversations.findFirst({
         where: (c, { eq }) => eq(c.projectId, projectId),

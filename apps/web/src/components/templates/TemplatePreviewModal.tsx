@@ -72,7 +72,7 @@ export function TemplatePreviewModal({
 
             {/* Badges */}
             <div className="flex gap-2 flex-wrap">
-              <span className="text-xs font-medium px-3 py-1 rounded-full bg-blue-700 text-white capitalize">
+              <span className="text-xs font-medium px-3 py-1 rounded-full bg-gray-800 text-blue-400 border border-gray-700 capitalize">
                 {template.framework}
               </span>
               <span className="text-xs font-medium px-3 py-1 rounded-full bg-gray-700 text-gray-300 capitalize">
@@ -95,7 +95,7 @@ export function TemplatePreviewModal({
             {/* CTA */}
             <button
               onClick={() => onUse(template.id)}
-              className="mt-auto w-full py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-all"
+              className="mt-auto w-full py-3 bg-violet-900/60 hover:bg-violet-900/90 text-violet-200 font-semibold rounded-xl transition-all border border-violet-800/40"
             >
               Use This Template
             </button>

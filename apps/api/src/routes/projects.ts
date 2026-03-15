@@ -4,6 +4,7 @@ import { z } from 'zod'
 import archiver from 'archiver'
 import { projects, projectFiles, workspaceMembers, workspaces } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
+import { canPerform } from '../middleware/rbac.js'
 import { trackEvent } from '../services/analytics.js'
 import { PLAN_LIMITS } from '../services/stripe.js'
 
@@ -103,7 +104,8 @@ async function assertProjectAccess(app: FastifyInstance, projectId: string, user
     where: (m, { and, eq }) =>
       and(eq(m.workspaceId, project.workspaceId), eq(m.userId, userId)),
   })
-  return member ? project : null
+  if (!member) return null
+  return { project, member }
 }
 
 export async function projectRoutes(app: FastifyInstance) {
@@ -234,10 +236,10 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const project = await assertProjectAccess(app, id, user.id)
-    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const access = await assertProjectAccess(app, id, user.id)
+    if (!access) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
 
-    return reply.send({ success: true, data: project })
+    return reply.send({ success: true, data: access.project })
   })
 
   // PATCH /api/v1/projects/:id
@@ -256,8 +258,11 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const existing = await assertProjectAccess(app, id, user.id)
-    if (!existing) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const access = await assertProjectAccess(app, id, user.id)
+    if (!access) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    if (!canPerform(access.member.role, 'editor')) {
+      return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Requires editor role or higher to update project' } })
+    }
 
     const [updated] = await app.db
       .update(projects)
@@ -279,8 +284,11 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const existing = await assertProjectAccess(app, id, user.id)
-    if (!existing) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const access = await assertProjectAccess(app, id, user.id)
+    if (!access) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    if (!canPerform(access.member.role, 'owner')) {
+      return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Only the workspace owner can delete a project' } })
+    }
 
     await app.db
       .update(projects)
@@ -301,8 +309,12 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const source = await assertProjectAccess(app, id, user.id)
-    if (!source) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const accessResult = await assertProjectAccess(app, id, user.id)
+    if (!accessResult) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    if (!canPerform(accessResult.member.role, 'editor')) {
+      return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'Requires editor role or higher to duplicate a project' } })
+    }
+    const source = accessResult.project
 
     // Clone project record
     const [copy] = await app.db
@@ -348,8 +360,8 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const project = await assertProjectAccess(app, id, user.id)
-    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const accessFiles = await assertProjectAccess(app, id, user.id)
+    if (!accessFiles) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
 
     const files = await app.db.query.projectFiles.findMany({
       where: (f, { eq }) => eq(f.projectId, id),
@@ -368,8 +380,9 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
 
-    const project = await assertProjectAccess(app, id, user.id)
-    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const accessDownload = await assertProjectAccess(app, id, user.id)
+    if (!accessDownload) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+    const project = accessDownload.project
 
     const files = await app.db.query.projectFiles.findMany({
       where: (f, { eq: eqFn }) => eqFn(f.projectId, id),
