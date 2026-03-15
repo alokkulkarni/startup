@@ -399,9 +399,9 @@ export default function App() {
 
 10. ⚠️ DEV SERVER BINDING — ALL projects MUST bind the dev server to 0.0.0.0 on port 5173
     so the Docker preview container can expose the port. Framework-specific rules:
-    • React / Vue / Svelte (Vite): vite.config MUST include `server: { host: true, port: 5173 }`
-    • Next.js: package.json dev script MUST be `"next dev -H 0.0.0.0 -p 5173"`
-    • Node / Fastify / Express: server.listen MUST use `host: '0.0.0.0'` and `port: 5173` (or PORT env var defaulting to 5173)
+    • React / Vue / Svelte (Vite): vite.config MUST include \`server: { host: true, port: 5173 }\`
+    • Next.js: package.json dev script MUST be \`"next dev -H 0.0.0.0 -p 5173"\`
+    • Node / Fastify / Express: server.listen MUST use \`host: '0.0.0.0'\` and \`port: 5173\` (or PORT env var defaulting to 5173)
     Any app that binds to 127.0.0.1 or localhost will NOT be reachable in preview.
 
 ## Architecture — Full-Stack vs Frontend-Only (READ CAREFULLY)
