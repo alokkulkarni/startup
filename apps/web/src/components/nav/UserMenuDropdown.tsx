@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { UserIcon, CreditCardIcon, LogOutIcon } from 'lucide-react'
+import { UserIcon, CreditCardIcon, LogOutIcon, BarChart2Icon } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface UserMenuDropdownProps {
@@ -73,6 +73,11 @@ export function UserMenuDropdown({ user }: UserMenuDropdownProps) {
               icon={<CreditCardIcon className="w-4 h-4" />}
               label="Account & billing"
               onClick={() => navigate('/dashboard/account')}
+            />
+            <MenuItem
+              icon={<BarChart2Icon className="w-4 h-4" />}
+              label="Analytics"
+              onClick={() => navigate('/analytics')}
             />
           </div>
 

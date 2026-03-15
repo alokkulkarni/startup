@@ -31,7 +31,7 @@ const PLANS: Plan[] = [
     priceId: { monthly: '', yearly: '' },
     features: [
       '3 projects',
-      '50 AI requests/day',
+      '20 AI requests/day',
       '20 files per project',
       'Community support',
       '1 workspace',
@@ -49,7 +49,7 @@ const PLANS: Plan[] = [
     },
     features: [
       '50 projects',
-      '500 AI requests/day',
+      '300 AI requests/day',
       '200 files per project',
       'Priority email support',
       '1 workspace',
@@ -70,7 +70,7 @@ const PLANS: Plan[] = [
     },
     features: [
       'Unlimited projects',
-      '2 000 AI requests/day',
+      '1,500 AI requests/day',
       'Unlimited files',
       'Dedicated Slack support',
       '5 workspaces',

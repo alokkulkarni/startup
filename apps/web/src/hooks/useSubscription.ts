@@ -28,7 +28,7 @@ const DEFAULT_FREE_SUBSCRIPTION: SubscriptionInfo = {
   periodEnd: null,
   cancelAtPeriodEnd: false,
   limits: {
-    aiRequestsPerDay: 50,
+    aiRequestsPerDay: 20,
     maxProjects: 3,
     maxFilesPerProject: 20,
   },

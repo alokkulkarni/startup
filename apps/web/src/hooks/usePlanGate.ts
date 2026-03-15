@@ -12,9 +12,9 @@ interface PlanLimits {
 }
 
 const TIER_LIMITS: Record<string, PlanLimits> = {
-  free:       { maxProjects: 3,   aiRequestsPerDay: 50,   maxFilesPerProject: 20  },
-  pro:        { maxProjects: 50,  aiRequestsPerDay: 500,  maxFilesPerProject: 200 },
-  team:       { maxProjects: 999, aiRequestsPerDay: 2000, maxFilesPerProject: 999 },
+  free:       { maxProjects: 3,   aiRequestsPerDay: 20,   maxFilesPerProject: 20  },
+  pro:        { maxProjects: 50,  aiRequestsPerDay: 300,  maxFilesPerProject: 200 },
+  team:       { maxProjects: 999, aiRequestsPerDay: 1500, maxFilesPerProject: 999 },
   enterprise: { maxProjects: 999, aiRequestsPerDay: 9999, maxFilesPerProject: 999 },
 }
 
@@ -42,8 +42,6 @@ export function usePlanGate(): PlanGate {
 
   const fetchProjectCount = useCallback(async () => {
     try {
-      const res = await api.get<{ total: number }>('/v1/projects?count=true')
-      // API returns array; just count length
       const list = await api.get<unknown[]>('/v1/projects')
       setProjectsUsed(list.data?.length ?? 0)
     } catch {
@@ -53,7 +51,8 @@ export function usePlanGate(): PlanGate {
 
   useEffect(() => {
     fetchProjectCount()
-  }, [fetchProjectCount])
+    fetchUsage()
+  }, [fetchProjectCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tier = subscription?.tier ?? 'free'
   const limits = TIER_LIMITS[tier] ?? TIER_LIMITS.free

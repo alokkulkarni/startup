@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { useSubscription } from '@/hooks/useSubscription'
 import { usePlanGate } from '@/hooks/usePlanGate'
-import { ZapIcon, FolderIcon, ArrowUpRightIcon, ReceiptIcon, ExternalLinkIcon } from 'lucide-react'
+import { ZapIcon, ArrowUpRightIcon, ReceiptIcon, ExternalLinkIcon, BarChart2Icon, ClockIcon } from 'lucide-react'
 
 const planLabels: Record<string, string> = {
   free: 'Free',
@@ -53,12 +52,23 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
 
 export default function AccountPage() {
   const router = useRouter()
-  const { subscription, loading: subLoading, openPortal } = useSubscription()
+  const { subscription, usage, loading: subLoading, openPortal } = useSubscription()
   const { projectsUsed, projectsLimit, aiUsed, aiLimit, tier } = usePlanGate()
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState('')
 
   const isPaid = tier !== 'free'
+
+  // Format the AI counter reset time
+  const resetAtLabel = usage?.resetAt
+    ? (() => {
+        const diff = new Date(usage.resetAt).getTime() - Date.now()
+        if (diff <= 0) return 'Resets soon'
+        const h = Math.floor(diff / 3_600_000)
+        const m = Math.floor((diff % 3_600_000) / 60_000)
+        return h > 0 ? `Resets in ${h}h ${m}m` : `Resets in ${m}m`
+      })()
+    : null
 
   const handleManageBilling = async () => {
     setPortalLoading(true)
@@ -108,7 +118,15 @@ export default function AccountPage() {
           {!subLoading && (
             <div className="space-y-4 pt-1">
               <UsageBar used={projectsUsed} limit={projectsLimit} label="Projects" />
-              <UsageBar used={aiUsed} limit={aiLimit} label="AI requests today" />
+              <div className="space-y-1.5">
+                <UsageBar used={aiUsed} limit={aiLimit} label="AI requests today" />
+                {resetAtLabel && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <ClockIcon className="w-3 h-3" />
+                    {resetAtLabel}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -166,6 +184,25 @@ export default function AccountPage() {
             </div>
           )}
         </section>
+
+        {/* Analytics quick link */}
+        <div className="flex items-center justify-between rounded-xl border border-gray-800 bg-gray-900/30 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-violet-900/50 border border-violet-800/50 flex items-center justify-center shrink-0">
+              <BarChart2Icon className="w-4 h-4 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Usage analytics</p>
+              <p className="text-xs text-gray-400 mt-0.5">AI requests, projects, deployments — last 30 days</p>
+            </div>
+          </div>
+          <Link
+            href="/analytics"
+            className="shrink-0 text-sm text-violet-400 hover:text-violet-300 font-medium transition-colors"
+          >
+            View analytics →
+          </Link>
+        </div>
 
         {/* Profile quick link */}
         <div className="flex items-center justify-between rounded-xl border border-gray-800 bg-gray-900/30 px-5 py-4">
