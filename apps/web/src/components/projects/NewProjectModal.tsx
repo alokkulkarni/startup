@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useTemplates } from '@/hooks/useTemplates'
 import type { Template } from '@/hooks/useTemplates'
-import { FolderIcon, PlusIcon } from 'lucide-react'
+import { FolderIcon } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface Workspace { id: string; name: string; slug: string; role: string }
 
@@ -32,7 +33,6 @@ type Tab = 'template' | 'blank'
 
 export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: NewProjectModalProps) {
   const router = useRouter()
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'
   const { templates, loading: tplLoading, cloneTemplate, fetchTemplates } = useTemplates()
 
   const [tab, setTab] = useState<Tab>('template')
@@ -49,12 +49,10 @@ export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: N
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(activeWorkspaceId)
 
   useEffect(() => {
-    fetch(`${apiBase}/v1/workspaces`, { credentials: 'include' })
-      .then(r => r.json())
+    api.get<Workspace[]>('/v1/workspaces')
       .then(d => {
         const list: Workspace[] = d.data ?? []
         setWorkspaces(list)
-        // Default to activeWorkspaceId, or first in list if none
         if (!selectedWorkspaceId && list.length > 0) {
           setSelectedWorkspaceId(list[0].id)
         }

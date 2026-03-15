@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDownIcon, PlusIcon, CheckIcon } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface Workspace {
   id: string
@@ -21,25 +22,24 @@ export function WorkspaceSwitcher({ currentWorkspaceId, onSwitch }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [createName, setCreateName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
   const current = workspaces.find(w => w.id === currentWorkspaceId)
 
   useEffect(() => {
-    fetch(`${apiBase}/api/v1/workspaces`, { credentials: 'include' })
-      .then(r => r.json())
+    api.get<Workspace[]>('/v1/workspaces')
       .then(d => {
-        // API returns { success: true, data: [...] }
-        setWorkspaces(d.data ?? [])
+        const list = d.data ?? []
+        setWorkspaces(list)
         // Auto-select first workspace if none is active
-        if (!currentWorkspaceId && d.data?.length > 0) {
-          onSwitch(d.data[0].id)
+        if (!currentWorkspaceId && list.length > 0) {
+          onSwitch(list[0].id)
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [apiBase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on outside click
   useEffect(() => {
@@ -56,28 +56,18 @@ export function WorkspaceSwitcher({ currentWorkspaceId, onSwitch }: Props) {
     e.preventDefault()
     if (!createName.trim()) return
     setCreating(true)
-    const slug = createName
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
+    setCreateError('')
     try {
-      const res = await fetch(`${apiBase}/api/v1/workspaces`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: createName.trim(), slug }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        // API returns { success: true, data: {...workspace, role} }
-        if (data.success && data.data) {
-          setWorkspaces(prev => [...prev, data.data])
-          onSwitch(data.data.id)
-          setShowCreate(false)
-          setCreateName('')
-          setOpen(false)
-        }
+      const res = await api.post<Workspace & { role: string }>('/v1/workspaces', { name: createName.trim() })
+      if (res.data) {
+        setWorkspaces(prev => [...prev, res.data!])
+        onSwitch(res.data.id)
+        setShowCreate(false)
+        setCreateName('')
+        setOpen(false)
       }
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create workspace')
     } finally {
       setCreating(false)
     }
@@ -150,8 +140,9 @@ export function WorkspaceSwitcher({ currentWorkspaceId, onSwitch }: Props) {
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-100 placeholder-gray-500"
                   placeholder="My Company"
                   value={createName}
-                  onChange={e => setCreateName(e.target.value)}
+                  onChange={e => { setCreateName(e.target.value); setCreateError('') }}
                 />
+                {createError && <p className="text-xs text-red-400 mt-1">{createError}</p>}
               </div>
               <div className="flex gap-3 justify-end">
                 <button
