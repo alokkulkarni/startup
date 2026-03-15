@@ -832,8 +832,8 @@ start_docker() {
     [[ ! "$_continue_anyway" =~ ^[Yy]$ ]] && { error "Aborted. Free the ports above and re-run."; exit 1; }
   fi
 
-  step "Pulling / starting Docker Compose services..."
-  docker compose up -d --remove-orphans
+  step "Pulling / building / starting Docker Compose services..."
+  docker compose up -d --build --remove-orphans
 
   echo ""
   step "Waiting for services to become healthy..."
