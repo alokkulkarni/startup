@@ -209,12 +209,20 @@ export async function githubRoutes(app: FastifyInstance) {
         where: (f, { eq: eqFn }) => eqFn(f.projectId, project.id),
       });
 
-      const result = await createRepoAndPush(
-        connection.encryptedToken,
-        body.repoName,
-        files.map((f) => ({ path: f.path, content: f.content })),
-        { private: body.private, description: body.description },
-      );
+      let result: Awaited<ReturnType<typeof createRepoAndPush>>;
+      try {
+        result = await createRepoAndPush(
+          connection.encryptedToken,
+          body.repoName,
+          files.map((f) => ({ path: f.path, content: f.content })),
+          { private: body.private, description: body.description },
+        );
+      } catch (err: any) {
+        const ghErrors: { message?: string }[] = err?.response?.data?.errors ?? [];
+        const detail = ghErrors[0]?.message ?? err?.message ?? 'GitHub API error';
+        const status = err?.status === 422 ? 422 : 502;
+        return reply.code(status).send({ success: false, error: { code: 'GITHUB_API_ERROR', message: detail } });
+      }
 
       await app.db.update(schema.projects)
         .set({
@@ -270,14 +278,22 @@ export async function githubRoutes(app: FastifyInstance) {
 
       const commitMessage = body.commitMessage ?? generateCommitMessage(files.map((f) => f.path));
 
-      const result = await pushToExistingRepo(
-        connection.encryptedToken,
-        body.owner,
-        body.repo,
-        body.branch,
-        files.map((f) => ({ path: f.path, content: f.content })),
-        commitMessage,
-      );
+      let result: Awaited<ReturnType<typeof pushToExistingRepo>>;
+      try {
+        result = await pushToExistingRepo(
+          connection.encryptedToken,
+          body.owner,
+          body.repo,
+          body.branch,
+          files.map((f) => ({ path: f.path, content: f.content })),
+          commitMessage,
+        );
+      } catch (err: any) {
+        const ghErrors: { message?: string }[] = err?.response?.data?.errors ?? [];
+        const detail = ghErrors[0]?.message ?? err?.message ?? 'GitHub API error';
+        const status = err?.status === 422 ? 422 : 502;
+        return reply.code(status).send({ success: false, error: { code: 'GITHUB_API_ERROR', message: detail } });
+      }
 
       await app.db.update(schema.projects)
         .set({
