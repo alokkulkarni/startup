@@ -1296,17 +1296,77 @@ const SEED_ITEMS: Item[] = [
 
 const db = new Map<string, Item>(SEED_ITEMS.map(i => [i.id, i]))
 
+// Shared response schema fragments
+const ItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'a1b2c3d4-0001-4000-8000-000000000001' },
+    name: { type: 'string', example: 'Widget Pro' },
+    description: { type: 'string', example: 'A high-quality widget for professionals' },
+    price: { type: 'number', example: 29.99 },
+    createdAt: { type: 'string', format: 'date-time', example: '2024-01-15T09:00:00.000Z' },
+  },
+}
+
+const ErrorSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean', example: false },
+    error: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', example: 'NOT_FOUND' },
+        message: { type: 'string', example: 'The requested resource was not found' },
+      },
+      required: ['code', 'message'],
+    },
+  },
+}
+
+const R400 = { description: 'Bad Request — validation failed', ...ErrorSchema }
+const R404 = { description: 'Not Found — item does not exist', ...ErrorSchema }
+const R500 = { description: 'Internal Server Error', ...ErrorSchema }
+
 export async function itemRoutes(app: FastifyInstance) {
   // GET /items
   app.get('/items', {
-    schema: { tags: ['items'], summary: 'List all items', response: { 200: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'array' } } } } },
+    schema: {
+      tags: ['items'],
+      summary: 'List all items',
+      description: 'Returns the full list of items in the store.',
+      response: {
+        200: {
+          description: 'Success',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: { type: 'array', items: ItemSchema },
+          },
+        },
+        500: R500,
+      },
+    },
   }, async () => {
     return { success: true, data: Array.from(db.values()) }
   })
 
   // GET /items/:id
   app.get<{ Params: { id: string } }>('/items/:id', {
-    schema: { tags: ['items'], summary: 'Get item by ID', params: { type: 'object', properties: { id: { type: 'string' } } } },
+    schema: {
+      tags: ['items'],
+      summary: 'Get item by ID',
+      description: 'Returns a single item by its UUID.',
+      params: { type: 'object', properties: { id: { type: 'string', example: 'a1b2c3d4-0001-4000-8000-000000000001' } }, required: ['id'] },
+      response: {
+        200: {
+          description: 'Success',
+          type: 'object',
+          properties: { success: { type: 'boolean', example: true }, data: ItemSchema },
+        },
+        404: R404,
+        500: R500,
+      },
+    },
   }, async (request, reply) => {
     const item = db.get(request.params.id)
     if (!item) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Item not found' } })
@@ -1316,8 +1376,27 @@ export async function itemRoutes(app: FastifyInstance) {
   // POST /items
   app.post('/items', {
     schema: {
-      tags: ['items'], summary: 'Create a new item',
-      body: { type: 'object', required: ['name', 'price'], properties: { name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' } } },
+      tags: ['items'],
+      summary: 'Create a new item',
+      description: 'Creates a new item. \`name\` and \`price\` are required.',
+      body: {
+        type: 'object',
+        required: ['name', 'price'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, example: 'New Widget' },
+          description: { type: 'string', maxLength: 500, example: 'A brand new widget' },
+          price: { type: 'number', minimum: 0, example: 19.99 },
+        },
+      },
+      response: {
+        201: {
+          description: 'Created successfully',
+          type: 'object',
+          properties: { success: { type: 'boolean', example: true }, data: ItemSchema },
+        },
+        400: R400,
+        500: R500,
+      },
     },
   }, async (request, reply) => {
     const result = CreateItemSchema.safeParse(request.body)
@@ -1330,9 +1409,28 @@ export async function itemRoutes(app: FastifyInstance) {
   // PATCH /items/:id
   app.patch<{ Params: { id: string } }>('/items/:id', {
     schema: {
-      tags: ['items'], summary: 'Update an item',
-      params: { type: 'object', properties: { id: { type: 'string' } } },
-      body: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' } } },
+      tags: ['items'],
+      summary: 'Update an item',
+      description: 'Partially updates an existing item. All fields are optional.',
+      params: { type: 'object', properties: { id: { type: 'string', example: 'a1b2c3d4-0001-4000-8000-000000000001' } }, required: ['id'] },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, example: 'Updated Name' },
+          description: { type: 'string', maxLength: 500, example: 'Updated description' },
+          price: { type: 'number', minimum: 0, example: 34.99 },
+        },
+      },
+      response: {
+        200: {
+          description: 'Updated successfully',
+          type: 'object',
+          properties: { success: { type: 'boolean', example: true }, data: ItemSchema },
+        },
+        400: R400,
+        404: R404,
+        500: R500,
+      },
     },
   }, async (request, reply) => {
     const item = db.get(request.params.id)
@@ -1346,7 +1444,24 @@ export async function itemRoutes(app: FastifyInstance) {
 
   // DELETE /items/:id
   app.delete<{ Params: { id: string } }>('/items/:id', {
-    schema: { tags: ['items'], summary: 'Delete an item', params: { type: 'object', properties: { id: { type: 'string' } } } },
+    schema: {
+      tags: ['items'],
+      summary: 'Delete an item',
+      description: 'Permanently removes an item from the store.',
+      params: { type: 'object', properties: { id: { type: 'string', example: 'a1b2c3d4-0001-4000-8000-000000000001' } }, required: ['id'] },
+      response: {
+        200: {
+          description: 'Deleted successfully',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: { type: 'object', properties: { message: { type: 'string', example: 'Deleted' } } },
+          },
+        },
+        404: R404,
+        500: R500,
+      },
+    },
   }, async (request, reply) => {
     if (!db.has(request.params.id)) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Item not found' } })
     db.delete(request.params.id)

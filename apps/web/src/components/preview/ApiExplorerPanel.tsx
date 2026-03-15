@@ -14,7 +14,13 @@ interface OpenApiPathItem {
   description?: string
   parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type: string; example?: unknown } }[]
   requestBody?: { required?: boolean; content?: { 'application/json'?: { schema?: unknown } } }
-  responses?: Record<string, { description: string }>
+  responses?: Record<string, {
+    description?: string
+    content?: { 'application/json'?: { schema?: unknown } }
+    // Fastify also inlines schema properties directly on the response object
+    type?: string
+    properties?: Record<string, unknown>
+  }>
 }
 
 interface OpenApiSpec {
@@ -27,9 +33,11 @@ interface RouteEntry {
   method: string
   path: string
   summary?: string
+  description?: string
   tags?: string[]
   parameters?: OpenApiPathItem['parameters']
   requestBody?: OpenApiPathItem['requestBody']
+  responses?: OpenApiPathItem['responses']
 }
 
 type RequestState = 'idle' | 'loading' | 'success' | 'error'
@@ -49,8 +57,30 @@ const STATUS_COLORS: Record<number, string> = {
   5: 'text-red-400',
 }
 
+const STATUS_BADGE: Record<number, string> = {
+  2: 'bg-emerald-600/15 text-emerald-300 border border-emerald-700/40',
+  3: 'bg-blue-600/15 text-blue-300 border border-blue-700/40',
+  4: 'bg-amber-600/15 text-amber-300 border border-amber-700/40',
+  5: 'bg-red-600/15 text-red-300 border border-red-700/40',
+}
+
+const STATUS_LABEL: Record<number, string> = {
+  2: 'Success',
+  3: 'Redirect',
+  4: 'Client Error',
+  5: 'Server Error',
+}
+
 function statusColor(code: number) {
   return STATUS_COLORS[Math.floor(code / 100)] ?? 'text-gray-400'
+}
+
+function statusBadge(code: number) {
+  return STATUS_BADGE[Math.floor(code / 100)] ?? 'bg-gray-700/30 text-gray-400 border border-gray-700'
+}
+
+function statusLabel(code: number) {
+  return STATUS_LABEL[Math.floor(code / 100)] ?? 'Other'
 }
 
 function formatDuration(ms: number) {
@@ -154,7 +184,7 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
   // Request state
   const [reqBody, setReqBody] = useState('')
   const [reqHeaders, setReqHeaders] = useState('{\n  "Content-Type": "application/json"\n}')
-  const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body')
+  const [activeTab, setActiveTab] = useState<'body' | 'headers' | 'responses'>('body')
 
   // Path params (key/value map)
   const [pathParams, setPathParams] = useState<Record<string, string>>({})
@@ -415,30 +445,45 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
               </div>
             )}
 
-            {/* Request tabs */}
+            {/* Request tabs — body | headers | responses */}
             <div className="flex gap-0 border-b border-gray-800 shrink-0">
-              {(['body', 'headers'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 text-xs font-medium transition-colors capitalize ${activeTab === tab ? 'text-indigo-400 border-b-2 border-indigo-500 -mb-px' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                  {tab}
-                </button>
-              ))}
+              {(['body', 'headers', 'responses'] as const).map(tab => {
+                const hasResponses = tab === 'responses' && selected?.responses && Object.keys(selected.responses).length > 0
+                const errorCount = hasResponses
+                  ? Object.keys(selected!.responses!).filter(c => Number(c) >= 400).length
+                  : 0
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 text-xs font-medium transition-colors capitalize flex items-center gap-1.5 ${activeTab === tab ? 'text-indigo-400 border-b-2 border-indigo-500 -mb-px' : 'text-gray-500 hover:text-gray-300'}`}
+                  >
+                    {tab}
+                    {tab === 'responses' && errorCount > 0 && (
+                      <span className="text-[9px] font-bold bg-amber-600/20 text-amber-400 border border-amber-700/40 px-1 py-0.5 rounded">
+                        {errorCount} err
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* Request body / headers */}
+            {/* Request body / headers / spec responses */}
             <div className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-hidden flex flex-col">
-                <textarea
-                  ref={bodyTextareaRef}
-                  value={activeTab === 'body' ? reqBody : reqHeaders}
-                  onChange={e => activeTab === 'body' ? setReqBody(e.target.value) : setReqHeaders(e.target.value)}
-                  spellCheck={false}
-                  placeholder={activeTab === 'body' ? '// Request body (JSON)' : '// Headers (JSON)'}
-                  className="flex-1 min-h-0 resize-none w-full bg-gray-900 text-gray-300 text-xs font-mono p-4 focus:outline-none border-none"
-                />
+                {activeTab === 'responses' ? (
+                  <SpecResponsesPanel responses={selected?.responses} description={selected?.description} />
+                ) : (
+                  <textarea
+                    ref={bodyTextareaRef}
+                    value={activeTab === 'body' ? reqBody : reqHeaders}
+                    onChange={e => activeTab === 'body' ? setReqBody(e.target.value) : setReqHeaders(e.target.value)}
+                    spellCheck={false}
+                    placeholder={activeTab === 'body' ? '// Request body (JSON)' : '// Headers (JSON)'}
+                    className="flex-1 min-h-0 resize-none w-full bg-gray-900 text-gray-300 text-xs font-mono p-4 focus:outline-none border-none"
+                  />
+                )}
               </div>
 
               {/* Response panel */}
@@ -488,6 +533,87 @@ export function ApiExplorerPanel({ baseUrl }: Props) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Spec-defined responses panel ──────────────────────────────────────────────
+function SpecResponsesPanel({
+  responses,
+  description,
+}: {
+  responses?: RouteEntry['responses']
+  description?: string
+}) {
+  if (!responses || Object.keys(responses).length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-xs text-gray-700 italic">No response schemas defined for this endpoint</p>
+      </div>
+    )
+  }
+
+  const sorted = Object.entries(responses).sort(([a], [b]) => Number(a) - Number(b))
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {description && (
+        <p className="text-xs text-gray-400 pb-2 border-b border-gray-800">{description}</p>
+      )}
+
+      {sorted.map(([code, resp]) => {
+        const num = Number(code)
+        const isError = num >= 400
+        const isSuccess = num >= 200 && num < 300
+
+        // Extract schema — Fastify inlines it directly; OpenAPI wraps in content
+        const schema = resp.content?.['application/json']?.schema
+          ?? (resp.type ? resp : undefined)
+
+        let exampleJson: string | null = null
+        if (schema) {
+          try {
+            const ex = schemaToExample(schema)
+            if (ex !== null) exampleJson = JSON.stringify(ex, null, 2)
+          } catch { /* ignore */ }
+        }
+
+        return (
+          <div
+            key={code}
+            className={`rounded-lg border overflow-hidden ${isError ? 'border-amber-800/30' : isSuccess ? 'border-emerald-800/30' : 'border-gray-700/40'}`}
+          >
+            {/* Header row */}
+            <div className={`flex items-start gap-3 px-3 py-2.5 ${isError ? 'bg-amber-950/20' : isSuccess ? 'bg-emerald-950/20' : 'bg-gray-900/40'}`}>
+              <span className={`shrink-0 text-xs font-bold font-mono px-2 py-0.5 rounded ${statusBadge(num)}`}>
+                {code}
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-semibold text-gray-300">{statusLabel(num)}</span>
+                {resp.description && (
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{resp.description}</p>
+                )}
+              </div>
+              {isError && (
+                <span className="shrink-0 text-[9px] font-bold text-amber-400 uppercase tracking-wider">
+                  {num >= 500 ? 'Server Error' : 'Client Error'}
+                </span>
+              )}
+            </div>
+
+            {/* Example payload */}
+            {exampleJson && (
+              <div className="bg-gray-950/60 px-3 pt-2 pb-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-600 mb-1.5">Example response</p>
+                <pre
+                  className="text-[10px] font-mono leading-relaxed whitespace-pre-wrap break-words"
+                  dangerouslySetInnerHTML={{ __html: jsonHighlight(exampleJson) }}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
