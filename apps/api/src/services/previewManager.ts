@@ -1,24 +1,24 @@
 /**
  * previewManager — server-side Docker container lifecycle for per-project previews.
  *
- * Isolation model: one container per project (keyed by projectId UUID). Two different users
- * each get their own project → their own container → their own port. Users sharing the same
- * workspace project share the same container, which is the correct collaborative behaviour.
+ * Routing strategy: Traefik subdomain (no host port binding)
+ * ──────────────────────────────────────────────────────────
+ * Each container gets a unique subdomain URL:  http://{projectId}.localhost/
+ * Traefik (Docker provider) reads the container labels and routes traffic from
+ * the subdomain to the container's internal IP on forge_forge_network:5173.
+ * No host port is bound — the port pool bottleneck is eliminated entirely.
+ * The number of concurrent previews is limited only by host RAM/CPU.
  *
- * Idle teardown: the preview container is automatically stopped after 10 minutes of inactivity.
- * "Inactive" means no SSE log-stream subscriber is connected (i.e. no browser tab has the
- * preview open) AND no file-sync occurred in the last 10 minutes. The timer is cancelled the
- * moment a subscriber connects and restarted when the last subscriber disconnects.
+ * Isolation model: one container per project (keyed by projectId UUID). Different
+ * users each own different projects → different containers → no overlap. Users
+ * sharing the same workspace project share one container (correct for collaboration).
  *
- * Each project preview runs in an isolated `node:20-alpine` container:
- *   • Container starts, runs `npm install` then `npm run dev`
- *   • Vite dev server listens on 0.0.0.0:5173 inside the container
- *   • Docker binds a host port (40000-40999) → container:5173
- *   • Browser accesses the preview at http://localhost:{port}/ directly (no proxy needed)
- *   • Express API (if full-stack) runs on :3001 inside the container; Vite proxies /api to it
+ * Idle teardown: the preview container is automatically stopped after 10 minutes of
+ * inactivity. The timer is cancelled when a browser tab opens the SSE log stream
+ * and restarted when the last tab closes. File syncs also reset the countdown.
  *
  * Files are injected via Docker's putArchive API (tar archive) so no host filesystem
- * sharing is required, and the API container can be fully isolated.
+ * sharing is required.
  */
 
 import Docker from 'dockerode'
@@ -38,7 +38,8 @@ export interface PreviewInstance {
   userId: string
   containerId: string
   containerName: string
-  hostPort: number
+  /** Subdomain URL the browser uses: http://{projectId}.{PREVIEW_DOMAIN}/ */
+  previewUrl: string
   status: PreviewStatus
   error?: string
   logs: string[]
@@ -54,20 +55,21 @@ export interface PreviewInstance {
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' })
 
-const PREVIEW_IMAGE  = 'node:20-alpine'
-const FLUTTER_IMAGE  = 'ghcr.io/cirruslabs/flutter:stable'
-const PORT_START = Number(process.env.PREVIEW_PORT_START ?? 40000)
-const PORT_END = Number(process.env.PREVIEW_PORT_END ?? 40999)
-const MEMORY_LIMIT   = 512 * 1024 * 1024       // 512 MB (Node.js projects)
-const FLUTTER_MEMORY = 2 * 1024 * 1024 * 1024  // 2 GB  (Flutter compilation)
-const CPU_LIMIT = 1_000_000_000                 // 1 vCPU (nanocpus)
+const PREVIEW_IMAGE   = 'node:20-alpine'
+const FLUTTER_IMAGE   = 'ghcr.io/cirruslabs/flutter:stable'
+const MEMORY_LIMIT    = 512 * 1024 * 1024       // 512 MB (Node.js projects)
+const FLUTTER_MEMORY  = 2 * 1024 * 1024 * 1024  // 2 GB  (Flutter compilation)
+const CPU_LIMIT       = 1_000_000_000            // 1 vCPU (nanocpus)
 /** Idle timeout: container is stopped 10 minutes after the last subscriber disconnects. */
-const IDLE_TTL_MS = 10 * 60 * 1000
+const IDLE_TTL_MS     = 10 * 60 * 1000
+/** Docker network shared with Traefik — containers must join this to be routable. */
+const TRAEFIK_NETWORK = process.env.TRAEFIK_NETWORK ?? 'forge_forge_network'
+/** Domain suffix for preview subdomains. On *.localhost all subdomains resolve to 127.0.0.1. */
+const PREVIEW_DOMAIN  = process.env.PREVIEW_DOMAIN ?? 'localhost'
 
 // ── In-memory state ───────────────────────────────────────────────────────────
 
 const instances = new Map<string, PreviewInstance>()
-const usedPorts = new Set<number>()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,14 +77,8 @@ function containerName(projectId: string): string {
   return `forge-preview-${projectId}`
 }
 
-function allocatePort(): number {
-  for (let p = PORT_START; p <= PORT_END; p++) {
-    if (!usedPorts.has(p)) {
-      usedPorts.add(p)
-      return p
-    }
-  }
-  throw new Error('No preview ports available (all 1000 slots in use)')
+function buildPreviewUrl(projectId: string): string {
+  return `http://${projectId}.${PREVIEW_DOMAIN}/`
 }
 
 function pushLog(instance: PreviewInstance, text: string) {
@@ -205,7 +201,7 @@ export async function initialize(): Promise<void> {
 }
 
 /** Start (or restart) a preview container for the given project. */
-export async function start(projectId: string, userId: string, db: DrizzleDB): Promise<number> {
+export async function start(projectId: string, userId: string, db: DrizzleDB): Promise<string> {
   // Stop any existing container first
   await stop(projectId)
 
@@ -217,8 +213,8 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
 
   if (!files.length) throw new Error('No files found for this project')
 
-  const port = allocatePort()
   const name = containerName(projectId)
+  const previewUrl = buildPreviewUrl(projectId)
 
   // Remove any orphaned container with same name
   try { await docker.getContainer(name).remove({ force: true }) } catch {}
@@ -228,7 +224,7 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
     userId,
     containerId: '',
     containerName: name,
-    hostPort: port,
+    previewUrl,
     status: 'starting',
     logs: [],
     subscribers: new Set(),
@@ -238,6 +234,26 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
   instances.set(projectId, instance)
 
   pushLog(instance, '⚙ Creating preview container…')
+
+  // Traefik labels — Traefik's Docker provider reads these at container-start time
+  // and immediately begins routing http://{projectId}.{PREVIEW_DOMAIN}/ to port 5173.
+  const traefikLabels = {
+    'traefik.enable': 'true',
+    [`traefik.http.routers.preview-${projectId}.rule`]: `Host(\`${projectId}.${PREVIEW_DOMAIN}\`)`,
+    [`traefik.http.routers.preview-${projectId}.entrypoints`]: 'web',
+    [`traefik.http.services.preview-${projectId}.loadbalancer.server.port`]: '5173',
+  }
+
+  const baseLabels = {
+    'forge.preview': 'true',
+    'forge.project': projectId,
+    'forge.user': userId,
+  }
+
+  // Networking — containers must be on the same Docker network as Traefik.
+  const networkingConfig = {
+    EndpointsConfig: { [TRAEFIK_NETWORK]: {} },
+  }
 
   try {
     // Detect Flutter project by presence of pubspec.yaml
@@ -261,12 +277,12 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
       Env: [],   // Flutter image ships its own environment
       ExposedPorts: { '5173/tcp': {} },
       HostConfig: {
-        PortBindings: { '5173/tcp': [{ HostPort: String(port) }] },
         Memory: FLUTTER_MEMORY,
         NanoCpus: CPU_LIMIT,
         AutoRemove: false,
       },
-      Labels: { 'forge.preview': 'true', 'forge.project': projectId, 'forge.user': userId },
+      Labels: { ...baseLabels, ...traefikLabels },
+      NetworkingConfig: networkingConfig,
     } : {
       name,
       Image: PREVIEW_IMAGE,
@@ -286,12 +302,12 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
       Env: ['NODE_ENV=development', 'FORCE_COLOR=0', 'PORT=5173'],
       ExposedPorts: { '5173/tcp': {} },
       HostConfig: {
-        PortBindings: { '5173/tcp': [{ HostPort: String(port) }] },
         Memory: MEMORY_LIMIT,
         NanoCpus: CPU_LIMIT,
         AutoRemove: false,
       },
-      Labels: { 'forge.preview': 'true', 'forge.project': projectId, 'forge.user': userId },
+      Labels: { ...baseLabels, ...traefikLabels },
+      NetworkingConfig: networkingConfig,
     })
 
     instance.containerId = container.id
@@ -388,13 +404,12 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
     // starts a preview but never opens / quickly closes the browser.
     scheduleIdleCleanup(instance)
 
-    return port
+    return previewUrl
   } catch (err) {
     const msg = (err as Error).message
     instance.status = 'error'
     instance.error = msg
     pushLog(instance, `❌ ${msg}`)
-    usedPorts.delete(port)
     instances.delete(projectId)
     throw err
   }
@@ -406,7 +421,6 @@ export async function stop(projectId: string): Promise<void> {
   if (!instance) return
 
   clearIdleTimer(instance)
-  usedPorts.delete(instance.hostPort)
   instances.delete(projectId)
   instance.status = 'stopped'
   pushLog(instance, '⏹ Preview stopped')

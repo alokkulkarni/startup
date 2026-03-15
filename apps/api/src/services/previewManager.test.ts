@@ -72,43 +72,74 @@ describe('previewManager', () => {
   // ── Container isolation ──────────────────────────────────────────────────
 
   describe('container isolation per project', () => {
-    it('allocates distinct ports for different projects', async () => {
-      const portA = await preview.start('project-aaa', 'user-001', mockDb)
-      const portB = await preview.start('project-bbb', 'user-002', mockDb)
+    it('assigns distinct subdomain URLs for different projects', async () => {
+      const urlA = await preview.start('project-aaa', 'user-001', mockDb)
+      const urlB = await preview.start('project-bbb', 'user-002', mockDb)
 
-      expect(portA).not.toBe(portB)
+      expect(urlA).not.toBe(urlB)
+      expect(urlA).toContain('project-aaa')
+      expect(urlB).toContain('project-bbb')
 
       await preview.stop('project-aaa')
       await preview.stop('project-bbb')
     })
 
-    it('uses project-scoped container names', async () => {
-      await preview.start('project-ccc', 'user-001', mockDb)
+    it('returns a subdomain preview URL', async () => {
+      const url = await preview.start('project-ccc', 'user-001', mockDb)
 
-      const createCall = mockDockerInstance.createContainer.mock.calls[0][0]
-      expect(createCall.name).toBe('forge-preview-project-ccc')
+      expect(url).toMatch(/^http:\/\/project-ccc\.\w+\/$/)
 
       await preview.stop('project-ccc')
     })
 
-    it('labels container with both projectId and userId', async () => {
-      await preview.start('project-ddd', 'user-xyz', mockDb)
+    it('uses project-scoped container names', async () => {
+      await preview.start('project-ddd', 'user-001', mockDb)
 
       const createCall = mockDockerInstance.createContainer.mock.calls[0][0]
-      expect(createCall.Labels['forge.project']).toBe('project-ddd')
-      expect(createCall.Labels['forge.user']).toBe('user-xyz')
+      expect(createCall.name).toBe('forge-preview-project-ddd')
 
       await preview.stop('project-ddd')
     })
 
-    it('stops old container before starting a new one for the same project', async () => {
-      await preview.start('project-eee', 'user-001', mockDb)
-      await preview.start('project-eee', 'user-001', mockDb) // restart
+    it('sets Traefik routing labels on the container', async () => {
+      await preview.start('project-eee', 'user-xyz', mockDb)
 
-      // getContainer called for the old container removal on second start
-      expect(mockDockerInstance.getContainer).toHaveBeenCalled()
+      const createCall = mockDockerInstance.createContainer.mock.calls[0][0]
+      expect(createCall.Labels['traefik.enable']).toBe('true')
+      expect(createCall.Labels['forge.project']).toBe('project-eee')
+      expect(createCall.Labels['forge.user']).toBe('user-xyz')
+      expect(createCall.Labels).toHaveProperty('traefik.http.routers.preview-project-eee.rule')
+      expect(createCall.Labels).toHaveProperty('traefik.http.services.preview-project-eee.loadbalancer.server.port', '5173')
 
       await preview.stop('project-eee')
+    })
+
+    it('connects container to the Traefik network', async () => {
+      await preview.start('project-fff', 'user-001', mockDb)
+
+      const createCall = mockDockerInstance.createContainer.mock.calls[0][0]
+      expect(createCall.NetworkingConfig).toBeDefined()
+      expect(createCall.NetworkingConfig.EndpointsConfig).toBeDefined()
+
+      await preview.stop('project-fff')
+    })
+
+    it('does NOT bind any host port (no PortBindings)', async () => {
+      await preview.start('project-ggg', 'user-001', mockDb)
+
+      const createCall = mockDockerInstance.createContainer.mock.calls[0][0]
+      expect(createCall.HostConfig?.PortBindings).toBeUndefined()
+
+      await preview.stop('project-ggg')
+    })
+
+    it('stops old container before starting a new one for the same project', async () => {
+      await preview.start('project-hhh', 'user-001', mockDb)
+      await preview.start('project-hhh', 'user-001', mockDb) // restart
+
+      expect(mockDockerInstance.getContainer).toHaveBeenCalled()
+
+      await preview.stop('project-hhh')
     })
   })
 
@@ -239,18 +270,26 @@ describe('previewManager', () => {
     })
   })
 
-  // ── Port recycling ───────────────────────────────────────────────────────
+  // ── No port exhaustion — unlimited concurrent containers ─────────────────
 
-  describe('port recycling', () => {
-    it('recycles port after stop so it can be reused', async () => {
-      const port1 = await preview.start('project-port-1', 'user-001', mockDb)
-      await preview.stop('project-port-1')
+  describe('no port exhaustion constraint', () => {
+    it('start() returns a string preview URL (not a port number)', async () => {
+      const result = await preview.start('project-url-1', 'user-001', mockDb)
 
-      const port2 = await preview.start('project-port-2', 'user-001', mockDb)
-      // port1 was freed — port2 should reuse it (first available slot)
-      expect(port2).toBe(port1)
+      expect(typeof result).toBe('string')
+      expect(result).toMatch(/^http:\/\//)
 
-      await preview.stop('project-port-2')
+      await preview.stop('project-url-1')
+    })
+
+    it('can start many containers without running out of ports', async () => {
+      const ids = Array.from({ length: 10 }, (_, i) => `project-many-${i}`)
+      const urls = await Promise.all(ids.map(id => preview.start(id, 'user-001', mockDb)))
+
+      // All URLs distinct
+      expect(new Set(urls).size).toBe(10)
+
+      await Promise.all(ids.map(id => preview.stop(id)))
     })
   })
 })

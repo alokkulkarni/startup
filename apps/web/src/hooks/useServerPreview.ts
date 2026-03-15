@@ -3,7 +3,8 @@
  * useServerPreview — replaces useWebContainer with server-side Docker preview.
  *
  * Each preview runs in a node:20-alpine Docker container on the server.
- * The browser connects to http://localhost:{port}/ directly — no WebContainer,
+ * Each preview runs in an isolated Docker container. Traefik routes
+ * http://{projectId}.localhost/ to the container — no host port binding needed.
  * no browser WASM, no memory exhaustion.
  *
  * Drop-in replacement for useWebContainer: same return interface (UseWebContainerReturn).
@@ -76,7 +77,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   const sseRef = useRef<EventSource | null>(null)
   const startingRef = useRef(false)
   const startFailedRef = useRef(false)  // prevents auto-restart loop when API itself errors
-  const portRef = useRef<number | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
 
   // ── Log helpers ──────────────────────────────────────────────────────────────
   const logBufRef = useRef<LogEntry[]>([])
@@ -184,16 +185,16 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       setProgress(10)
       addLog('system', '⚙ Starting preview container…')
 
-      const data = await apiPost<{ port: number; previewUrl: string }>(
+      const data = await apiPost<{ port: number | null; previewUrl: string }>(
         `/v1/projects/${projectId}/preview/start`
       )
-      portRef.current = data.port
+      previewUrlRef.current = data.previewUrl
 
       // Timestamp-bust the URL on each start so the iframe actually reloads
       setPreviewUrl(`${data.previewUrl}?t=${Date.now()}`)
       setStatus('installing')
       setProgress(30)
-      addLog('system', `📦 Container started on port ${data.port} — running npm install…`)
+      addLog('system', `📦 Container started — running npm install…`)
 
       connectSSE(projectId)
     } catch (err) {
@@ -228,9 +229,9 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     // server to re-upload them to the running container.
     try {
       await apiPost(`/v1/projects/${projectId}/preview/sync`)
-      if (portRef.current) {
+      if (previewUrlRef.current) {
         // Refresh timestamp so iframe picks up changes
-        setPreviewUrl(`http://localhost:${portRef.current}/?t=${Date.now()}`)
+        setPreviewUrl(`${previewUrlRef.current}?t=${Date.now()}`)
       }
     } catch (err) {
       addLog('stderr', `⚠ Sync failed: ${(err as Error).message}`)

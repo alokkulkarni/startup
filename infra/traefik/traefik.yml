@@ -19,6 +19,16 @@ providers:
   file:
     filename: /etc/traefik/routes.yml
     watch: false
+  docker:
+    # Connect via socket proxy (avoids macOS Docker Desktop socket issues and
+    # limits Traefik to only CONTAINERS+NETWORKS API access — not full Docker).
+    endpoint: "tcp://socket-proxy:2375"
+    # Dynamically route to preview containers by their forge.preview label.
+    # Only containers with traefik.enable=true are exposed — all other forge
+    # services (api, web, postgres, etc.) are unaffected.
+    exposedByDefault: false
+    network: forge_forge_network
+    watch: true
 
 metrics:
   prometheus:

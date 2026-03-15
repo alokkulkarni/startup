@@ -28,8 +28,8 @@ export async function previewRoutes(app: FastifyInstance) {
       if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
 
       try {
-        const port = await previewManager.start(id, user.id, app.db)
-        return reply.send({ success: true, data: { port, previewUrl: `http://localhost:${port}/` } })
+        const previewUrl = await previewManager.start(id, user.id, app.db)
+        return reply.send({ success: true, data: { port: null, previewUrl } })
       } catch (err) {
         const msg = (err as Error).message
         app.log.error({ err }, '[preview] Failed to start preview container')
@@ -66,14 +66,14 @@ export async function previewRoutes(app: FastifyInstance) {
       if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
 
       const instance = previewManager.getInstance(id)
-      if (!instance) return reply.send({ success: true, data: { status: 'stopped', port: null } })
+      if (!instance) return reply.send({ success: true, data: { status: 'stopped', port: null, previewUrl: null } })
 
       return reply.send({
         success: true,
         data: {
           status: instance.status,
-          port: instance.hostPort,
-          previewUrl: `http://localhost:${instance.hostPort}/`,
+          port: null,
+          previewUrl: instance.previewUrl,
           error: instance.error ?? null,
         },
       })
