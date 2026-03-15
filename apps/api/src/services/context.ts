@@ -391,6 +391,7 @@ export default function App() {
 8. Use relative file paths (src/App.tsx not /src/App.tsx)
 9. For React projects always include: package.json, vite.config.ts, index.html, tailwind.config.js, src/main.tsx, src/index.css, src/App.tsx
    For full-stack projects also include: dev.mjs (process manager), server.js (Express), .env.example, tsconfig.json
+   ALL projects MUST also include: .gitignore, README.md, LICENSE, CONTRIBUTING.md (see rule 29)
    Full-stack package.json "dependencies" MUST include: "express", "cors", and EVERY other package imported in server.js.
    package.json "devDependencies" MUST ALWAYS include "tailwindcss": "^3.4.1", "autoprefixer": "^10.4.19", "postcss": "^8.4.38"
    whenever tailwind.config.js or postcss.config.js are generated (which is ALWAYS for React apps).
@@ -583,6 +584,133 @@ This distinction unlocks every use-case the user asks for. Use it.
     c) Output ONLY the broken file(s) with corrected content — do NOT touch working files
     d) Use action="create" with the COMPLETE corrected file content (no diffs needed)
     e) Verify: every import in the fixed file resolves, every new dep is in package.json
+
+29. ⚠️  STANDARD PROJECT FILES — generate ALL of the following in every new project, no exceptions:
+
+    ┌─ .gitignore ──────────────────────────────────────────────────────────────
+    │  Comprehensive for the chosen framework. ALWAYS include:
+    │    node_modules/   dist/   .env   .DS_Store   *.local   coverage/
+    │  Framework extras:
+    │    .next/           (Next.js)
+    │    .svelte-kit/     (Svelte)
+    │    .nuxt/ .output/  (Nuxt/Vue)
+    │    *.env.local  *.env.*.local  .env.development.local
+    └───────────────────────────────────────────────────────────────────────────
+
+    ┌─ README.md ───────────────────────────────────────────────────────────────
+    │  Must include ALL of these sections in order:
+    │  # <Project Name>
+    │  > One-paragraph description of what the app does and who it is for.
+    │
+    │  ## ✨ Features
+    │  - Bullet list of key features
+    │
+    │  ## 🛠 Tech Stack
+    │  - Framework, language, key libraries with versions
+    │
+    │  ## 📋 Prerequisites
+    │  - Node.js >= 18, npm/pnpm/yarn, any external accounts needed
+    │
+    │  ## 🚀 Getting Started
+    │  \`\`\`bash
+    │  git clone <repo-url>
+    │  cd <project>
+    │  npm install
+    │  cp .env.example .env   # fill in your values
+    │  npm run dev
+    │  \`\`\`
+    │
+    │  ## 🔑 Environment Variables
+    │  | Variable | Description | Example |
+    │  | VITE_API_KEY | Your API key | abc123 |
+    │  (mirror every variable from .env.example)
+    │
+    │  ## 📁 Project Structure
+    │  \`\`\`
+    │  src/
+    │    components/   UI components
+    │    pages/        Route-level pages
+    │    ...
+    │  server.js       Express API server (full-stack only)
+    │  api/            Vercel serverless functions (full-stack only)
+    │  \`\`\`
+    │
+    │  ## 🌐 API Endpoints (full-stack only)
+    │  | Method | Path | Description |
+    │  | GET | /api/data | Fetch data |
+    │
+    │  ## 🏗 Building for Production
+    │  \`\`\`bash
+    │  npm run build   # outputs to dist/
+    │  \`\`\`
+    │
+    │  ## ☁️  Deployment
+    │  One-click deploy to Vercel:
+    │  [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+    │  Set env vars in Vercel project settings matching .env.example.
+    │
+    │  ## 📄 License
+    │  MIT — see [LICENSE](LICENSE)
+    └───────────────────────────────────────────────────────────────────────────
+
+    ┌─ LICENSE ─────────────────────────────────────────────────────────────────
+    │  Full MIT License text. Use this EXACT template:
+    │
+    │  MIT License
+    │
+    │  Copyright (c) 2025 <Project Name> Contributors
+    │
+    │  Permission is hereby granted, free of charge, to any person obtaining a
+    │  copy of this software and associated documentation files (the "Software"),
+    │  to deal in the Software without restriction, including without limitation
+    │  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    │  and/or sell copies of the Software, and to permit persons to whom the
+    │  Software is furnished to do so, subject to the following conditions:
+    │
+    │  The above copyright notice and this permission notice shall be included in
+    │  all copies or substantial portions of the Software.
+    │
+    │  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    │  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    │  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+    │  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    │  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    │  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    │  DEALINGS IN THE SOFTWARE.
+    └───────────────────────────────────────────────────────────────────────────
+
+    ┌─ CONTRIBUTING.md ─────────────────────────────────────────────────────────
+    │  # Contributing
+    │  We welcome contributions! Please follow these steps:
+    │
+    │  1. Fork the repo and create a branch: \`git checkout -b feature/your-feature\`
+    │  2. Make your changes and commit using Conventional Commits:
+    │     \`feat:\`, \`fix:\`, \`docs:\`, \`chore:\`, \`refactor:\`
+    │  3. Push and open a Pull Request against \`main\`
+    │  4. Ensure all checks pass before requesting review
+    │
+    │  ## Code Style
+    │  - TypeScript strict mode; no \`any\`
+    │  - ESLint + Prettier (run \`npm run lint\` before committing)
+    │
+    │  ## Reporting Issues
+    │  Open a GitHub Issue with: steps to reproduce, expected vs actual behaviour,
+    │  browser/Node version, and any relevant logs.
+    └───────────────────────────────────────────────────────────────────────────
+
+    ┌─ .env / .env.example ─────────────────────────────────────────────────────
+    │  .env.example — ALWAYS generate; lists every variable with a description
+    │  and safe placeholder value. NO real secrets. Example:
+    │    # Required: Your API key from https://example.com/settings
+    │    VITE_API_KEY=your_api_key_here
+    │    # Optional: Override the default API base URL
+    │    VITE_API_BASE_URL=https://api.example.com
+    │
+    │  .env — generate ONLY when the app requires secrets/API keys to run.
+    │  Use the same keys as .env.example but with PLACEHOLDER values only.
+    │  Real secrets are NEVER hardcoded — the user fills them in.
+    │  .env MUST be listed in .gitignore.
+    └───────────────────────────────────────────────────────────────────────────
 
 ## Current project files
 `
