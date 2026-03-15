@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { initAuth } from '@/lib/auth'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useSubscription } from '@/hooks/useSubscription'
 
 interface UserProfile {
   id: string
@@ -25,6 +26,7 @@ const planBadgeColors: Record<string, string> = {
 }
 
 export default function ProfilePage() {
+  const router = useRouter()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -34,17 +36,16 @@ export default function ProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const { subscription, loading: subLoading, openPortal } = useSubscription()
+
   useEffect(() => {
-    initAuth().then(({ authenticated }) => {
-      if (!authenticated) { window.location.href = '/login'; return }
-      api.get<UserProfile>('/v1/users/me').then(res => {
-        if (res.data) {
-          setUser(res.data)
-          setName(res.data.name)
-        }
-        setLoading(false)
-      }).catch(() => setLoading(false))
-    })
+    api.get<UserProfile>('/v1/users/me').then(res => {
+      if (res.data) {
+        setUser(res.data)
+        setName(res.data.name)
+      }
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
   const handleSave = async (e: React.FormEvent) => {
@@ -173,12 +174,41 @@ export default function ProfilePage() {
           <h2 className="text-base font-semibold">Subscription</h2>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium capitalize">{user?.plan} plan</p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="font-medium capitalize">
+                  {subscription?.tier ?? user?.plan ?? 'free'} plan
+                </p>
+                <span className={cn('text-xs px-2 py-0.5 rounded-full font-semibold', planBadgeColors[subscription?.tier ?? user?.plan ?? 'free'] ?? planBadgeColors.free)}>
+                  {(subscription?.tier ?? user?.plan ?? 'free').toUpperCase()}
+                </span>
+              </div>
               <p className="text-sm text-gray-400">
-                {user?.plan === 'free' ? '50 AI messages/day · 3 projects' : 'Unlimited access'}
+                {subscription
+                  ? `${subscription.limits.aiRequestsPerDay} AI messages/day · ${subscription.limits.maxProjects === 999 ? 'Unlimited' : subscription.limits.maxProjects} projects`
+                  : '50 AI messages/day · 3 projects'}
               </p>
+              {subscription?.periodEnd && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {subscription.cancelAtPeriodEnd ? 'Cancels' : 'Renews'} {new Date(subscription.periodEnd).toLocaleDateString()}
+                </p>
+              )}
             </div>
-            <Button variant="secondary">Upgrade plan</Button>
+            <div className="flex flex-col gap-2 items-end">
+              {(subscription?.tier ?? 'free') === 'free' ? (
+                <Button variant="secondary" onClick={() => router.push('/pricing')}>
+                  Upgrade plan
+                </Button>
+              ) : (
+                <>
+                  <Button variant="secondary" onClick={() => router.push('/pricing')}>
+                    Change plan
+                  </Button>
+                  <Button variant="outline" loading={subLoading} onClick={openPortal} className="text-xs">
+                    Manage billing
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </section>
 
