@@ -319,7 +319,7 @@ export async function githubRoutes(app: FastifyInstance) {
       if (!member) return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN' } });
 
       if (!project.githubRepoOwner || !project.githubRepoName) {
-        return reply.send({ success: true, data: { status: 'not_linked' } });
+        return reply.send({ success: true, data: { status: 'no_repo', aheadBy: 0, behindBy: 0, latestSha: null, repoUrl: null } });
       }
 
       const syncStatus = await getSyncStatus(

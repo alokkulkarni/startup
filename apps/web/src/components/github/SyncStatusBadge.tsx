@@ -63,5 +63,10 @@ function getBadge(syncStatus: SyncStatus): { label: string; className: string } 
         label: 'No repo',
         className: 'bg-gray-700/50 text-gray-500 border border-gray-700',
       }
+    default:
+      return {
+        label: 'Unknown',
+        className: 'bg-gray-700/50 text-gray-500 border border-gray-700',
+      }
   }
 }
