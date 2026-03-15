@@ -1,0 +1,10 @@
+{
+  "default": {
+    "paths": ["features/**/*.feature"],
+    "require": ["features/step-definitions/**/*.ts"],
+    "requireModule": ["tsx/esm"],
+    "format": ["progress-bar", "json:reports/cucumber-report.json"],
+    "formatOptions": { "snippetInterface": "async-await" },
+    "publishQuiet": true
+  }
+}
