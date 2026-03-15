@@ -495,6 +495,7 @@ export default function ProjectPage() {
             onClearLogs={clearLogs}
             showConsole={showConsole}
             onToggleConsole={() => setShowConsole(v => !v)}
+            framework={project?.framework}
           />
         </div>
       </div>

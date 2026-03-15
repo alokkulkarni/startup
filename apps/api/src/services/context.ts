@@ -744,7 +744,7 @@ export async function buildSystemPrompt(
     vue:     'vite.config MUST have `server: { host: true, port: 5173 }`. Dev script: `vite`. Use @vitejs/plugin-vue.',
     svelte:  'vite.config MUST use vitePreprocess() for TypeScript support: `import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte"` and `plugins: [svelte({ preprocess: vitePreprocess() })]`. Also `server: { host: true, port: 5173 }`. Dev script: `vite dev`.',
     nextjs:  'Dev script MUST be `"next dev -H 0.0.0.0 -p 5173"`. Never use plain `next dev`.',
-    node:    'Server MUST listen on `host: "0.0.0.0", port: Number(process.env.PORT ?? 5173)`. No Vite needed.',
+    node:    'Server MUST listen on `host: "0.0.0.0", port: Number(process.env.PORT ?? 5173)`. No Vite needed. ALWAYS register @fastify/cors (origin: true), @fastify/swagger (openapi spec at /openapi.json), and @fastify/swagger-ui (Swagger UI at /docs). Add schema tags to ALL routes so they appear in the OpenAPI spec. This enables the built-in API Explorer preview.',
   }
   const fwHint = meta ? (frameworkHints[meta.framework] ?? '') : ''
 

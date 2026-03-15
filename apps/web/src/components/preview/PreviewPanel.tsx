@@ -6,6 +6,7 @@ import { ViewportToggle, VIEWPORT_WIDTHS } from './ViewportToggle'
 import type { Viewport } from './ViewportToggle'
 import { ConsolePanel } from './ConsolePanel'
 import { ErrorOverlay } from './ErrorOverlay'
+import { ApiExplorerPanel } from './ApiExplorerPanel'
 
 interface PreviewPanelProps {
   status: WCStatus
@@ -21,6 +22,7 @@ interface PreviewPanelProps {
   onClearLogs: () => void
   showConsole: boolean
   onToggleConsole: () => void
+  framework?: string | null
 }
 
 const STATUS_MESSAGES: Partial<Record<WCStatus, string>> = {
@@ -43,7 +45,9 @@ export function PreviewPanel({
   onClearLogs,
   showConsole,
   onToggleConsole,
+  framework,
 }: PreviewPanelProps) {
+  const isApiProject = framework === 'node'
   // Track whether the user has dismissed the current error session.
   // Only reset when the preview restarts (status goes idle) — NOT on every new error message,
   // because repeated proxy errors have slightly different messages each time.
@@ -77,7 +81,12 @@ export function PreviewPanel({
     <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
       {/* Header */}
       <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900">
-        <ViewportToggle current={viewport} onChange={onViewportChange} />
+        {!isApiProject && <ViewportToggle current={viewport} onChange={onViewportChange} />}
+        {isApiProject && (
+          <span className="text-xs font-medium text-indigo-400 px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
+            API Explorer
+          </span>
+        )}
         <div className="flex-1" />
 
         {/* Stop */}
@@ -154,8 +163,13 @@ export function PreviewPanel({
           </div>
         )}
 
-        {/* iframe — rendered when ready */}
-        {status === 'ready' && previewUrl && (
+        {/* API Explorer — rendered when ready and project is a node/API project */}
+        {status === 'ready' && previewUrl && isApiProject && (
+          <ApiExplorerPanel baseUrl={previewUrl} />
+        )}
+
+        {/* iframe — rendered when ready for UI frameworks */}
+        {status === 'ready' && previewUrl && !isApiProject && (
           <div className="w-full h-full flex justify-center overflow-auto bg-gray-200">
             <iframe
               src={previewUrl}

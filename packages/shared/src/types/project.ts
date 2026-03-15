@@ -38,7 +38,7 @@ export interface Deployment {
   completedAt: string | null
 }
 
-export type ProjectFramework = 'react' | 'nextjs' | 'vue' | 'svelte' | 'vanilla'
+export type ProjectFramework = 'react' | 'nextjs' | 'vue' | 'svelte' | 'vanilla' | 'node'
 export type ProjectStatus = 'active' | 'archived' | 'deleted'
 export type DeployProvider = 'vercel' | 'netlify' | 'cloudflare-pages'
 export type DeployStatus = 'pending' | 'building' | 'deployed' | 'failed' | 'cancelled'

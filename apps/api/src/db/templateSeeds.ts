@@ -1211,20 +1211,49 @@ export default defineConfig({ plugins: [react()], server: { host: true, port: 51
           version: '1.0.0',
           type: 'module',
           scripts: { dev: 'tsx watch src/server.ts', build: 'tsc', start: 'node dist/server.js' },
-          dependencies: { fastify: '^4.28.0', zod: '^3.23.0', 'zod-to-json-schema': '^3.23.0' },
+          dependencies: {
+            fastify: '^4.28.0',
+            '@fastify/cors': '^9.0.0',
+            '@fastify/swagger': '^8.14.0',
+            '@fastify/swagger-ui': '^4.0.0',
+            zod: '^3.23.0',
+            'zod-to-json-schema': '^3.23.0',
+          },
           devDependencies: { typescript: '^5.5.0', tsx: '^4.16.0', '@types/node': '^20.0.0' },
         }, null, 2),
       },
       {
         path: 'src/server.ts',
         content: `import Fastify from 'fastify'
+import cors from '@fastify/cors'
+import swagger from '@fastify/swagger'
+import swaggerUi from '@fastify/swagger-ui'
 import { itemRoutes } from './routes/items.js'
 
 const app = Fastify({ logger: { level: 'info' } })
 
+// CORS — allow all origins in development
+await app.register(cors, { origin: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] })
+
+// OpenAPI spec + Swagger UI
+await app.register(swagger, {
+  openapi: {
+    info: { title: 'Fastify REST API', description: 'CRUD API with Zod validation', version: '1.0.0' },
+    tags: [{ name: 'items', description: 'Item management' }, { name: 'system', description: 'System endpoints' }],
+  },
+})
+await app.register(swaggerUi, { routePrefix: '/docs' })
+
+// Routes
 await app.register(itemRoutes, { prefix: '/api/v1' })
 
-app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+app.get('/health', {
+  schema: {
+    tags: ['system'],
+    summary: 'Health check',
+    response: { 200: { type: 'object', properties: { status: { type: 'string' }, timestamp: { type: 'string' } } } },
+  },
+}, () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
 app.setErrorHandler((error, _request, reply) => {
   app.log.error(error)
@@ -1236,7 +1265,8 @@ app.setErrorHandler((error, _request, reply) => {
 
 const port = Number(process.env.PORT ?? 5173)
 await app.listen({ port, host: '0.0.0.0' })
-app.log.info(\`Server running on http://localhost:\${port}\`)`,
+app.log.info(\`Server listening on http://0.0.0.0:\${port}\`)
+app.log.info(\`Swagger UI: http://localhost:\${port}/docs\`)`,
       },
       {
         path: 'src/routes/items.ts',
@@ -1258,19 +1288,28 @@ const db = new Map<string, Item>()
 
 export async function itemRoutes(app: FastifyInstance) {
   // GET /items
-  app.get('/items', async () => {
+  app.get('/items', {
+    schema: { tags: ['items'], summary: 'List all items', response: { 200: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'array' } } } } },
+  }, async () => {
     return { success: true, data: Array.from(db.values()) }
   })
 
   // GET /items/:id
-  app.get<{ Params: { id: string } }>('/items/:id', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/items/:id', {
+    schema: { tags: ['items'], summary: 'Get item by ID', params: { type: 'object', properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
     const item = db.get(request.params.id)
     if (!item) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Item not found' } })
     return { success: true, data: item }
   })
 
   // POST /items
-  app.post('/items', async (request, reply) => {
+  app.post('/items', {
+    schema: {
+      tags: ['items'], summary: 'Create a new item',
+      body: { type: 'object', required: ['name', 'price'], properties: { name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' } } },
+    },
+  }, async (request, reply) => {
     const result = CreateItemSchema.safeParse(request.body)
     if (!result.success) return reply.code(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: result.error.message } })
     const item: Item = { id: randomUUID(), ...result.data, createdAt: new Date().toISOString() }
@@ -1279,7 +1318,13 @@ export async function itemRoutes(app: FastifyInstance) {
   })
 
   // PATCH /items/:id
-  app.patch<{ Params: { id: string } }>('/items/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/items/:id', {
+    schema: {
+      tags: ['items'], summary: 'Update an item',
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+      body: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, price: { type: 'number' } } },
+    },
+  }, async (request, reply) => {
     const item = db.get(request.params.id)
     if (!item) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Item not found' } })
     const result = UpdateItemSchema.safeParse(request.body)
@@ -1290,7 +1335,9 @@ export async function itemRoutes(app: FastifyInstance) {
   })
 
   // DELETE /items/:id
-  app.delete<{ Params: { id: string } }>('/items/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/items/:id', {
+    schema: { tags: ['items'], summary: 'Delete an item', params: { type: 'object', properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
     if (!db.has(request.params.id)) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Item not found' } })
     db.delete(request.params.id)
     return { success: true, data: { message: 'Deleted' } }
