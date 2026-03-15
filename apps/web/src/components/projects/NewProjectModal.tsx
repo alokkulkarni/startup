@@ -19,6 +19,8 @@ const FRAMEWORKS = [
   { id: 'vue',     label: 'Vue',      icon: '💚', desc: 'Vite + Vue 3 + TypeScript' },
   { id: 'svelte',  label: 'Svelte',   icon: '🔥', desc: 'Vite + Svelte 4' },
   { id: 'vanilla', label: 'Vanilla',  icon: '🟡', desc: 'Vite + TypeScript' },
+  { id: 'angular', label: 'Angular',  icon: '🅰',  desc: 'Angular 18 + TypeScript' },
+  { id: 'node',    label: 'Node.js',  icon: '🟢', desc: 'Fastify + Swagger REST API' },
 ]
 
 type Tab = 'template' | 'blank'

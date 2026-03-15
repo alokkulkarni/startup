@@ -18,10 +18,12 @@ const frameworkColors: Record<string, string> = {
   vue:     'text-green-400 bg-green-950/60 border-green-800',
   svelte:  'text-orange-400 bg-orange-950/60 border-orange-800',
   vanilla: 'text-yellow-400 bg-yellow-950/60 border-yellow-800',
+  node:    'text-emerald-400 bg-emerald-950/60 border-emerald-800',
+  angular: 'text-red-400 bg-red-950/60 border-red-800',
 }
 
 const frameworkIcons: Record<string, string> = {
-  react: '⚛', nextjs: '▲', vue: '💚', svelte: '🔥', vanilla: '🟡',
+  react: '⚛', nextjs: '▲', vue: '💚', svelte: '🔥', vanilla: '🟡', node: '🟢', angular: '🅰',
 }
 
 function timeAgo(date: string) {

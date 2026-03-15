@@ -1834,4 +1834,1933 @@ export default defineConfig({
       },
     ],
   },
+
+  // ── 11. Angular Starter ─────────────────────────────────────────────────────
+  {
+    name: 'Angular Starter',
+    slug: 'angular-starter',
+    description: 'Clean Angular 18 starter with standalone components, routing, lazy loading, reactive services, and a polished dark-mode UI.',
+    category: 'starter',
+    framework: 'angular',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'package.json',
+        content: JSON.stringify({
+          name: 'angular-starter',
+          version: '1.0.0',
+          private: true,
+          scripts: {
+            ng: 'ng',
+            dev: 'ng serve --host 0.0.0.0 --port 5173',
+            start: 'ng serve',
+            build: 'ng build',
+            watch: 'ng build --watch --configuration development',
+          },
+          dependencies: {
+            '@angular/animations': '^18.0.0',
+            '@angular/common': '^18.0.0',
+            '@angular/compiler': '^18.0.0',
+            '@angular/core': '^18.0.0',
+            '@angular/forms': '^18.0.0',
+            '@angular/platform-browser': '^18.0.0',
+            '@angular/platform-browser-dynamic': '^18.0.0',
+            '@angular/router': '^18.0.0',
+            'rxjs': '~7.8.0',
+            'tslib': '^2.3.0',
+            'zone.js': '~0.14.0',
+          },
+          devDependencies: {
+            '@angular-devkit/build-angular': '^18.0.0',
+            '@angular/cli': '^18.0.0',
+            '@angular/compiler-cli': '^18.0.0',
+            'typescript': '~5.4.0',
+          },
+        }, null, 2),
+      },
+      {
+        path: 'angular.json',
+        content: JSON.stringify({
+          $schema: './node_modules/@angular/cli/lib/config/schema.json',
+          version: 1,
+          newProjectRoot: 'projects',
+          projects: {
+            app: {
+              projectType: 'application',
+              schematics: {
+                '@schematics/angular:component': { standalone: true, style: 'css', skipTests: true },
+                '@schematics/angular:service': { skipTests: true },
+              },
+              root: '',
+              sourceRoot: 'src',
+              prefix: 'app',
+              architect: {
+                build: {
+                  builder: '@angular-devkit/build-angular:application',
+                  options: {
+                    outputPath: 'dist/app',
+                    index: 'src/index.html',
+                    browser: 'src/main.ts',
+                    polyfills: ['zone.js'],
+                    tsConfig: 'tsconfig.app.json',
+                    assets: [{ glob: '**/*', input: 'public' }],
+                    styles: ['src/styles.css'],
+                    scripts: [],
+                  },
+                  configurations: {
+                    production: {
+                      budgets: [
+                        { type: 'initial', maximumWarning: '500kB', maximumError: '1MB' },
+                        { type: 'anyComponentStyle', maximumWarning: '2kB', maximumError: '4kB' },
+                      ],
+                      outputHashing: 'all',
+                    },
+                    development: { optimization: false, extractLicenses: false, sourceMap: true },
+                  },
+                  defaultConfiguration: 'production',
+                },
+                serve: {
+                  builder: '@angular-devkit/build-angular:dev-server',
+                  options: { host: '0.0.0.0', port: 5173 },
+                  configurations: {
+                    production: { buildTarget: 'app:build:production' },
+                    development: { buildTarget: 'app:build:development' },
+                  },
+                  defaultConfiguration: 'development',
+                },
+                'extract-i18n': { builder: '@angular-devkit/build-angular:extract-i18n' },
+              },
+            },
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compileOnSave: false,
+          compilerOptions: {
+            outDir: './dist/out-tsc',
+            strict: true,
+            noImplicitOverride: true,
+            noPropertyAccessFromIndexSignature: true,
+            noImplicitReturns: true,
+            noFallthroughCasesInSwitch: true,
+            skipLibCheck: true,
+            esModuleInterop: true,
+            sourceMap: true,
+            declaration: false,
+            experimentalDecorators: true,
+            moduleResolution: 'bundler',
+            importHelpers: true,
+            target: 'ES2022',
+            module: 'ES2022',
+            useDefineForClassFields: false,
+            lib: ['ES2022', 'dom'],
+          },
+          angularCompilerOptions: {
+            enableI18nLegacyMessageIdFormat: false,
+            strictInjectionParameters: true,
+            strictInputAccessModifiers: true,
+            strictTemplates: true,
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.app.json',
+        content: JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: { outDir: './out-tsc/app', types: [] },
+          files: ['src/main.ts'],
+          include: ['src/**/*.d.ts'],
+        }, null, 2),
+      },
+      {
+        path: 'src/index.html',
+        content: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Angular Starter</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>`,
+      },
+      {
+        path: 'src/main.ts',
+        content: `import { bootstrapApplication } from '@angular/platform-browser'
+import { appConfig } from './app/app.config'
+import { AppComponent } from './app/app.component'
+
+bootstrapApplication(AppComponent, appConfig).catch(err => console.error(err))`,
+      },
+      {
+        path: 'src/styles.css',
+        content: `*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface2: #16213e;
+  --border: #2a2a4a;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --accent: #818cf8;
+  --accent-hover: #6366f1;
+  --accent-dim: #818cf81a;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --radius: 12px;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }`,
+      },
+      {
+        path: 'src/app/app.config.ts',
+        content: `import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core'
+import { provideRouter, withViewTransitions } from '@angular/router'
+import { provideHttpClient } from '@angular/common/http'
+import { routes } from './app.routes'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes, withViewTransitions()),
+    provideHttpClient(),
+  ],
+}`,
+      },
+      {
+        path: 'src/app/app.routes.ts',
+        content: `import { Routes } from '@angular/router'
+
+export const routes: Routes = [
+  {
+    path: '',
+    loadComponent: () => import('./pages/home/home.component').then(m => m.HomeComponent),
+  },
+  {
+    path: 'features',
+    loadComponent: () => import('./pages/features/features.component').then(m => m.FeaturesComponent),
+  },
+  {
+    path: 'counter',
+    loadComponent: () => import('./pages/counter/counter.component').then(m => m.CounterComponent),
+  },
+  { path: '**', redirectTo: '' },
+]`,
+      },
+      {
+        path: 'src/app/app.component.ts',
+        content: `import { Component } from '@angular/core'
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router'
+import { VERSION } from '@angular/core'
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  template: \`
+    <nav class="navbar">
+      <div class="nav-brand">
+        <span class="logo">⚡</span>
+        <span>Angular Starter</span>
+      </div>
+      <ul class="nav-links">
+        <li><a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Home</a></li>
+        <li><a routerLink="/features" routerLinkActive="active">Features</a></li>
+        <li><a routerLink="/counter" routerLinkActive="active">Counter</a></li>
+      </ul>
+      <span class="version-badge">v{{ version }}</span>
+    </nav>
+    <main class="main-content">
+      <router-outlet />
+    </main>
+    <footer class="site-footer">
+      <p>Built with <strong>Angular {{ version }}</strong> · Standalone Components · {{ year }}</p>
+    </footer>
+  \`,
+  styles: [\`
+    .navbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+    }
+    .logo { font-size: 1.4rem; }
+    .nav-links {
+      display: flex;
+      list-style: none;
+      gap: 0.25rem;
+      flex: 1;
+    }
+    .nav-links a {
+      padding: 0.4rem 0.9rem;
+      border-radius: 8px;
+      color: var(--text-muted);
+      transition: all 0.15s;
+      font-size: 0.9rem;
+    }
+    .nav-links a:hover, .nav-links a.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .version-badge {
+      font-size: 0.75rem;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      margin-left: auto;
+    }
+    .main-content { min-height: calc(100vh - 120px); }
+    .site-footer {
+      text-align: center;
+      padding: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .site-footer strong { color: var(--accent); }
+  \`],
+})
+export class AppComponent {
+  version = VERSION.major
+  year = new Date().getFullYear()
+}`,
+      },
+      {
+        path: 'src/app/pages/home/home.component.ts',
+        content: `import { Component } from '@angular/core'
+import { RouterLink } from '@angular/router'
+
+@Component({
+  selector: 'app-home',
+  standalone: true,
+  imports: [RouterLink],
+  template: \`
+    <div class="home">
+      <section class="hero">
+        <div class="hero-badge">⚡ Angular 18 Starter</div>
+        <h1>Build faster with <span class="highlight">Angular</span></h1>
+        <p>A modern Angular starter with standalone components, lazy-loaded routes, reactive services, and a beautiful dark-mode UI ready to go.</p>
+        <div class="hero-actions">
+          <a routerLink="/features" class="btn btn-primary">Explore Features</a>
+          <a routerLink="/counter" class="btn btn-ghost">Try Counter →</a>
+        </div>
+      </section>
+
+      <section class="cards">
+        <div class="card" *ngFor="let item of highlights">
+          <span class="card-icon">{{ item.icon }}</span>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.desc }}</p>
+        </div>
+      </section>
+    </div>
+  \`,
+  styles: [\`
+    .home { padding: 0 2rem 4rem; max-width: 1100px; margin: 0 auto; }
+    .hero { text-align: center; padding: 5rem 1rem 4rem; }
+    .hero-badge {
+      display: inline-block;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 0.3rem 1rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 1.5rem;
+    }
+    h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 800; margin-bottom: 1rem; line-height: 1.2; }
+    .highlight { color: var(--accent); }
+    .hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 560px; margin: 0 auto 2.5rem; }
+    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      padding: 0.75rem 1.75rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); color: #fff; transform: translateY(-1px); }
+    .btn-ghost { color: var(--text); background: var(--surface); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card-icon { font-size: 2rem; display: block; margin-bottom: 0.75rem; }
+    .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .card p { color: var(--text-muted); font-size: 0.875rem; }
+  \`],
+})
+export class HomeComponent {
+  highlights = [
+    { icon: '🧩', title: 'Standalone Components', desc: 'Modern Angular architecture — no NgModule boilerplate needed.' },
+    { icon: '🚦', title: 'Lazy Routing', desc: 'Routes load on demand with loadComponent() for smaller initial bundles.' },
+    { icon: '🔄', title: 'Reactive Services', desc: 'RxJS BehaviorSubjects and Observables for state management.' },
+    { icon: '🎨', title: 'Dark Mode UI', desc: 'CSS custom properties for easy theming across the whole app.' },
+    { icon: '📦', title: 'Typed & Strict', desc: 'Full TypeScript with strict mode and Angular compiler checks.' },
+    { icon: '⚡', title: 'esbuild Fast', desc: 'Angular 17+ application builder with near-instant rebuilds.' },
+  ]
+}`,
+      },
+      {
+        path: 'src/app/pages/features/features.component.ts',
+        content: `import { Component } from '@angular/core'
+import { CommonModule } from '@angular/common'
+
+interface Feature {
+  icon: string
+  name: string
+  status: 'stable' | 'new' | 'experimental'
+  desc: string
+}
+
+@Component({
+  selector: 'app-features',
+  standalone: true,
+  imports: [CommonModule],
+  template: \`
+    <div class="features-page">
+      <header class="page-header">
+        <h2>Angular 18 Features</h2>
+        <p>Key features and APIs available in this starter</p>
+      </header>
+
+      <div class="filter-row">
+        <button
+          *ngFor="let f of filters"
+          [class.active]="activeFilter === f"
+          (click)="activeFilter = f"
+          class="filter-btn">
+          {{ f | titlecase }}
+        </button>
+      </div>
+
+      <div class="feature-grid">
+        <div
+          *ngFor="let feat of filteredFeatures"
+          class="feature-card">
+          <div class="feat-header">
+            <span class="feat-icon">{{ feat.icon }}</span>
+            <span class="status-badge" [class]="'badge-' + feat.status">{{ feat.status }}</span>
+          </div>
+          <h3>{{ feat.name }}</h3>
+          <p>{{ feat.desc }}</p>
+        </div>
+      </div>
+    </div>
+  \`,
+  styles: [\`
+    .features-page { padding: 2rem; max-width: 1100px; margin: 0 auto; }
+    .page-header { margin-bottom: 2rem; }
+    .page-header h2 { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.25rem; }
+    .page-header p { color: var(--text-muted); }
+    .filter-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .filter-btn {
+      padding: 0.35rem 0.9rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      transition: border-color 0.15s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .feat-icon { font-size: 1.5rem; }
+    .status-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-stable { background: #10b98120; color: #34d399; border: 1px solid #10b98140; }
+    .badge-new { background: #818cf820; color: #818cf8; border: 1px solid #818cf840; }
+    .badge-experimental { background: #f59e0b20; color: #fbbf24; border: 1px solid #f59e0b40; }
+    .feature-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .feature-card p { color: var(--text-muted); font-size: 0.825rem; }
+  \`],
+})
+export class FeaturesComponent {
+  filters = ['all', 'stable', 'new', 'experimental']
+  activeFilter = 'all'
+
+  features: Feature[] = [
+    { icon: '🧩', name: 'Standalone Components', status: 'stable', desc: 'Components, directives, and pipes without NgModule.' },
+    { icon: '🚦', name: 'Lazy Routing', status: 'stable', desc: 'loadComponent() and loadChildren() for on-demand loading.' },
+    { icon: '📡', name: 'Signals', status: 'stable', desc: 'Fine-grained reactive primitives: signal(), computed(), effect().' },
+    { icon: '🏗️', name: 'esbuild Builder', status: 'stable', desc: 'Near-instant rebuilds with the new application builder.' },
+    { icon: '💧', name: 'Control Flow', status: 'stable', desc: '@if, @for, @switch — new template syntax replacing *ngIf and *ngFor.' },
+    { icon: '🌊', name: 'Deferrable Views', status: 'stable', desc: '@defer blocks for lazy-loading template content.' },
+    { icon: '🔁', name: 'View Transitions', status: 'new', desc: 'provideRouter(routes, withViewTransitions()) for smooth page transitions.' },
+    { icon: '⚡', name: 'Zoneless (Preview)', status: 'experimental', desc: 'Run Angular without Zone.js using provideExperimentalZonelessChangeDetection().' },
+    { icon: '🏄', name: 'Partial Hydration', status: 'experimental', desc: 'Incrementally hydrate server-rendered content on demand.' },
+  ]
+
+  get filteredFeatures() {
+    return this.activeFilter === 'all' ? this.features : this.features.filter(f => f.status === this.activeFilter)
+  }
+}`,
+      },
+      {
+        path: 'src/app/pages/counter/counter.component.ts',
+        content: `import { Component, inject } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { CounterService } from '../../services/counter.service'
+
+@Component({
+  selector: 'app-counter',
+  standalone: true,
+  imports: [CommonModule],
+  template: \`
+    <div class="counter-page">
+      <header class="page-header">
+        <h2>Reactive Counter</h2>
+        <p>State managed via an injectable RxJS service shared across components</p>
+      </header>
+
+      <div class="counter-card">
+        <div class="counter-display">
+          <div class="counter-value" [class.positive]="(count$ | async)! > 0" [class.negative]="(count$ | async)! < 0">
+            {{ count$ | async }}
+          </div>
+          <div class="counter-label">Current count</div>
+        </div>
+
+        <div class="counter-controls">
+          <button class="ctrl-btn decrement" (click)="counter.decrement()">−</button>
+          <button class="ctrl-btn reset" (click)="counter.reset()">↺</button>
+          <button class="ctrl-btn increment" (click)="counter.increment()">+</button>
+        </div>
+
+        <div class="step-row">
+          <span class="step-label">Step</span>
+          <button *ngFor="let s of steps" [class.active]="s === step" (click)="setStep(s)" class="step-btn">{{ s }}</button>
+        </div>
+      </div>
+
+      <div class="history-card">
+        <h3>History <span class="badge">{{ (history$ | async)?.length }}</span></h3>
+        <div class="history-list">
+          <div *ngFor="let h of history$ | async; let i = index" class="history-item">
+            <span class="history-index">#{{ i + 1 }}</span>
+            <span class="history-op" [class]="h.op">{{ h.op }}</span>
+            <span class="history-value">{{ h.value }}</span>
+          </div>
+          <div *ngIf="!(history$ | async)?.length" class="empty-state">No actions yet — try the buttons above</div>
+        </div>
+      </div>
+    </div>
+  \`,
+  styles: [\`
+    .counter-page { padding: 2rem; max-width: 680px; margin: 0 auto; }
+    .page-header { margin-bottom: 2rem; }
+    .page-header h2 { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.25rem; }
+    .page-header p { color: var(--text-muted); }
+    .counter-card, .history-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .counter-display { text-align: center; margin-bottom: 2rem; }
+    .counter-value {
+      font-size: 5rem;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .counter-value.positive { color: var(--success); }
+    .counter-value.negative { color: #f87171; }
+    .counter-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; }
+    .counter-controls { display: flex; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; }
+    .ctrl-btn {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-weight: 700;
+    }
+    .ctrl-btn.increment { background: var(--success); color: #000; }
+    .ctrl-btn.increment:hover { filter: brightness(1.1); transform: scale(1.08); }
+    .ctrl-btn.decrement { background: #f87171; color: #000; }
+    .ctrl-btn.decrement:hover { filter: brightness(1.1); transform: scale(1.08); }
+    .ctrl-btn.reset { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .ctrl-btn.reset:hover { border-color: var(--accent); }
+    .step-row { display: flex; align-items: center; gap: 0.5rem; justify-content: center; }
+    .step-label { color: var(--text-muted); font-size: 0.85rem; }
+    .step-btn {
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .step-btn.active, .step-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .history-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 0.1rem 0.5rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+    }
+    .history-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 240px; overflow-y: auto; }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface2);
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+    .history-index { color: var(--text-muted); font-size: 0.75rem; width: 28px; }
+    .history-op {
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .history-op.increment { background: #10b98120; color: #34d399; }
+    .history-op.decrement { background: #f8717120; color: #f87171; }
+    .history-op.reset { background: #94a3b820; color: #94a3b8; }
+    .history-value { font-weight: 600; margin-left: auto; }
+    .empty-state { color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem; }
+  \`],
+})
+export class CounterComponent {
+  counter = inject(CounterService)
+  count$ = this.counter.count$
+  history$ = this.counter.history$
+  steps = [1, 5, 10]
+  step = 1
+
+  setStep(s: number) {
+    this.step = s
+    this.counter.setStep(s)
+  }
+}`,
+      },
+      {
+        path: 'src/app/services/counter.service.ts',
+        content: `import { Injectable } from '@angular/core'
+import { BehaviorSubject } from 'rxjs'
+
+interface HistoryEntry { op: 'increment' | 'decrement' | 'reset'; value: number }
+
+@Injectable({ providedIn: 'root' })
+export class CounterService {
+  private _count = new BehaviorSubject<number>(0)
+  private _history = new BehaviorSubject<HistoryEntry[]>([])
+  private _step = 1
+
+  count$ = this._count.asObservable()
+  history$ = this._history.asObservable()
+
+  setStep(s: number) { this._step = s }
+
+  increment() {
+    const next = this._count.value + this._step
+    this._count.next(next)
+    this._push('increment', next)
+  }
+
+  decrement() {
+    const next = this._count.value - this._step
+    this._count.next(next)
+    this._push('decrement', next)
+  }
+
+  reset() {
+    this._count.next(0)
+    this._push('reset', 0)
+  }
+
+  private _push(op: HistoryEntry['op'], value: number) {
+    this._history.next([{ op, value }, ...this._history.value].slice(0, 20))
+  }
+}`,
+      },
+    ],
+  },
+
+  // ── 12. Angular Material Dashboard ──────────────────────────────────────────
+  {
+    name: 'Angular Material Dashboard',
+    slug: 'angular-material',
+    description: 'Admin dashboard built with Angular 18 and Angular Material — sidenav, stats cards, data table, snack-bar notifications, and dark theme.',
+    category: 'dashboard',
+    framework: 'angular',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'package.json',
+        content: JSON.stringify({
+          name: 'angular-material-dashboard',
+          version: '1.0.0',
+          private: true,
+          scripts: {
+            ng: 'ng',
+            dev: 'ng serve --host 0.0.0.0 --port 5173',
+            start: 'ng serve',
+            build: 'ng build',
+          },
+          dependencies: {
+            '@angular/animations': '^18.0.0',
+            '@angular/cdk': '^18.0.0',
+            '@angular/common': '^18.0.0',
+            '@angular/compiler': '^18.0.0',
+            '@angular/core': '^18.0.0',
+            '@angular/forms': '^18.0.0',
+            '@angular/material': '^18.0.0',
+            '@angular/platform-browser': '^18.0.0',
+            '@angular/platform-browser-dynamic': '^18.0.0',
+            '@angular/router': '^18.0.0',
+            'rxjs': '~7.8.0',
+            'tslib': '^2.3.0',
+            'zone.js': '~0.14.0',
+          },
+          devDependencies: {
+            '@angular-devkit/build-angular': '^18.0.0',
+            '@angular/cli': '^18.0.0',
+            '@angular/compiler-cli': '^18.0.0',
+            'typescript': '~5.4.0',
+          },
+        }, null, 2),
+      },
+      {
+        path: 'angular.json',
+        content: JSON.stringify({
+          $schema: './node_modules/@angular/cli/lib/config/schema.json',
+          version: 1,
+          newProjectRoot: 'projects',
+          projects: {
+            app: {
+              projectType: 'application',
+              schematics: {
+                '@schematics/angular:component': { standalone: true, style: 'css', skipTests: true },
+                '@schematics/angular:service': { skipTests: true },
+              },
+              root: '',
+              sourceRoot: 'src',
+              prefix: 'app',
+              architect: {
+                build: {
+                  builder: '@angular-devkit/build-angular:application',
+                  options: {
+                    outputPath: 'dist/app',
+                    index: 'src/index.html',
+                    browser: 'src/main.ts',
+                    polyfills: ['zone.js'],
+                    tsConfig: 'tsconfig.app.json',
+                    assets: [{ glob: '**/*', input: 'public' }],
+                    styles: ['@angular/material/prebuilt-themes/indigo-pink.css', 'src/styles.css'],
+                    scripts: [],
+                  },
+                  configurations: {
+                    production: {
+                      budgets: [
+                        { type: 'initial', maximumWarning: '2MB', maximumError: '4MB' },
+                        { type: 'anyComponentStyle', maximumWarning: '8kB', maximumError: '16kB' },
+                      ],
+                      outputHashing: 'all',
+                    },
+                    development: { optimization: false, extractLicenses: false, sourceMap: true },
+                  },
+                  defaultConfiguration: 'production',
+                },
+                serve: {
+                  builder: '@angular-devkit/build-angular:dev-server',
+                  options: { host: '0.0.0.0', port: 5173 },
+                  configurations: {
+                    production: { buildTarget: 'app:build:production' },
+                    development: { buildTarget: 'app:build:development' },
+                  },
+                  defaultConfiguration: 'development',
+                },
+                'extract-i18n': { builder: '@angular-devkit/build-angular:extract-i18n' },
+              },
+            },
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compileOnSave: false,
+          compilerOptions: {
+            outDir: './dist/out-tsc', strict: true, noImplicitOverride: true,
+            noPropertyAccessFromIndexSignature: true, noImplicitReturns: true,
+            noFallthroughCasesInSwitch: true, skipLibCheck: true, esModuleInterop: true,
+            sourceMap: true, declaration: false, experimentalDecorators: true,
+            moduleResolution: 'bundler', importHelpers: true, target: 'ES2022',
+            module: 'ES2022', useDefineForClassFields: false, lib: ['ES2022', 'dom'],
+          },
+          angularCompilerOptions: {
+            enableI18nLegacyMessageIdFormat: false, strictInjectionParameters: true,
+            strictInputAccessModifiers: true, strictTemplates: true,
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.app.json',
+        content: JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: { outDir: './out-tsc/app', types: [] },
+          files: ['src/main.ts'],
+          include: ['src/**/*.d.ts'],
+        }, null, 2),
+      },
+      {
+        path: 'src/index.html',
+        content: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Angular Material Dashboard</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body class="mat-app-background">
+  <app-root></app-root>
+</body>
+</html>`,
+      },
+      {
+        path: 'src/main.ts',
+        content: `import { bootstrapApplication } from '@angular/platform-browser'
+import { appConfig } from './app/app.config'
+import { AppComponent } from './app/app.component'
+bootstrapApplication(AppComponent, appConfig).catch(err => console.error(err))`,
+      },
+      {
+        path: 'src/styles.css',
+        content: `html, body { height: 100%; }
+body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+.spacer { flex: 1 1 auto; }
+.mat-toolbar { background: #1e1e2e !important; color: #cdd6f4 !important; }`,
+      },
+      {
+        path: 'src/app/app.config.ts',
+        content: `import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core'
+import { provideRouter } from '@angular/router'
+import { provideAnimationsAsync } from '@angular/platform-browser/animations/async'
+import { routes } from './app.routes'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
+    provideAnimationsAsync(),
+  ],
+}`,
+      },
+      {
+        path: 'src/app/app.routes.ts',
+        content: `import { Routes } from '@angular/router'
+
+export const routes: Routes = [
+  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'dashboard', loadComponent: () => import('./dashboard/dashboard.component').then(m => m.DashboardComponent) },
+  { path: 'users', loadComponent: () => import('./users/users.component').then(m => m.UsersComponent) },
+  { path: 'settings', loadComponent: () => import('./settings/settings.component').then(m => m.SettingsComponent) },
+  { path: '**', redirectTo: 'dashboard' },
+]`,
+      },
+      {
+        path: 'src/app/app.component.ts',
+        content: `import { Component, ViewChild } from '@angular/core'
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router'
+import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav'
+import { MatToolbarModule } from '@angular/material/toolbar'
+import { MatIconModule } from '@angular/material/icon'
+import { MatButtonModule } from '@angular/material/button'
+import { MatListModule } from '@angular/material/list'
+import { MatDividerModule } from '@angular/material/divider'
+import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout'
+import { AsyncPipe } from '@angular/common'
+import { map, shareReplay } from 'rxjs/operators'
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [
+    RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe,
+    MatSidenavModule, MatToolbarModule, MatIconModule,
+    MatButtonModule, MatListModule, MatDividerModule,
+  ],
+  template: \`
+    <mat-sidenav-container class="sidenav-container">
+      <mat-sidenav #drawer class="sidenav" fixedInViewport
+          [mode]="(isHandset$ | async) ? 'over' : 'side'"
+          [opened]="!(isHandset$ | async)">
+        <mat-toolbar class="sidenav-header">
+          <span class="brand-logo">📊</span>
+          <span class="brand-name">AdminPro</span>
+        </mat-toolbar>
+        <mat-nav-list>
+          <a mat-list-item routerLink="/dashboard" routerLinkActive="nav-active">
+            <mat-icon matListItemIcon>dashboard</mat-icon>
+            <span matListItemTitle>Dashboard</span>
+          </a>
+          <a mat-list-item routerLink="/users" routerLinkActive="nav-active">
+            <mat-icon matListItemIcon>people</mat-icon>
+            <span matListItemTitle>Users</span>
+          </a>
+          <a mat-list-item routerLink="/settings" routerLinkActive="nav-active">
+            <mat-icon matListItemIcon>settings</mat-icon>
+            <span matListItemTitle>Settings</span>
+          </a>
+        </mat-nav-list>
+        <mat-divider></mat-divider>
+        <mat-nav-list>
+          <a mat-list-item>
+            <mat-icon matListItemIcon>help_outline</mat-icon>
+            <span matListItemTitle>Documentation</span>
+          </a>
+        </mat-nav-list>
+      </mat-sidenav>
+      <mat-sidenav-content>
+        <mat-toolbar color="primary">
+          <button type="button" mat-icon-button (click)="drawer.toggle()">
+            <mat-icon>menu</mat-icon>
+          </button>
+          <span>AdminPro Dashboard</span>
+          <span class="spacer"></span>
+          <button mat-icon-button>
+            <mat-icon>notifications</mat-icon>
+          </button>
+          <button mat-icon-button>
+            <mat-icon>account_circle</mat-icon>
+          </button>
+        </mat-toolbar>
+        <div class="content-area">
+          <router-outlet></router-outlet>
+        </div>
+      </mat-sidenav-content>
+    </mat-sidenav-container>
+  \`,
+  styles: [\`
+    .sidenav-container { height: 100vh; background: #11111b; }
+    .sidenav {
+      width: 240px;
+      background: #1e1e2e !important;
+      border-right: 1px solid #313244 !important;
+    }
+    .sidenav-header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #181825 !important;
+      border-bottom: 1px solid #313244;
+    }
+    .brand-logo { font-size: 1.5rem; }
+    .brand-name { font-weight: 700; font-size: 1.1rem; color: #cdd6f4; }
+    .nav-active { background: #89b4fa20 !important; color: #89b4fa !important; border-radius: 8px; }
+    .content-area { padding: 1.5rem; }
+    mat-nav-list { padding-top: 0.5rem !important; }
+    .mat-mdc-list-item { border-radius: 8px !important; margin: 0 0.5rem 0.25rem !important; }
+  \`],
+})
+export class AppComponent {
+  isHandset$ = this.breakpointObserver.observe(Breakpoints.Handset).pipe(
+    map(r => r.matches),
+    shareReplay(),
+  )
+  constructor(private breakpointObserver: BreakpointObserver) {}
+}`,
+      },
+      {
+        path: 'src/app/dashboard/dashboard.component.ts',
+        content: `import { Component, inject } from '@angular/core'
+import { CommonModule, DecimalPipe } from '@angular/common'
+import { MatCardModule } from '@angular/material/card'
+import { MatIconModule } from '@angular/material/icon'
+import { MatTableModule } from '@angular/material/table'
+import { MatChipsModule } from '@angular/material/chips'
+import { MatButtonModule } from '@angular/material/button'
+import { MatSnackBar } from '@angular/material/snack-bar'
+import { DashboardService } from '../services/dashboard.service'
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [CommonModule, DecimalPipe, MatCardModule, MatIconModule, MatTableModule, MatChipsModule, MatButtonModule],
+  template: \`
+    <div class="dashboard">
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub">Welcome back! Here's what's happening today.</p>
+
+      <!-- Stats row -->
+      <div class="stats-grid">
+        <mat-card *ngFor="let stat of stats" class="stat-card">
+          <mat-card-content>
+            <div class="stat-row">
+              <div>
+                <div class="stat-label">{{ stat.label }}</div>
+                <div class="stat-value">{{ stat.prefix }}{{ stat.value | number }}{{ stat.suffix }}</div>
+              </div>
+              <div class="stat-icon" [style.background]="stat.bg">
+                <mat-icon [style.color]="stat.color">{{ stat.icon }}</mat-icon>
+              </div>
+            </div>
+            <div class="stat-change" [class.up]="stat.change > 0" [class.down]="stat.change < 0">
+              <mat-icon>{{ stat.change > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+              {{ stat.change > 0 ? '+' : '' }}{{ stat.change }}% from last month
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <!-- Recent activity table -->
+      <mat-card class="table-card">
+        <mat-card-header>
+          <mat-card-title>Recent Transactions</mat-card-title>
+          <mat-card-subtitle>Latest 6 transactions across all accounts</mat-card-subtitle>
+          <div class="card-actions">
+            <button mat-stroked-button color="primary" (click)="notify()">Export CSV</button>
+          </div>
+        </mat-card-header>
+        <mat-card-content>
+          <table mat-table [dataSource]="transactions" class="full-table">
+            <ng-container matColumnDef="id">
+              <th mat-header-cell *matHeaderCellDef>#</th>
+              <td mat-cell *matCellDef="let t">{{ t.id }}</td>
+            </ng-container>
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let t"><strong>{{ t.name }}</strong></td>
+            </ng-container>
+            <ng-container matColumnDef="amount">
+              <th mat-header-cell *matHeaderCellDef>Amount</th>
+              <td mat-cell *matCellDef="let t" [class.credit]="t.amount > 0" [class.debit]="t.amount < 0">
+                {{ t.amount > 0 ? '+' : '' }}\${{ t.amount | number:'1.2-2' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let t">
+                <mat-chip-set>
+                  <mat-chip [class]="'chip-' + t.status">{{ t.status }}</mat-chip>
+                </mat-chip-set>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="date">
+              <th mat-header-cell *matHeaderCellDef>Date</th>
+              <td mat-cell *matCellDef="let t">{{ t.date }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          </table>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  \`,
+  styles: [\`
+    .dashboard { max-width: 1200px; }
+    .page-title { font-size: 1.75rem; font-weight: 700; color: #cdd6f4; margin: 0 0 0.25rem; }
+    .page-sub { color: #a6adc8; margin: 0 0 1.5rem; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: #1e1e2e !important; border: 1px solid #313244 !important; }
+    .stat-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
+    .stat-label { font-size: 0.8rem; color: #a6adc8; margin-bottom: 0.25rem; }
+    .stat-value { font-size: 1.6rem; font-weight: 700; color: #cdd6f4; }
+    .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+    .stat-change { display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; color: #a6adc8; }
+    .stat-change mat-icon { font-size: 1rem; width: 1rem; height: 1rem; }
+    .stat-change.up { color: #a6e3a1; }
+    .stat-change.down { color: #f38ba8; }
+    .table-card { background: #1e1e2e !important; border: 1px solid #313244 !important; }
+    .card-actions { margin-left: auto; }
+    .full-table { width: 100%; background: transparent !important; }
+    .credit { color: #a6e3a1 !important; font-weight: 600; }
+    .debit { color: #f38ba8 !important; font-weight: 600; }
+    .chip-completed { background: #a6e3a120 !important; color: #a6e3a1 !important; }
+    .chip-pending { background: #f9e2af20 !important; color: #f9e2af !important; }
+    .chip-failed { background: #f38ba820 !important; color: #f38ba8 !important; }
+  \`],
+})
+export class DashboardComponent {
+  private snack = inject(MatSnackBar)
+  private svc = inject(DashboardService)
+
+  stats = this.svc.getStats()
+  transactions = this.svc.getTransactions()
+  displayedColumns = ['id', 'name', 'amount', 'status', 'date']
+
+  notify() {
+    this.snack.open('CSV export started — check your downloads', 'OK', { duration: 3000 })
+  }
+}`,
+      },
+      {
+        path: 'src/app/users/users.component.ts',
+        content: `import { Component, inject } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { MatCardModule } from '@angular/material/card'
+import { MatButtonModule } from '@angular/material/button'
+import { MatIconModule } from '@angular/material/icon'
+import { MatInputModule } from '@angular/material/input'
+import { MatFormFieldModule } from '@angular/material/form-field'
+import { FormsModule } from '@angular/forms'
+import { DashboardService } from '../services/dashboard.service'
+
+@Component({
+  selector: 'app-users',
+  standalone: true,
+  imports: [CommonModule, FormsModule, MatCardModule, MatButtonModule, MatIconModule, MatInputModule, MatFormFieldModule],
+  template: \`
+    <div class="users-page">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Users</h1>
+          <p class="page-sub">{{ filtered.length }} of {{ users.length }} users</p>
+        </div>
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Search users</mat-label>
+          <input matInput [(ngModel)]="query" (input)="filter()" placeholder="Name or email…">
+          <mat-icon matPrefix>search</mat-icon>
+        </mat-form-field>
+      </div>
+      <div class="user-grid">
+        <mat-card *ngFor="let u of filtered" class="user-card">
+          <mat-card-content>
+            <div class="user-avatar">{{ u.name[0] }}</div>
+            <div class="user-info">
+              <strong>{{ u.name }}</strong>
+              <small>{{ u.email }}</small>
+            </div>
+            <span class="role-badge" [class]="'role-' + u.role">{{ u.role }}</span>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+  \`,
+  styles: [\`
+    .users-page { max-width: 1200px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+    .page-title { font-size: 1.75rem; font-weight: 700; color: #cdd6f4; margin: 0 0 0.25rem; }
+    .page-sub { color: #a6adc8; margin: 0; font-size: 0.875rem; }
+    .search-field { width: 280px; }
+    .user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+    .user-card { background: #1e1e2e !important; border: 1px solid #313244 !important; cursor: pointer; transition: border-color 0.15s; }
+    .user-card:hover { border-color: #89b4fa !important; }
+    mat-card-content { display: flex; align-items: center; gap: 0.75rem; }
+    .user-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #89b4fa30; color: #89b4fa;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.1rem; flex-shrink: 0;
+    }
+    .user-info { flex: 1; overflow: hidden; }
+    .user-info strong { display: block; color: #cdd6f4; font-size: 0.9rem; }
+    .user-info small { color: #a6adc8; font-size: 0.75rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .role-badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 20px; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
+    .role-admin { background: #cba6f720; color: #cba6f7; border: 1px solid #cba6f740; }
+    .role-user { background: #89b4fa20; color: #89b4fa; border: 1px solid #89b4fa40; }
+    .role-viewer { background: #a6adc820; color: #a6adc8; border: 1px solid #a6adc840; }
+  \`],
+})
+export class UsersComponent {
+  private svc = inject(DashboardService)
+  users = this.svc.getUsers()
+  filtered = [...this.users]
+  query = ''
+  filter() {
+    const q = this.query.toLowerCase()
+    this.filtered = q ? this.users.filter(u => u.name.toLowerCase().includes(q) || u.email.includes(q)) : [...this.users]
+  }
+}`,
+      },
+      {
+        path: 'src/app/settings/settings.component.ts',
+        content: `import { Component } from '@angular/core'
+import { FormsModule } from '@angular/forms'
+import { MatCardModule } from '@angular/material/card'
+import { MatSlideToggleModule } from '@angular/material/slide-toggle'
+import { MatButtonModule } from '@angular/material/button'
+import { MatInputModule } from '@angular/material/input'
+import { MatFormFieldModule } from '@angular/material/form-field'
+import { MatSnackBar } from '@angular/material/snack-bar'
+
+@Component({
+  selector: 'app-settings',
+  standalone: true,
+  imports: [FormsModule, MatCardModule, MatSlideToggleModule, MatButtonModule, MatInputModule, MatFormFieldModule],
+  template: \`
+    <div class="settings-page">
+      <h1 class="page-title">Settings</h1>
+      <p class="page-sub">Manage your application preferences</p>
+
+      <div class="settings-grid">
+        <mat-card class="settings-card">
+          <mat-card-header><mat-card-title>Profile</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Display Name</mat-label>
+              <input matInput [(ngModel)]="profile.name">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Email</mat-label>
+              <input matInput type="email" [(ngModel)]="profile.email">
+            </mat-form-field>
+          </mat-card-content>
+          <mat-card-actions>
+            <button mat-raised-button color="primary" (click)="save()">Save Changes</button>
+          </mat-card-actions>
+        </mat-card>
+
+        <mat-card class="settings-card">
+          <mat-card-header><mat-card-title>Notifications</mat-card-title></mat-card-header>
+          <mat-card-content class="toggles">
+            <div *ngFor="let n of notifications" class="toggle-row">
+              <div>
+                <div class="toggle-label">{{ n.label }}</div>
+                <div class="toggle-desc">{{ n.desc }}</div>
+              </div>
+              <mat-slide-toggle [(ngModel)]="n.enabled" color="primary"></mat-slide-toggle>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+  \`,
+  styles: [\`
+    .settings-page { max-width: 900px; }
+    .page-title { font-size: 1.75rem; font-weight: 700; color: #cdd6f4; margin: 0 0 0.25rem; }
+    .page-sub { color: #a6adc8; margin: 0 0 1.5rem; }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; }
+    .settings-card { background: #1e1e2e !important; border: 1px solid #313244 !important; }
+    .full-width { width: 100%; margin-bottom: 0.75rem; }
+    .toggles { display: flex; flex-direction: column; gap: 1rem; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .toggle-label { font-size: 0.9rem; color: #cdd6f4; font-weight: 500; }
+    .toggle-desc { font-size: 0.8rem; color: #a6adc8; margin-top: 0.15rem; }
+  \`],
+})
+export class SettingsComponent {
+  profile = { name: 'Alex Johnson', email: 'alex@example.com' }
+  notifications = [
+    { label: 'Email Alerts', desc: 'Receive alerts via email', enabled: true },
+    { label: 'Push Notifications', desc: 'Browser push notifications', enabled: false },
+    { label: 'Weekly Digest', desc: 'Summary email every Monday', enabled: true },
+    { label: 'Security Alerts', desc: 'Notify on suspicious activity', enabled: true },
+  ]
+  constructor(private snack: MatSnackBar) {}
+  save() { this.snack.open('Settings saved!', 'OK', { duration: 2500 }) }
+}`,
+      },
+      {
+        path: 'src/app/services/dashboard.service.ts',
+        content: `import { Injectable } from '@angular/core'
+
+@Injectable({ providedIn: 'root' })
+export class DashboardService {
+  getStats() {
+    return [
+      { label: 'Total Revenue', value: 84230, prefix: '\$', suffix: '', change: 12, icon: 'attach_money', color: '#a6e3a1', bg: '#a6e3a115' },
+      { label: 'Active Users', value: 3284, prefix: '', suffix: '', change: 8, icon: 'people', color: '#89b4fa', bg: '#89b4fa15' },
+      { label: 'New Orders', value: 492, prefix: '', suffix: '', change: -3, icon: 'shopping_cart', color: '#fab387', bg: '#fab38715' },
+      { label: 'Conversion', value: 3.6, prefix: '', suffix: '%', change: 5, icon: 'trending_up', color: '#cba6f7', bg: '#cba6f715' },
+    ]
+  }
+
+  getTransactions() {
+    return [
+      { id: '#1001', name: 'Alice Smith', amount: 1250.00, status: 'completed', date: '2024-03-15' },
+      { id: '#1002', name: 'Bob Johnson', amount: -89.99, status: 'completed', date: '2024-03-14' },
+      { id: '#1003', name: 'Carol White', amount: 3400.00, status: 'pending', date: '2024-03-14' },
+      { id: '#1004', name: 'Dave Brown', amount: -220.50, status: 'failed', date: '2024-03-13' },
+      { id: '#1005', name: 'Eve Davis', amount: 780.00, status: 'completed', date: '2024-03-12' },
+      { id: '#1006', name: 'Frank Miller', amount: 95.20, status: 'pending', date: '2024-03-12' },
+    ]
+  }
+
+  getUsers() {
+    return [
+      { name: 'Alice Smith', email: 'alice@example.com', role: 'admin' },
+      { name: 'Bob Johnson', email: 'bob@example.com', role: 'user' },
+      { name: 'Carol White', email: 'carol@example.com', role: 'user' },
+      { name: 'Dave Brown', email: 'dave@example.com', role: 'viewer' },
+      { name: 'Eve Davis', email: 'eve@example.com', role: 'user' },
+      { name: 'Frank Miller', email: 'frank@example.com', role: 'admin' },
+      { name: 'Grace Lee', email: 'grace@example.com', role: 'user' },
+      { name: 'Henry Wilson', email: 'henry@example.com', role: 'viewer' },
+    ]
+  }
+}`,
+      },
+    ],
+  },
+
+  // ── 13. Angular Signals Todo ─────────────────────────────────────────────────
+  {
+    name: 'Angular Signals App',
+    slug: 'angular-signals',
+    description: 'Modern Angular 18 app showcasing Signals, computed(), effect(), and signal-based state management — a feature-rich todo app with filters, stats, and undo.',
+    category: 'starter',
+    framework: 'angular',
+    isOfficial: true,
+    isPublic: true,
+    filesJson: [
+      {
+        path: 'package.json',
+        content: JSON.stringify({
+          name: 'angular-signals-todo',
+          version: '1.0.0',
+          private: true,
+          scripts: {
+            ng: 'ng',
+            dev: 'ng serve --host 0.0.0.0 --port 5173',
+            start: 'ng serve',
+            build: 'ng build',
+          },
+          dependencies: {
+            '@angular/animations': '^18.0.0',
+            '@angular/common': '^18.0.0',
+            '@angular/compiler': '^18.0.0',
+            '@angular/core': '^18.0.0',
+            '@angular/forms': '^18.0.0',
+            '@angular/platform-browser': '^18.0.0',
+            '@angular/platform-browser-dynamic': '^18.0.0',
+            '@angular/router': '^18.0.0',
+            'rxjs': '~7.8.0',
+            'tslib': '^2.3.0',
+            'zone.js': '~0.14.0',
+          },
+          devDependencies: {
+            '@angular-devkit/build-angular': '^18.0.0',
+            '@angular/cli': '^18.0.0',
+            '@angular/compiler-cli': '^18.0.0',
+            'typescript': '~5.4.0',
+          },
+        }, null, 2),
+      },
+      {
+        path: 'angular.json',
+        content: JSON.stringify({
+          $schema: './node_modules/@angular/cli/lib/config/schema.json',
+          version: 1,
+          newProjectRoot: 'projects',
+          projects: {
+            app: {
+              projectType: 'application',
+              schematics: {
+                '@schematics/angular:component': { standalone: true, style: 'css', skipTests: true },
+              },
+              root: '',
+              sourceRoot: 'src',
+              prefix: 'app',
+              architect: {
+                build: {
+                  builder: '@angular-devkit/build-angular:application',
+                  options: {
+                    outputPath: 'dist/app',
+                    index: 'src/index.html',
+                    browser: 'src/main.ts',
+                    polyfills: ['zone.js'],
+                    tsConfig: 'tsconfig.app.json',
+                    assets: [{ glob: '**/*', input: 'public' }],
+                    styles: ['src/styles.css'],
+                    scripts: [],
+                  },
+                  configurations: {
+                    production: {
+                      budgets: [
+                        { type: 'initial', maximumWarning: '500kB', maximumError: '1MB' },
+                        { type: 'anyComponentStyle', maximumWarning: '2kB', maximumError: '4kB' },
+                      ],
+                      outputHashing: 'all',
+                    },
+                    development: { optimization: false, extractLicenses: false, sourceMap: true },
+                  },
+                  defaultConfiguration: 'production',
+                },
+                serve: {
+                  builder: '@angular-devkit/build-angular:dev-server',
+                  options: { host: '0.0.0.0', port: 5173 },
+                  configurations: {
+                    production: { buildTarget: 'app:build:production' },
+                    development: { buildTarget: 'app:build:development' },
+                  },
+                  defaultConfiguration: 'development',
+                },
+                'extract-i18n': { builder: '@angular-devkit/build-angular:extract-i18n' },
+              },
+            },
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compileOnSave: false,
+          compilerOptions: {
+            outDir: './dist/out-tsc', strict: true, noImplicitOverride: true,
+            noPropertyAccessFromIndexSignature: true, noImplicitReturns: true,
+            noFallthroughCasesInSwitch: true, skipLibCheck: true, esModuleInterop: true,
+            sourceMap: true, declaration: false, experimentalDecorators: true,
+            moduleResolution: 'bundler', importHelpers: true, target: 'ES2022',
+            module: 'ES2022', useDefineForClassFields: false, lib: ['ES2022', 'dom'],
+          },
+          angularCompilerOptions: {
+            enableI18nLegacyMessageIdFormat: false, strictInjectionParameters: true,
+            strictInputAccessModifiers: true, strictTemplates: true,
+          },
+        }, null, 2),
+      },
+      {
+        path: 'tsconfig.app.json',
+        content: JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: { outDir: './out-tsc/app', types: [] },
+          files: ['src/main.ts'],
+          include: ['src/**/*.d.ts'],
+        }, null, 2),
+      },
+      {
+        path: 'src/index.html',
+        content: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Angular Signals — Todo App</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>`,
+      },
+      {
+        path: 'src/main.ts',
+        content: `import { bootstrapApplication } from '@angular/platform-browser'
+import { appConfig } from './app/app.config'
+import { AppComponent } from './app/app.component'
+bootstrapApplication(AppComponent, appConfig).catch(err => console.error(err))`,
+      },
+      {
+        path: 'src/styles.css',
+        content: `*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface2: #16213e;
+  --border: #2a2a4a;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --accent: #818cf8;
+  --accent-hover: #6366f1;
+  --accent-dim: #818cf81a;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --radius: 12px;
+}
+html, body { height: 100%; }
+body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }`,
+      },
+      {
+        path: 'src/app/app.config.ts',
+        content: `import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core'
+import { provideRouter } from '@angular/router'
+import { routes } from './app.routes'
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
+  ],
+}`,
+      },
+      {
+        path: 'src/app/app.routes.ts',
+        content: `import { Routes } from '@angular/router'
+export const routes: Routes = [
+  { path: '', loadComponent: () => import('./todos/todo-app.component').then(m => m.TodoAppComponent) },
+  { path: '**', redirectTo: '' },
+]`,
+      },
+      {
+        path: 'src/app/app.component.ts',
+        content: `import { Component } from '@angular/core'
+import { RouterOutlet } from '@angular/router'
+import { VERSION } from '@angular/core'
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet],
+  template: \`
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <span class="brand-icon">📡</span>
+          <span class="brand-name">Signals Todo</span>
+          <span class="fw-badge">Angular {{ version }} · Signals</span>
+        </div>
+      </div>
+    </header>
+    <main><router-outlet /></main>
+  \`,
+  styles: [\`
+    .app-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 56px; display: flex; align-items: center; }
+    .header-inner { max-width: 760px; margin: 0 auto; width: 100%; }
+    .brand { display: flex; align-items: center; gap: 0.6rem; }
+    .brand-icon { font-size: 1.3rem; }
+    .brand-name { font-weight: 700; font-size: 1rem; }
+    .fw-badge { font-size: 0.7rem; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--border); padding: 0.15rem 0.6rem; border-radius: 20px; margin-left: 0.25rem; }
+  \`],
+})
+export class AppComponent {
+  version = VERSION.major
+}`,
+      },
+      {
+        path: 'src/app/store/todo.store.ts',
+        content: `import { Injectable, signal, computed, effect } from '@angular/core'
+
+export type Priority = 'low' | 'medium' | 'high'
+export type Filter = 'all' | 'active' | 'completed'
+
+export interface Todo {
+  id: number
+  text: string
+  completed: boolean
+  priority: Priority
+  createdAt: Date
+}
+
+@Injectable({ providedIn: 'root' })
+export class TodoStore {
+  private nextId = signal(4)
+
+  // Core state signals
+  todos = signal<Todo[]>([
+    { id: 1, text: 'Learn Angular Signals API', completed: true, priority: 'high', createdAt: new Date('2024-01-10') },
+    { id: 2, text: 'Build a signal-based state store', completed: true, priority: 'high', createdAt: new Date('2024-01-11') },
+    { id: 3, text: 'Explore computed() and effect()', completed: false, priority: 'medium', createdAt: new Date('2024-01-12') },
+  ])
+
+  filter = signal<Filter>('all')
+  searchQuery = signal('')
+
+  // Derived state via computed()
+  filtered = computed(() => {
+    const q = this.searchQuery().toLowerCase()
+    return this.todos()
+      .filter(t => {
+        const matchesFilter =
+          this.filter() === 'all' ||
+          (this.filter() === 'active' && !t.completed) ||
+          (this.filter() === 'completed' && t.completed)
+        const matchesSearch = !q || t.text.toLowerCase().includes(q)
+        return matchesFilter && matchesSearch
+      })
+      .sort((a, b) => {
+        const order: Record<Priority, number> = { high: 0, medium: 1, low: 2 }
+        return a.completed === b.completed
+          ? order[a.priority] - order[b.priority]
+          : a.completed ? 1 : -1
+      })
+  })
+
+  totalCount = computed(() => this.todos().length)
+  activeCount = computed(() => this.todos().filter(t => !t.completed).length)
+  completedCount = computed(() => this.todos().filter(t => t.completed).length)
+  completionRate = computed(() =>
+    this.totalCount() > 0 ? Math.round((this.completedCount() / this.totalCount()) * 100) : 0
+  )
+
+  private undoStack: Todo[][] = []
+
+  constructor() {
+    // effect() logs state changes for debugging
+    effect(() => {
+      console.log(\`[TodoStore] todos: \${this.totalCount()}, active: \${this.activeCount()}\`)
+    })
+  }
+
+  add(text: string, priority: Priority = 'medium') {
+    this._snapshot()
+    this.todos.update(list => [
+      ...list,
+      { id: this.nextId(), text: text.trim(), completed: false, priority, createdAt: new Date() },
+    ])
+    this.nextId.update(n => n + 1)
+  }
+
+  toggle(id: number) {
+    this._snapshot()
+    this.todos.update(list => list.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
+  }
+
+  remove(id: number) {
+    this._snapshot()
+    this.todos.update(list => list.filter(t => t.id !== id))
+  }
+
+  clearCompleted() {
+    this._snapshot()
+    this.todos.update(list => list.filter(t => !t.completed))
+  }
+
+  undo() {
+    const prev = this.undoStack.pop()
+    if (prev) this.todos.set(prev)
+  }
+
+  canUndo = computed(() => this.undoStack.length > 0)
+
+  private _snapshot() {
+    this.undoStack.push([...this.todos()])
+    if (this.undoStack.length > 20) this.undoStack.shift()
+  }
+}`,
+      },
+      {
+        path: 'src/app/todos/todo-app.component.ts',
+        content: `import { Component, inject, signal } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { FormsModule } from '@angular/forms'
+import { TodoStore, Priority, Filter } from '../store/todo.store'
+
+@Component({
+  selector: 'app-todo-app',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: \`
+    <div class="todo-app">
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat">
+          <span class="stat-num">{{ store.totalCount() }}</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num active">{{ store.activeCount() }}</span>
+          <span class="stat-label">Active</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num done">{{ store.completedCount() }}</span>
+          <span class="stat-label">Done</span>
+        </div>
+        <div class="progress-pill">
+          <div class="progress-fill" [style.width.%]="store.completionRate()"></div>
+          <span class="progress-pct">{{ store.completionRate() }}%</span>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="add-row">
+        <input
+          class="todo-input"
+          [(ngModel)]="newText"
+          (keydown.enter)="addTodo()"
+          placeholder="Add a new task… (Enter to save)"
+          maxlength="120">
+        <select class="priority-select" [(ngModel)]="newPriority">
+          <option value="low">🟢 Low</option>
+          <option value="medium">🟡 Medium</option>
+          <option value="high">🔴 High</option>
+        </select>
+        <button class="add-btn" (click)="addTodo()" [disabled]="!newText.trim()">Add</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          @for (f of filterOptions; track f) {
+            <button class="filter-btn" [class.active]="store.filter() === f" (click)="store.filter.set(f)">
+              {{ f | titlecase }}
+              @if (f === 'active') { <span class="count-dot">{{ store.activeCount() }}</span> }
+            </button>
+          }
+        </div>
+        <input class="search-input" [(ngModel)]="search" (ngModelChange)="store.searchQuery.set($event)" placeholder="🔍 Search…">
+        <div class="action-group">
+          <button class="action-btn" (click)="store.undo()" [disabled]="!store.canUndo()" title="Undo">↩ Undo</button>
+          <button class="action-btn danger" (click)="store.clearCompleted()" [disabled]="!store.completedCount()">Clear done</button>
+        </div>
+      </div>
+
+      <!-- Todo list -->
+      <div class="todo-list">
+        @if (store.filtered().length === 0) {
+          <div class="empty-state">
+            <div class="empty-icon">✅</div>
+            <p>{{ store.filter() === 'completed' ? 'No completed tasks' : 'All caught up!' }}</p>
+          </div>
+        }
+        @for (todo of store.filtered(); track todo.id) {
+          <div class="todo-item" [class.done]="todo.completed">
+            <button class="check-btn" (click)="store.toggle(todo.id)" [class.checked]="todo.completed">
+              @if (todo.completed) { ✓ }
+            </button>
+            <span class="todo-text">{{ todo.text }}</span>
+            <span class="priority-dot" [title]="todo.priority" [class]="'p-' + todo.priority"></span>
+            <button class="del-btn" (click)="store.remove(todo.id)" title="Delete">×</button>
+          </div>
+        }
+      </div>
+
+      <!-- Signals info panel -->
+      <div class="signals-panel">
+        <div class="signals-title">⚡ How Signals work here</div>
+        <div class="signals-list">
+          <div class="signal-item"><code>todos</code> — writable signal, mutated via <code>.update()</code></div>
+          <div class="signal-item"><code>filtered</code> — <code>computed()</code> that re-runs when todos/filter/search change</div>
+          <div class="signal-item"><code>totalCount, activeCount</code> — <code>computed()</code> derived from <code>todos</code></div>
+          <div class="signal-item"><code>effect()</code> — logs state to console on every change</div>
+          <div class="signal-item"><code>canUndo</code> — <code>computed()</code> over the undo stack length</div>
+        </div>
+      </div>
+    </div>
+  \`,
+  styles: [\`
+    .todo-app { max-width: 760px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .stat { display: flex; flex-direction: column; align-items: center; }
+    .stat-num { font-size: 1.5rem; font-weight: 700; }
+    .stat-num.active { color: var(--accent); }
+    .stat-num.done { color: var(--success); }
+    .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-divider { width: 1px; height: 32px; background: var(--border); }
+    .progress-pill {
+      flex: 1;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+      margin-left: 0.5rem;
+    }
+    .progress-fill { height: 100%; background: var(--success); border-radius: 8px; transition: width 0.3s; }
+    .progress-pct { position: absolute; right: -2rem; top: -0.35rem; font-size: 0.7rem; color: var(--text-muted); }
+    .add-row { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+    .todo-input {
+      flex: 1;
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .todo-input:focus { border-color: var(--accent); }
+    .priority-select {
+      padding: 0.7rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.875rem;
+      cursor: pointer;
+      outline: none;
+    }
+    .add-btn {
+      padding: 0.7rem 1.5rem;
+      border-radius: 10px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .add-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .filter-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+    .filter-group { display: flex; gap: 0.25rem; }
+    .filter-btn {
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.825rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: all 0.15s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+    .count-dot { background: var(--accent); color: #fff; border-radius: 20px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; }
+    .search-input {
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.825rem;
+      outline: none;
+      min-width: 160px;
+    }
+    .action-group { display: flex; gap: 0.4rem; margin-left: auto; }
+    .action-btn {
+      padding: 0.3rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.15s;
+    }
+    .action-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .action-btn.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+    .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .todo-list { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.5rem; }
+    .todo-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition: border-color 0.15s;
+    }
+    .todo-item:hover { border-color: var(--accent); }
+    .todo-item.done { opacity: 0.55; }
+    .check-btn {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      color: #fff;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .check-btn.checked { background: var(--success); border-color: var(--success); }
+    .check-btn:hover { border-color: var(--success); }
+    .todo-text { flex: 1; font-size: 0.9rem; }
+    .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-muted); }
+    .priority-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .p-high { background: var(--danger); }
+    .p-medium { background: var(--warning); }
+    .p-low { background: var(--success); }
+    .del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; padding: 0 0.25rem; opacity: 0; transition: opacity 0.15s; }
+    .todo-item:hover .del-btn { opacity: 1; }
+    .del-btn:hover { color: var(--danger); }
+    .empty-state { text-align: center; padding: 3rem 2rem; color: var(--text-muted); }
+    .empty-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+    .signals-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+    .signals-title { font-size: 0.85rem; font-weight: 700; color: var(--accent); margin-bottom: 0.75rem; }
+    .signals-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .signal-item { font-size: 0.8rem; color: var(--text-muted); }
+    .signal-item code { background: var(--accent-dim); color: var(--accent); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.75rem; }
+  \`],
+})
+export class TodoAppComponent {
+  store = inject(TodoStore)
+  newText = ''
+  newPriority: Priority = 'medium'
+  search = ''
+  filterOptions: Filter[] = ['all', 'active', 'completed']
+
+  addTodo() {
+    if (!this.newText.trim()) return
+    this.store.add(this.newText, this.newPriority)
+    this.newText = ''
+  }
+}`,
+      },
+    ],
+  },
 ]

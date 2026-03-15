@@ -148,6 +148,9 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       if (text.includes('__FORGE_SERVER_READY__') ||
           text.includes('Local:') || text.includes('ready in') || text.includes('App running') ||
           text.includes('✓ Ready') || text.includes('started server on') ||
+          text.toLowerCase().includes('compiled successfully') ||
+          text.toLowerCase().includes('angular live development server is listening') ||
+          text.toLowerCase().includes('watching for file changes') ||
           text.toLowerCase().includes('listening at') || text.toLowerCase().includes('listening on') ||
           text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')) {
         setStatus('ready')

@@ -247,6 +247,7 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
           //  Vite:    "ready in", "Local:"
           //  Node/Fastify: "listening at/on" in pino JSON logs
           //  Next.js: "✓ Ready", "started server on"
+          //  Angular: "Compiled successfully", "Angular Live Development Server is listening"
           //  Express/Hapi/etc: common "listening" patterns
           const lower = text.toLowerCase()
           const isReady =
@@ -254,6 +255,9 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
             text.includes('Local:') ||
             text.includes('✓ Ready') ||
             text.includes('started server on') ||
+            lower.includes('compiled successfully') ||
+            lower.includes('angular live development server is listening') ||
+            lower.includes('watching for file changes') ||
             lower.includes('listening at') ||
             lower.includes('listening on') ||
             lower.includes('server listening') ||
