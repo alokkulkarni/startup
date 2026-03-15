@@ -1,16 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useTemplates } from '@/hooks/useTemplates'
 import type { Template } from '@/hooks/useTemplates'
+import { FolderIcon, PlusIcon } from 'lucide-react'
+
+interface Workspace { id: string; name: string; slug: string; role: string }
 
 interface NewProjectModalProps {
   onClose: () => void
-  onCreate: (name: string, framework: string) => Promise<void>
+  onCreate: (name: string, framework: string, workspaceId: string) => Promise<void>
+  activeWorkspaceId?: string
 }
 
 const FRAMEWORKS = [
@@ -26,8 +30,9 @@ const FRAMEWORKS = [
 
 type Tab = 'template' | 'blank'
 
-export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
+export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: NewProjectModalProps) {
   const router = useRouter()
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost/api'
   const { templates, loading: tplLoading, cloneTemplate, fetchTemplates } = useTemplates()
 
   const [tab, setTab] = useState<Tab>('template')
@@ -38,6 +43,26 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
   const [tplSearch, setTplSearch] = useState('')
   const [selectedTpl, setSelectedTpl] = useState<Template | null>(null)
 
+  // Workspace state
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [wsLoading, setWsLoading] = useState(true)
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(activeWorkspaceId)
+
+  useEffect(() => {
+    fetch(`${apiBase}/v1/workspaces`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        const list: Workspace[] = d.data ?? []
+        setWorkspaces(list)
+        // Default to activeWorkspaceId, or first in list if none
+        if (!selectedWorkspaceId && list.length > 0) {
+          setSelectedWorkspaceId(list[0].id)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setWsLoading(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSelectTemplate = (tpl: Template) => {
     setSelectedTpl(tpl)
     setName(tpl.name)
@@ -46,15 +71,16 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) { setError('Project name is required'); return }
+    if (!selectedWorkspaceId) { setError('Please select a workspace first'); return }
     setLoading(true)
     setError('')
     try {
       if (tab === 'template' && selectedTpl) {
-        const projectId = await cloneTemplate(selectedTpl.id, name.trim())
+        const projectId = await cloneTemplate(selectedTpl.id, name.trim(), selectedWorkspaceId)
         onClose()
         if (projectId) router.push(`/dashboard/projects/${projectId}`)
       } else {
-        await onCreate(name.trim(), framework)
+        await onCreate(name.trim(), framework, selectedWorkspaceId)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create project'
@@ -198,10 +224,35 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
             )}
 
             <div className="flex gap-3 pt-1">
+              {/* Workspace selector */}
+              <div className="w-full">
+                <label className="text-xs font-medium text-gray-400 mb-1 block">Workspace</label>
+                {wsLoading ? (
+                  <div className="h-9 rounded-md bg-gray-800 animate-pulse" />
+                ) : workspaces.length === 0 ? (
+                  <p className="text-xs text-amber-400 flex items-center gap-1">
+                    <FolderIcon className="h-3 w-3" />
+                    Create a workspace first before making a project.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedWorkspaceId}
+                    onChange={e => setSelectedWorkspaceId(e.target.value)}
+                    className="w-full h-9 rounded-md border border-gray-700 bg-gray-900 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  >
+                    {workspaces.map(ws => (
+                      <option key={ws.id} value={ws.id}>{ws.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
               <Button
                 type="submit"
                 loading={loading}
-                disabled={tab === 'template' && !selectedTpl}
+                disabled={(tab === 'template' && !selectedTpl) || !selectedWorkspaceId || workspaces.length === 0}
                 className="flex-1"
               >
                 Create project

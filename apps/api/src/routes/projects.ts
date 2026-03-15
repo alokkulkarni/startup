@@ -75,8 +75,9 @@ const STARTER_FILES: Record<string, Record<string, string>> = {
 
 const CreateProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  framework: z.enum(['react', 'nextjs', 'vue', 'svelte', 'vanilla']).default('react'),
+  framework: z.enum(['react', 'nextjs', 'vue', 'svelte', 'vanilla', 'angular', 'node', 'flutter']).default('react'),
   description: z.string().max(500).optional(),
+  workspaceId: z.string().uuid().optional(),
 })
 
 const UpdateProjectSchema = z.object({
@@ -120,14 +121,25 @@ export async function projectRoutes(app: FastifyInstance) {
     const user = await getDbUser(app, request.user.id)
     if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'Call /auth/sync first' } })
 
-    // Get user's first workspace
-    const membership = await app.db.query.workspaceMembers.findFirst({
-      where: (m, { eq }) => eq(m.userId, user.id),
-      with: { workspace: true },
-    })
-    if (!membership) return reply.code(404).send({ success: false, error: { code: 'NO_WORKSPACE', message: 'No workspace found' } })
+    const { name, framework, description, workspaceId: requestedWorkspaceId } = parsed.data
 
-    const { name, framework, description } = parsed.data
+    let membership: { workspaceId: string } | undefined
+
+    if (requestedWorkspaceId) {
+      // Verify the user is a member of the requested workspace
+      const m = await app.db.query.workspaceMembers.findFirst({
+        where: (m, { and, eq }) => and(eq(m.workspaceId, requestedWorkspaceId), eq(m.userId, user.id)),
+      })
+      if (!m) return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'You are not a member of this workspace' } })
+      membership = { workspaceId: requestedWorkspaceId }
+    } else {
+      // Fall back to first workspace the user belongs to
+      const m = await app.db.query.workspaceMembers.findFirst({
+        where: (m, { eq }) => eq(m.userId, user.id),
+      })
+      if (!m) return reply.code(404).send({ success: false, error: { code: 'NO_WORKSPACE', message: 'Create a workspace before creating a project' } })
+      membership = { workspaceId: m.workspaceId }
+    }
 
     const [project] = await app.db
       .insert(projects)

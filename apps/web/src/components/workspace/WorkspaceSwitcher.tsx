@@ -29,10 +29,17 @@ export function WorkspaceSwitcher({ currentWorkspaceId, onSwitch }: Props) {
   useEffect(() => {
     fetch(`${apiBase}/api/v1/workspaces`, { credentials: 'include' })
       .then(r => r.json())
-      .then(d => setWorkspaces(d.workspaces ?? []))
+      .then(d => {
+        // API returns { success: true, data: [...] }
+        setWorkspaces(d.data ?? [])
+        // Auto-select first workspace if none is active
+        if (!currentWorkspaceId && d.data?.length > 0) {
+          onSwitch(d.data[0].id)
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [apiBase])
+  }, [apiBase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on outside click
   useEffect(() => {
@@ -62,11 +69,14 @@ export function WorkspaceSwitcher({ currentWorkspaceId, onSwitch }: Props) {
       })
       if (res.ok) {
         const data = await res.json()
-        setWorkspaces(prev => [...prev, { ...data.workspace, role: 'owner' }])
-        onSwitch(data.workspace.id)
-        setShowCreate(false)
-        setCreateName('')
-        setOpen(false)
+        // API returns { success: true, data: {...workspace, role} }
+        if (data.success && data.data) {
+          setWorkspaces(prev => [...prev, data.data])
+          onSwitch(data.data.id)
+          setShowCreate(false)
+          setCreateName('')
+          setOpen(false)
+        }
       }
     } finally {
       setCreating(false)
