@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
-import { users } from '../db/schema.js'
+import { eq, inArray } from 'drizzle-orm'
+import { users, workspaceMembers, subscriptions } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
+import { getStripeClient } from '../services/stripe.js'
 
 const UpdateProfileSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -77,7 +78,7 @@ export async function userRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: updated })
   })
 
-  // DELETE /api/v1/users/me — soft delete
+  // DELETE /api/v1/users/me — soft delete + cancel active subscriptions
   app.delete('/me', {
     schema: {
       tags: ['users'],
@@ -87,6 +88,33 @@ export async function userRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     await requireAuth(request, reply)
     if (!request.user) return
+
+    // Cancel any active Stripe subscriptions for workspaces owned by this user
+    try {
+      const memberships = await app.db.query.workspaceMembers.findMany({
+        where: (m, { eq }) => eq(m.userId, request.user!.id),
+      })
+      if (memberships.length > 0) {
+        const wsIds = memberships.map(m => m.workspaceId)
+        const activeSubs = await app.db
+          .select()
+          .from(subscriptions)
+          .where(inArray(subscriptions.workspaceId, wsIds))
+
+        const stripe = getStripeClient()
+        for (const sub of activeSubs) {
+          if (sub.stripeSubscriptionId && sub.planTier !== 'free') {
+            await stripe.subscriptions.cancel(sub.stripeSubscriptionId).catch(() => {
+              // Log but don't block account deletion if Stripe call fails
+              app.log.warn(`Failed to cancel Stripe subscription ${sub.stripeSubscriptionId} during account delete`)
+            })
+          }
+        }
+      }
+    } catch (err) {
+      app.log.warn({ err }, 'Subscription cancellation step failed during account delete')
+      // Non-blocking — proceed with account deletion
+    }
 
     const [deactivated] = await app.db
       .update(users)
@@ -109,9 +137,9 @@ export async function userRoutes(app: FastifyInstance) {
       30 * 24 * 3600, // 30 days TTL
     )
 
-    return reply.send({
+    return reply.clearCookie('forge_token', { path: '/' }).send({
       success: true,
-      data: { message: 'Account deactivated. Data will be deleted in 30 days.' },
+      data: { message: 'Account deactivated. Data will be permanently deleted in 30 days.' },
     })
   })
 }

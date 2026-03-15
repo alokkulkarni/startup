@@ -20,7 +20,7 @@ interface UserProfile {
 
 const planBadgeColors: Record<string, string> = {
   free: 'bg-gray-700 text-gray-300',
-  pro: 'bg-forge-900 text-forge-300 border border-forge-700',
+  pro: 'bg-violet-900/50 text-violet-300 border border-violet-700',
   team: 'bg-purple-900/50 text-purple-300 border border-purple-700',
   enterprise: 'bg-amber-900/50 text-amber-300 border border-amber-700',
 }
@@ -33,10 +33,12 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   const [name, setName] = useState('')
   const [saveMsg, setSaveMsg] = useState('')
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0) // 0=closed, 1=warn, 2=confirm
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const { subscription, loading: subLoading, openPortal } = useSubscription()
+  const { subscription } = useSubscription()
+  const isPaidPlan = subscription?.tier && subscription.tier !== 'free'
 
   useEffect(() => {
     api.get<UserProfile>('/v1/users/me').then(res => {
@@ -83,6 +85,7 @@ export default function ProfilePage() {
   }
 
   const handleDeleteAccount = async () => {
+    setDeleteLoading(true)
     await api.delete('/v1/users/me')
     window.location.href = '/'
   }
@@ -90,7 +93,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-forge-400 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -100,7 +103,7 @@ export default function ProfilePage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-forge-500 rounded-lg flex items-center justify-center font-bold text-white text-sm">F</div>
+          <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white text-sm">F</div>
           <span className="font-semibold">Forge AI</span>
         </Link>
         <Link href="/dashboard" className="text-sm text-gray-400 hover:text-white transition-colors">
@@ -108,10 +111,10 @@ export default function ProfilePage() {
         </Link>
       </nav>
 
-      <main className="max-w-2xl mx-auto px-6 py-12 space-y-10">
+      <main className="max-w-2xl mx-auto px-6 py-12 space-y-8">
         <div>
-          <h1 className="text-2xl font-bold">Account settings</h1>
-          <p className="text-gray-400 text-sm mt-1">Manage your profile and account preferences</p>
+          <h1 className="text-2xl font-bold">Profile</h1>
+          <p className="text-gray-400 text-sm mt-1">Manage your personal details</p>
         </div>
 
         {/* Avatar + info */}
@@ -121,7 +124,7 @@ export default function ProfilePage() {
           <div className="flex items-center gap-6">
             {/* Avatar */}
             <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-forge-800 flex items-center justify-center text-2xl font-bold text-forge-200 overflow-hidden">
+              <div className="w-20 h-20 rounded-full bg-violet-900/60 flex items-center justify-center text-2xl font-bold text-violet-200 overflow-hidden">
                 {user?.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -132,7 +135,7 @@ export default function ProfilePage() {
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="absolute -bottom-1 -right-1 w-7 h-7 bg-forge-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-forge-600 transition-colors disabled:opacity-50"
+                className="absolute -bottom-1 -right-1 w-7 h-7 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs hover:bg-violet-500 transition-colors disabled:opacity-50"
                 title="Upload avatar"
               >
                 {uploading ? (
@@ -169,48 +172,19 @@ export default function ProfilePage() {
           </form>
         </section>
 
-        {/* Plan */}
-        <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 space-y-4">
-          <h2 className="text-base font-semibold">Subscription</h2>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <p className="font-medium capitalize">
-                  {subscription?.tier ?? user?.plan ?? 'free'} plan
-                </p>
-                <span className={cn('text-xs px-2 py-0.5 rounded-full font-semibold', planBadgeColors[subscription?.tier ?? user?.plan ?? 'free'] ?? planBadgeColors.free)}>
-                  {(subscription?.tier ?? user?.plan ?? 'free').toUpperCase()}
-                </span>
-              </div>
-              <p className="text-sm text-gray-400">
-                {subscription
-                  ? `${subscription.limits.aiRequestsPerDay} AI messages/day · ${subscription.limits.maxProjects === 999 ? 'Unlimited' : subscription.limits.maxProjects} projects`
-                  : '50 AI messages/day · 3 projects'}
-              </p>
-              {subscription?.periodEnd && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {subscription.cancelAtPeriodEnd ? 'Cancels' : 'Renews'} {new Date(subscription.periodEnd).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 items-end">
-              {(subscription?.tier ?? 'free') === 'free' ? (
-                <Button variant="secondary" onClick={() => router.push('/pricing')}>
-                  Upgrade plan
-                </Button>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={() => router.push('/pricing')}>
-                    Change plan
-                  </Button>
-                  <Button variant="outline" loading={subLoading} onClick={openPortal} className="text-xs">
-                    Manage billing
-                  </Button>
-                </>
-              )}
-            </div>
+        {/* Account & billing quick link */}
+        <div className="flex items-center justify-between rounded-xl border border-gray-800 bg-gray-900/30 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium">Account &amp; billing</p>
+            <p className="text-xs text-gray-400 mt-0.5">View your plan, usage limits, and invoices</p>
           </div>
-        </section>
+          <Link
+            href="/dashboard/account"
+            className="text-sm text-violet-400 hover:text-violet-300 font-medium transition-colors"
+          >
+            Manage →
+          </Link>
+        </div>
 
         {/* Danger zone */}
         <section className="rounded-xl border border-red-900/50 bg-red-950/20 p-6 space-y-4">
@@ -220,26 +194,58 @@ export default function ProfilePage() {
               <p className="font-medium">Delete account</p>
               <p className="text-sm text-gray-400">Your data will be permanently deleted in 30 days</p>
             </div>
-            <Button variant="danger" onClick={() => setShowDeleteModal(true)}>
+            <Button variant="danger" onClick={() => setDeleteStep(isPaidPlan ? 1 : 2)}>
               Delete account
             </Button>
           </div>
         </section>
       </main>
 
-      {/* Delete confirmation modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      {/* Step 1: Paid plan warning */}
+      {deleteStep === 1 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 space-y-5">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-950/60 border border-amber-700/60 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Active subscription will be cancelled</h3>
+                <p className="text-gray-400 text-sm mt-1">
+                  You have an active <span className="capitalize font-semibold text-white">{subscription?.tier}</span> subscription. Deleting your account will{' '}
+                  <strong className="text-amber-300">immediately cancel</strong> your subscription — you will not receive a refund for the remaining period.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <Button variant="danger" onClick={() => setDeleteStep(2)} className="flex-1">
+                I understand, continue
+              </Button>
+              <Button variant="outline" onClick={() => setDeleteStep(0)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Final confirmation */}
+      {deleteStep === 2 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 space-y-4">
             <h3 className="text-xl font-bold">Delete your account?</h3>
             <p className="text-gray-400 text-sm">
-              This will immediately deactivate your account. Your data will be permanently deleted in 30 days. This action cannot be undone.
+              This will <strong className="text-white">immediately deactivate</strong> your account
+              {isPaidPlan ? ' and cancel your subscription' : ''}.
+              Your data will be permanently deleted in 30 days. <strong className="text-red-400">This action cannot be undone.</strong>
             </p>
             <div className="flex gap-3 pt-2">
-              <Button variant="danger" onClick={handleDeleteAccount} className="flex-1">
+              <Button variant="danger" loading={deleteLoading} onClick={handleDeleteAccount} className="flex-1">
                 Yes, delete my account
               </Button>
-              <Button variant="outline" onClick={() => setShowDeleteModal(false)} className="flex-1">
+              <Button variant="outline" onClick={() => setDeleteStep(0)} className="flex-1">
                 Cancel
               </Button>
             </div>
@@ -248,4 +254,14 @@ export default function ProfilePage() {
       )}
     </div>
   )
+}
+
+
+interface UserProfile {
+  id: string
+  email: string
+  name: string
+  avatarUrl: string | null
+  plan: string
+  createdAt: string
 }

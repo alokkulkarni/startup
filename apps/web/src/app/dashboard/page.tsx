@@ -18,6 +18,7 @@ import { PlanBadge } from '@/components/billing/PlanBadge'
 import { UpgradePrompt } from '@/components/billing/UpgradePrompt'
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher'
 import { AvatarStack } from '@/components/presence/AvatarStack'
+import { UserMenuDropdown } from '@/components/nav/UserMenuDropdown'
 import { usePresence } from '@/hooks/usePresence'
 import { useTemplates } from '@/hooks/useTemplates'
 import type { Project } from '@forge/shared'
@@ -187,15 +188,7 @@ export default function DashboardPage() {
           {onlineUsers.length > 0 && (
             <AvatarStack users={onlineUsers} maxVisible={4} size="sm" />
           )}
-          <Link href="/dashboard/profile">
-            <div className="w-8 h-8 rounded-full bg-forge-700 flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:ring-2 hover:ring-forge-500 transition-all overflow-hidden">
-              {user?.avatarUrl ? (
-                <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                user?.name?.[0]?.toUpperCase() ?? '?'
-              )}
-            </div>
-          </Link>
+          <UserMenuDropdown user={user} />
         </div>
       </header>
 
