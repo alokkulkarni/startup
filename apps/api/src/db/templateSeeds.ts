@@ -18,6 +18,7 @@ export const TEMPLATE_SEEDS: TemplateSeed[] = [
         content: JSON.stringify({
           name: 'react-counter',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^5.0.0' },
@@ -42,7 +43,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />)`,
       {
         path: 'src/App.jsx',
         content: `import { useState } from 'react'
-import './App.css'
 
 export default function App() {
   const [count, setCount] = useState(0)
@@ -92,6 +92,7 @@ export default defineConfig({ plugins: [react()], server: { host: true, port: 51
         content: JSON.stringify({
           name: 'react-todo-app',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^5.0.0' },
@@ -116,7 +117,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />)`,
       {
         path: 'src/App.jsx',
         content: `import { useState, useEffect } from 'react'
-import './App.css'
 
 function useTodos() {
   const [todos, setTodos] = useState(() => {
@@ -220,7 +220,7 @@ export default defineConfig({ plugins: [react()], server: { host: true, port: 51
           version: '1.0.0',
           scripts: { dev: 'next dev -H 0.0.0.0 -p 5173', build: 'next build', start: 'next start -H 0.0.0.0 -p 5173' },
           dependencies: { next: '^14.2.0', react: '^18.2.0', 'react-dom': '^18.2.0' },
-          devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
+          devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', '@types/react-dom': '^18.3.0', '@types/node': '^20.0.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
         }, null, 2),
       },
       {
@@ -350,10 +350,43 @@ export default function Pricing() {
 @tailwind components;
 @tailwind utilities;`,
       },
+      {
+        path: 'tailwind.config.js',
+        content: `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  theme: { extend: {} },
+  plugins: [],
+}`,
+      },
+      {
+        path: 'postcss.config.js',
+        content: `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }`,
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compilerOptions: {
+            target: 'ES2017', lib: ['dom', 'dom.iterable', 'esnext'],
+            allowJs: true, skipLibCheck: true, strict: true,
+            noEmit: true, esModuleInterop: true, module: 'esnext',
+            moduleResolution: 'bundler', resolveJsonModule: true,
+            isolatedModules: true, jsx: 'preserve', incremental: true,
+            plugins: [{ name: 'next' }],
+            paths: { '@/*': ['./src/*'] },
+          },
+          include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', '.next/types/**/*.ts'],
+          exclude: ['node_modules'],
+        }, null, 2),
+      },
+      {
+        path: 'next.config.js',
+        content: `/** @type {import('next').NextConfig} */
+const nextConfig = { env: { NEXT_TELEMETRY_DISABLED: '1' } }
+module.exports = nextConfig`,
+      },
     ],
   },
-
-  // ── 4. Landing Page ──────────────────────────────────────────────────────────
   {
     name: 'React Landing Page',
     slug: 'landing-page',
@@ -368,6 +401,7 @@ export default function Pricing() {
         content: JSON.stringify({
           name: 'landing-page',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^5.0.0' },
@@ -569,7 +603,7 @@ export default defineConfig({ plugins: [react()], server: { host: true, port: 51
           version: '1.0.0',
           scripts: { dev: 'next dev -H 0.0.0.0 -p 5173', build: 'next build', start: 'next start -H 0.0.0.0 -p 5173' },
           dependencies: { next: '^14.2.0', react: '^18.2.0', 'react-dom': '^18.2.0', 'gray-matter': '^4.0.3', 'remark': '^15.0.0', 'remark-html': '^16.0.1' },
-          devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
+          devDependencies: { typescript: '^5.5.0', '@types/react': '^18.3.0', '@types/react-dom': '^18.3.0', '@types/node': '^20.0.0', tailwindcss: '^3.4.0', autoprefixer: '^10.4.0', postcss: '^8.4.0' },
         }, null, 2),
       },
       {
@@ -707,10 +741,43 @@ Happy writing! ✍️`,
 @tailwind components;
 @tailwind utilities;`,
       },
+      {
+        path: 'tailwind.config.js',
+        content: `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  theme: { extend: {} },
+  plugins: [],
+}`,
+      },
+      {
+        path: 'postcss.config.js',
+        content: `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }`,
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compilerOptions: {
+            target: 'ES2017', lib: ['dom', 'dom.iterable', 'esnext'],
+            allowJs: true, skipLibCheck: true, strict: true,
+            noEmit: true, esModuleInterop: true, module: 'esnext',
+            moduleResolution: 'bundler', resolveJsonModule: true,
+            isolatedModules: true, jsx: 'preserve', incremental: true,
+            plugins: [{ name: 'next' }],
+            paths: { '@/*': ['./src/*'] },
+          },
+          include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', '.next/types/**/*.ts'],
+          exclude: ['node_modules'],
+        }, null, 2),
+      },
+      {
+        path: 'next.config.js',
+        content: `/** @type {import('next').NextConfig} */
+const nextConfig = { env: { NEXT_TELEMETRY_DISABLED: '1' } }
+module.exports = nextConfig`,
+      },
     ],
   },
-
-  // ── 6. React E-Commerce ──────────────────────────────────────────────────────
   {
     name: 'React E-Commerce',
     slug: 'react-ecommerce',
@@ -725,6 +792,7 @@ Happy writing! ✍️`,
         content: JSON.stringify({
           name: 'react-ecommerce',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^5.0.0' },
@@ -919,6 +987,7 @@ export default defineConfig({ plugins: [react()], server: { host: true, port: 51
         content: JSON.stringify({
           name: 'react-dashboard',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
           devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^5.0.0' },
@@ -1260,6 +1329,7 @@ export async function itemRoutes(app: FastifyInstance) {
         content: JSON.stringify({
           name: 'vue3-app',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
           dependencies: { vue: '^3.4.0', pinia: '^2.1.0' },
           devDependencies: { '@vitejs/plugin-vue': '^5.0.0', vite: '^5.0.0', typescript: '^5.5.0', 'vue-tsc': '^2.0.0' },
@@ -1423,15 +1493,27 @@ export const useTodoStore = defineStore('todo', () => {
 body { font-family: system-ui; background: #f0f4ff; min-height: 100vh; padding: 2rem; }`,
       },
       {
-        path: 'vite.config.ts',
+        path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 export default defineConfig({ plugins: [vue()], server: { host: true, port: 5173 } })`,
       },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compilerOptions: {
+            target: 'ES2020', useDefineForClassFields: true,
+            lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+            module: 'ESNext', skipLibCheck: true,
+            moduleResolution: 'bundler', resolveJsonModule: true,
+            isolatedModules: true, noEmit: true, jsx: 'preserve',
+            strict: true,
+          },
+          include: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.vue'],
+        }, null, 2),
+      },
     ],
   },
-
-  // ── 10. Svelte App ───────────────────────────────────────────────────────────
   {
     name: 'SvelteKit Starter',
     slug: 'svelte-app',
@@ -1446,9 +1528,10 @@ export default defineConfig({ plugins: [vue()], server: { host: true, port: 5173
         content: JSON.stringify({
           name: 'svelte-app',
           version: '1.0.0',
+          type: 'module',
           scripts: { dev: 'vite dev', build: 'vite build', preview: 'vite preview' },
           dependencies: { svelte: '^4.2.0' },
-          devDependencies: { '@sveltejs/vite-plugin-svelte': '^3.0.0', vite: '^5.0.0' },
+          devDependencies: { '@sveltejs/vite-plugin-svelte': '^3.0.0', vite: '^5.0.0', typescript: '^5.5.0' },
         }, null, 2),
       },
       {
@@ -1557,10 +1640,22 @@ export const notifications = writable<string[]>([])`,
 body { font-family: system-ui, -apple-system, sans-serif; }`,
       },
       {
-        path: 'vite.config.ts',
+        path: 'vite.config.js',
         content: `import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({ plugins: [svelte()], server: { host: true, port: 5173 } })`,
+      },
+      {
+        path: 'tsconfig.json',
+        content: JSON.stringify({
+          compilerOptions: {
+            target: 'ES2017', lib: ['ES2017', 'DOM', 'DOM.Iterable'],
+            module: 'ESNext', moduleResolution: 'bundler',
+            resolveJsonModule: true, isolatedModules: true,
+            noEmit: true, strict: true, skipLibCheck: true,
+          },
+          include: ['src/**/*.ts', 'src/**/*.svelte'],
+        }, null, 2),
       },
     ],
   },
