@@ -55,6 +55,7 @@ export async function createRepoAndPush(
 ): Promise<{ repoUrl: string; owner: string; repo: string; sha: string }> {
   const octokit = getOctokit(encryptedToken);
 
+  // 1. Create the repo (empty, no auto-init)
   const { data: repoData } = await octokit.rest.repos.createForAuthenticatedUser({
     name: repoName,
     private: options?.private ?? false,
@@ -65,26 +66,44 @@ export async function createRepoAndPush(
   const owner = repoData.owner.login;
   const repo = repoData.name;
 
-  const tree = files.map((f) => ({
-    path: f.path,
-    mode: '100644' as const,
-    type: 'blob' as const,
-    content: f.content,
-  }));
+  // 2. Create individual blobs (more reliable than inline content in createTree)
+  const blobs = await Promise.all(
+    files.map(async (f) => {
+      const { data } = await octokit.rest.git.createBlob({
+        owner,
+        repo,
+        content: Buffer.from(f.content, 'utf8').toString('base64'),
+        encoding: 'base64',
+      });
+      return { path: f.path, sha: data.sha };
+    }),
+  );
 
+  // 3. Create tree referencing blob SHAs
   const { data: treeData } = await octokit.rest.git.createTree({
-    owner, repo, tree,
+    owner,
+    repo,
+    tree: blobs.map((b) => ({
+      path: b.path,
+      mode: '100644' as const,
+      type: 'blob' as const,
+      sha: b.sha,
+    })),
   });
 
+  // 4. Create initial commit with no parents
   const { data: commitData } = await octokit.rest.git.createCommit({
-    owner, repo,
+    owner,
+    repo,
     message: 'Initial commit from Forge AI',
     tree: treeData.sha,
     parents: [],
   });
 
+  // 5. Create the main branch ref
   await octokit.rest.git.createRef({
-    owner, repo,
+    owner,
+    repo,
     ref: 'refs/heads/main',
     sha: commitData.sha,
   });
