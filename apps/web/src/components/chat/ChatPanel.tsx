@@ -166,22 +166,18 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
       {/* Rate limit banner */}
       {rateLimit?.remaining === 0 && (
         <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-yellow-900/40 border-b border-yellow-700/50">
-          <svg
-            className="w-4 h-4 text-yellow-400 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-            />
+          <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          <p className="text-xs text-yellow-300">
-            Rate limit reached ({rateLimit.limit} messages/day). Upgrade your plan for more.
+          <p className="text-xs text-yellow-300 flex-1">
+            Daily limit reached ({rateLimit.limit} messages/day).
           </p>
+          <a
+            href="/pricing"
+            className="shrink-0 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 px-2.5 py-1 rounded-lg transition-colors"
+          >
+            Upgrade →
+          </a>
         </div>
       )}
 

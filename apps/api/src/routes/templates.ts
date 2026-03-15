@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { eq, and, or, desc, ilike, sql } from 'drizzle-orm'
+import { eq, and, or, desc, ilike, sql, count } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   templates,
@@ -8,9 +8,11 @@ import {
   workspaceMembers,
   projects,
   projectFiles,
+  workspaces,
 } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { trackEvent } from '../services/analytics.js'
+import { PLAN_LIMITS } from '../services/stripe.js'
 
 type TemplateRow = typeof templates.$inferSelect
 
@@ -199,6 +201,29 @@ export async function templateRoutes(app: FastifyInstance) {
       return reply.code(400).send({
         success: false,
         error: { code: 'NO_WORKSPACE', message: 'Create a workspace before cloning a template' },
+      })
+    }
+
+    // ── Enforce maxProjects plan limit ────────────────────────────────────────
+    const ws = await app.db.query.workspaces.findFirst({
+      where: (w, { eq }) => eq(w.id, membership!.workspaceId),
+    })
+    const planTier = (ws?.plan ?? 'free') as keyof typeof PLAN_LIMITS
+    const limits = PLAN_LIMITS[planTier] ?? PLAN_LIMITS.free
+    const [{ value: projectCount }] = await app.db
+      .select({ value: count() })
+      .from(projects)
+      .where(eq(projects.workspaceId, membership!.workspaceId))
+    if (projectCount >= limits.maxProjects) {
+      return reply.code(403).send({
+        success: false,
+        error: {
+          code: 'PLAN_LIMIT_REACHED',
+          message: `Your ${planTier} plan allows up to ${limits.maxProjects} project${limits.maxProjects === 1 ? '' : 's'}. Upgrade to create more.`,
+          limit: limits.maxProjects,
+          current: projectCount,
+          planTier,
+        },
       })
     }
 

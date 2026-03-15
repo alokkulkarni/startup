@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useTemplates } from '@/hooks/useTemplates'
 import type { Template } from '@/hooks/useTemplates'
-import { FolderIcon } from 'lucide-react'
+import { FolderIcon, ZapIcon } from 'lucide-react'
 import { api } from '@/lib/api'
+import { usePlanGate } from '@/hooks/usePlanGate'
 
 interface Workspace { id: string; name: string; slug: string; role: string }
 
@@ -34,6 +35,7 @@ type Tab = 'template' | 'blank'
 export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: NewProjectModalProps) {
   const router = useRouter()
   const { templates, loading: tplLoading, cloneTemplate, fetchTemplates } = useTemplates()
+  const { canCreateProject, projectsUsed, projectsLimit, tier, upgrade } = usePlanGate()
 
   const [tab, setTab] = useState<Tab>('template')
   const [name, setName] = useState('')
@@ -119,6 +121,27 @@ export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: N
         </div>
 
         <div className="p-6">
+          {/* Plan limit gate — shown when user has reached their project limit */}
+          {!canCreateProject && (
+            <div className="mb-4 rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 flex items-start gap-3">
+              <ZapIcon className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-300">Project limit reached</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">
+                  Your <span className="capitalize font-medium">{tier}</span> plan allows {projectsLimit} project{projectsLimit === 1 ? '' : 's'} ({projectsUsed} used).
+                  Upgrade to create more.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { onClose(); upgrade() }}
+                className="shrink-0 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Upgrade
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 rounded-xl border border-red-800 bg-red-950/50 px-4 py-2.5 text-sm text-red-400">
               {error}
@@ -250,7 +273,7 @@ export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: N
               <Button
                 type="submit"
                 loading={loading}
-                disabled={(tab === 'template' && !selectedTpl) || !selectedWorkspaceId || workspaces.length === 0}
+                disabled={(tab === 'template' && !selectedTpl) || !selectedWorkspaceId || workspaces.length === 0 || !canCreateProject}
                 className="flex-1"
               >
                 Create project

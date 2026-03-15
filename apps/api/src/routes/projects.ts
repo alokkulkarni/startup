@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify'
-import { eq, and, desc, isNull } from 'drizzle-orm'
+import { eq, and, desc, isNull, count } from 'drizzle-orm'
 import { z } from 'zod'
 import archiver from 'archiver'
-import { projects, projectFiles, workspaceMembers } from '../db/schema.js'
+import { projects, projectFiles, workspaceMembers, workspaces } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { trackEvent } from '../services/analytics.js'
+import { PLAN_LIMITS } from '../services/stripe.js'
 
 // ── Starter templates ──────────────────────────────────────────────────────────
 const STARTER_FILES: Record<string, Record<string, string>> = {
@@ -126,19 +127,40 @@ export async function projectRoutes(app: FastifyInstance) {
     let membership: { workspaceId: string } | undefined
 
     if (requestedWorkspaceId) {
-      // Verify the user is a member of the requested workspace
       const m = await app.db.query.workspaceMembers.findFirst({
         where: (m, { and, eq }) => and(eq(m.workspaceId, requestedWorkspaceId), eq(m.userId, user.id)),
       })
       if (!m) return reply.code(403).send({ success: false, error: { code: 'FORBIDDEN', message: 'You are not a member of this workspace' } })
       membership = { workspaceId: requestedWorkspaceId }
     } else {
-      // Fall back to first workspace the user belongs to
       const m = await app.db.query.workspaceMembers.findFirst({
         where: (m, { eq }) => eq(m.userId, user.id),
       })
       if (!m) return reply.code(404).send({ success: false, error: { code: 'NO_WORKSPACE', message: 'Create a workspace before creating a project' } })
       membership = { workspaceId: m.workspaceId }
+    }
+
+    // ── Enforce maxProjects plan limit ────────────────────────────────────────
+    const ws = await app.db.query.workspaces.findFirst({
+      where: (w, { eq }) => eq(w.id, membership!.workspaceId),
+    })
+    const planTier = (ws?.plan ?? 'free') as keyof typeof PLAN_LIMITS
+    const limits = PLAN_LIMITS[planTier] ?? PLAN_LIMITS.free
+    const [{ value: projectCount }] = await app.db
+      .select({ value: count() })
+      .from(projects)
+      .where(eq(projects.workspaceId, membership!.workspaceId))
+    if (projectCount >= limits.maxProjects) {
+      return reply.code(403).send({
+        success: false,
+        error: {
+          code: 'PLAN_LIMIT_REACHED',
+          message: `Your ${planTier} plan allows up to ${limits.maxProjects} project${limits.maxProjects === 1 ? '' : 's'}. Upgrade to create more.`,
+          limit: limits.maxProjects,
+          current: projectCount,
+          planTier,
+        },
+      })
     }
 
     const [project] = await app.db
