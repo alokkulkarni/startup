@@ -19,7 +19,19 @@ import { UpgradePrompt } from '@/components/billing/UpgradePrompt'
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher'
 import { AvatarStack } from '@/components/presence/AvatarStack'
 import { usePresence } from '@/hooks/usePresence'
+import { useTemplates } from '@/hooks/useTemplates'
 import type { Project } from '@forge/shared'
+
+function frameworkIcon(framework: string): string {
+  switch (framework) {
+    case 'react': return '⚛️'
+    case 'nextjs': return '▲'
+    case 'vue': return '💚'
+    case 'svelte': return '🔥'
+    case 'node': return '🟢'
+    default: return '📦'
+  }
+}
 
 export default function DashboardPage() {
   const { user, loading: authLoading, authenticated } = useAuth()
@@ -27,6 +39,7 @@ export default function DashboardPage() {
   const { toast } = useToast()
   const { onboarding } = useOnboarding()
   const { subscription, startCheckout } = useSubscription()
+  const { templates, fetchTemplates } = useTemplates()
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(true)
@@ -63,7 +76,10 @@ export default function DashboardPage() {
   }, [toast])
 
   useEffect(() => {
-    if (authenticated) fetchProjects()
+    if (authenticated) {
+      fetchProjects()
+      fetchTemplates({ sort: 'popular', perPage: 6 })
+    }
   }, [authenticated, fetchProjects])
 
   const handleNewProject = () => {
@@ -182,20 +198,12 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-10">
-        {/* Page heading */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Projects</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {projects.length} project{projects.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <Button onClick={handleNewProject} className="hidden sm:inline-flex">
-            + New project
-          </Button>
-          <Button variant="secondary" onClick={() => setShowImportModal(true)} className="hidden sm:inline-flex">
-            Import from GitHub
-          </Button>
+        {/* Page heading — buttons are in the top bar, no duplicates here */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">Projects</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {projects.length} project{projects.length !== 1 ? 's' : ''}
+          </p>
         </div>
 
         {/* Loading skeleton */}
@@ -247,6 +255,38 @@ export default function DashboardPage() {
               />
             ))}
           </div>
+        )}
+
+        {/* Featured Templates */}
+        {templates.length > 0 && (
+          <section className="mt-16 pt-8 border-t border-gray-800">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Start from a template</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Jumpstart your project with a pre-built template</p>
+              </div>
+              <Link href="/templates">
+                <Button variant="secondary" size="sm">View all templates →</Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {templates.slice(0, 6).map(tpl => (
+                <Link
+                  key={tpl.id}
+                  href="/templates"
+                  className="group flex flex-col gap-2 p-4 rounded-xl bg-gray-900 border border-gray-800 hover:border-gray-600 hover:bg-gray-800/80 transition-all"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center text-lg transition-colors">
+                    {frameworkIcon(tpl.framework)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-white truncate">{tpl.name}</p>
+                    <p className="text-xs text-gray-500 capitalize mt-0.5">{tpl.category}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
       </main>
 
