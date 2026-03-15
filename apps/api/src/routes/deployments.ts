@@ -88,6 +88,45 @@ export async function deploymentRoutes(app: FastifyInstance) {
     return reply.send({ success: true, data: { deployments: deploymentList } })
   })
 
+  // GET /:id/deployments/:deployId/ready — check if the deployed URL is actually live
+  app.get<{ Params: { id: string; deployId: string } }>(
+    '/:id/deployments/:deployId/ready',
+    async (request, reply) => {
+      if (!(await requireAuth(request, reply))) return
+      const user = await app.db.query.users.findFirst({
+        where: (u, { eq: eqFn }) => eqFn(u.id, request.user!.id),
+      })
+      if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND' } })
+      const project = await assertAccess(request.params.id, user.id)
+      if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND' } })
+
+      const deployment = await app.db.query.deployments.findFirst({
+        where: (d, { and, eq: eqFn }) =>
+          and(eqFn(d.id, request.params.deployId), eqFn(d.projectId, request.params.id)),
+      })
+      if (!deployment || !deployment.deployUrl) {
+        return reply.send({ success: true, data: { ready: false } })
+      }
+      if (deployment.status !== 'deployed') {
+        return reply.send({ success: true, data: { ready: false } })
+      }
+
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        const res = await fetch(deployment.deployUrl, {
+          method: 'HEAD',
+          signal: controller.signal,
+          redirect: 'follow',
+        })
+        clearTimeout(timeout)
+        return reply.send({ success: true, data: { ready: res.ok || res.status < 500 } })
+      } catch {
+        return reply.send({ success: true, data: { ready: false } })
+      }
+    },
+  )
+
   // POST /:id/deployments/:deployId/rollback — restore snapshot + re-deploy
   app.post<{ Params: { id: string; deployId: string } }>(
     '/:id/deployments/:deployId/rollback',

@@ -12,6 +12,24 @@ export interface Message {
   content: string
   createdAt: string
   isStreaming?: boolean
+  /** File paths created/modified/deleted by this assistant message. */
+  changedPaths?: string[]
+}
+
+/**
+ * Strip all AI file-output XML (<forge_changes>, <file> tags and their content)
+ * so the chat only stores and displays the human-readable explanation text.
+ */
+function extractExplanation(content: string): string {
+  return content
+    .replace(/<forge_changes>[\s\S]*?<\/forge_changes>/g, '')
+    .replace(/<forge_changes>[\s\S]*/g, '')        // incomplete tag (shouldn't happen on done)
+    .replace(/<file\s[^>]*>[\s\S]*?<\/file>/g, '') // bare file tags (AI ignoring format)
+    .replace(/<file\s[^>]*>[\s\S]*/g, '')           // incomplete bare tag
+    .replace(/```[\w.\-/ ]*\n[\s\S]*?```/g, '')     // markdown code blocks
+    .replace(/```[\w.\-/ ]*\n[\s\S]*/g, '')          // partial code block
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 interface HistoryResponse {
@@ -105,28 +123,59 @@ export function useAIChat(
 
       const decoder = new TextDecoder()
 
+      // Buffer incoming text tokens and flush to state via rAF to avoid
+      // re-rendering on every single token (which freezes the browser).
+      let pendingContent = ''
+      let rafId: number | null = null
+
+      const flushContent = () => {
+        rafId = null
+        const snapshot = pendingContent
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
+        )
+      }
+
       const parser = createParser({
         onEvent(event) {
           try {
             const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[] }
 
             if (data.type === 'text' && data.text) {
+              pendingContent += data.text
+              // Batch all tokens arriving within the same animation frame
+              if (rafId === null) {
+                rafId = requestAnimationFrame(flushContent)
+              }
+            } else if (data.type === 'file_written') {
+              onFilesChanged?.()
+            } else if (data.type === 'files_changed') {
+              const paths: string[] = data.paths ?? []
               setMessages(prev =>
                 prev.map(m =>
-                  m.id === assistantId ? { ...m, content: m.content + data.text } : m,
+                  m.id === assistantId ? { ...m, changedPaths: paths } : m,
                 ),
               )
-            } else if (data.type === 'files_changed') {
-              // Trigger file tree refresh
               onFilesChanged?.()
             } else if (data.type === 'done') {
+              if (rafId !== null) {
+                cancelAnimationFrame(rafId)
+                rafId = null
+              }
               setMessages(prev =>
-                prev.map(m => (m.id === assistantId ? { ...m, isStreaming: false } : m)),
+                prev.map(m => {
+                  if (m.id !== assistantId) return m
+                  return {
+                    ...m,
+                    content: extractExplanation(pendingContent),
+                    isStreaming: false,
+                  }
+                }),
               )
               setIsStreaming(false)
-              // Also refresh files on done in case files_changed wasn't received
               onFilesChanged?.()
             } else if (data.type === 'error') {
+              if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
               setIsStreaming(false)
@@ -144,8 +193,9 @@ export function useAIChat(
       }
 
       // Ensure streaming flag is cleared if stream ended without explicit done event
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       setMessages(prev =>
-        prev.map(m => (m.id === assistantId ? { ...m, isStreaming: false } : m)),
+        prev.map(m => (m.id === assistantId ? { ...m, content: extractExplanation(pendingContent), isStreaming: false } : m)),
       )
       setIsStreaming(false)
     } catch (err) {

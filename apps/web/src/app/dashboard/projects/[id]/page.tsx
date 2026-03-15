@@ -17,7 +17,7 @@ import { GitHubPanel } from '@/components/github/GitHubPanel'
 import { SyncStatusBadge } from '@/components/github/SyncStatusBadge'
 import { useGitHub } from '@/hooks/useGitHub'
 import { useFileTree } from '@/hooks/useFileTree'
-import { useWebContainer } from '@/hooks/useWebContainer'
+import { useServerPreview, type WCStatus } from '@/hooks/useServerPreview'
 import { useSnapshots } from '@/hooks/useSnapshots'
 import { useToast } from '@/hooks/useToast'
 import { useDeployments } from '@/hooks/useDeployments'
@@ -71,7 +71,7 @@ export default function ProjectPage() {
   const { toast } = useToast()
   const { startCheckout } = useSubscription()
 
-  const { isDeploying, latestDeployUrl, triggerDeploy } = useDeployments(id, token)
+  const { isDeploying, isWarmingUp: deployWarmingUp, latestDeployUrl, triggerDeploy } = useDeployments(id, token)
   const { syncStatus, refetchSyncStatus } = useGitHub(id)
 
   // Load panel widths from localStorage
@@ -133,8 +133,12 @@ export default function ProjectPage() {
     writeFile,
     syncFiles,
     restart: restartWC,
+    stop: stopWC,
     clearLogs,
-  } = useWebContainer(id, files, showPreview && files.length > 0)
+  } = useServerPreview(id, showPreview && files.length > 0)
+
+  const wcStatusRef = useRef<WCStatus>('idle')
+  useEffect(() => { wcStatusRef.current = wcStatus }, [wcStatus])
 
   const MAX_HEAL_ATTEMPTS = 3
 
@@ -142,15 +146,22 @@ export default function ProjectPage() {
     id,
     token,
     async () => {
-      await refreshFiles()
-      await syncFiles(files)
+      const freshFiles = await refreshFiles()
+      await syncFiles(freshFiles)
     },
   )
 
   // Auto self-heal on WebContainer errors
   useEffect(() => {
     if (wcError && healAttempts < MAX_HEAL_ATTEMPTS) {
-      const healPrompt = `Fix this runtime error (attempt ${healAttempts + 1}/${MAX_HEAL_ATTEMPTS}):\n\n${wcError.message}${wcError.file ? `\nFile: ${wcError.file}:${wcError.line}` : ''}${wcError.stack ? `\n\nStack trace:\n${wcError.stack}` : ''}`
+      const location = wcError.file
+        ? `\nFile: ${wcError.file}${wcError.line != null ? `:${wcError.line}` : ''}`
+        : ''
+      const stack = wcError.stack ? `\n\nStack trace:\n${wcError.stack}` : ''
+      const healPrompt =
+        `The preview crashed (auto-fix attempt ${healAttempts + 1}/${MAX_HEAL_ATTEMPTS}). ` +
+        `Review the current files and fix ONLY the root cause — do not regenerate unrelated files:\n\n` +
+        wcError.message + location + stack
       setFixPrompt(healPrompt)
       setHealAttempts(prev => prev + 1)
     }
@@ -244,9 +255,14 @@ export default function ProjectPage() {
   }, [id])
 
   const handleFilesChanged = useCallback(async () => {
-    await refreshFiles()
-    await syncFiles(files)
-  }, [refreshFiles, syncFiles, files])
+    const freshFiles = await refreshFiles()
+    await syncFiles(freshFiles)
+    // If the preview was errored, restart it so the fix takes effect.
+    // Vite HMR handles running apps automatically; only a full restart clears crash state.
+    if (wcStatusRef.current === 'error') {
+      await restartWC()
+    }
+  }, [refreshFiles, syncFiles, restartWC])
 
   if (authLoading || loading) {
     return (
@@ -320,8 +336,36 @@ export default function ProjectPage() {
           </button>
           {/* Sync status badge */}
           <SyncStatusBadge syncStatus={syncStatus} onRefresh={refetchSyncStatus} />
+          {/* Download ZIP */}
+          <a
+            href={`/api/v1/projects/${id}/download`}
+            download
+            className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-200 hover:text-white font-medium transition-all flex items-center gap-1.5"
+            title="Download project as ZIP"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download
+          </a>
           {/* Deploy button */}
-          {latestDeployUrl ? (
+          {isDeploying ? (
+            <button
+              disabled
+              className="text-xs px-3 py-1.5 bg-indigo-600 rounded-lg text-white font-medium flex items-center gap-1.5 opacity-75"
+            >
+              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+              Deploying…
+            </button>
+          ) : deployWarmingUp ? (
+            <button
+              disabled
+              className="text-xs px-3 py-1.5 bg-indigo-600 rounded-lg text-white font-medium flex items-center gap-1.5 opacity-75"
+            >
+              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+              Warming up…
+            </button>
+          ) : latestDeployUrl ? (
             <a
               href={latestDeployUrl}
               target="_blank"
@@ -330,14 +374,6 @@ export default function ProjectPage() {
             >
               Live ↗
             </a>
-          ) : isDeploying ? (
-            <button
-              disabled
-              className="text-xs px-3 py-1.5 bg-indigo-600 rounded-lg text-white font-medium flex items-center gap-1.5 opacity-75"
-            >
-              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-              Deploying…
-            </button>
           ) : (
             <div className="relative">
               <button
@@ -405,7 +441,7 @@ export default function ProjectPage() {
             projectId={id}
             onFilesChanged={handleFilesChanged}
             initialPrompt={fixPrompt ?? initialBuildPrompt}
-            autoSendPrompt={!fixPrompt && !!initialBuildPrompt}
+            autoSendPrompt={!!(fixPrompt ?? initialBuildPrompt)}
             onPromptConsumed={() => setFixPrompt(null)}
             files={files}
             onRateLimit={() => setShowRateLimitPrompt(true)}
@@ -452,7 +488,10 @@ export default function ProjectPage() {
             viewport={viewport}
             onViewportChange={setViewport}
             onRefresh={restartWC}
-            onFixWithAI={msg => setFixPrompt(`Fix this error:\n\n${msg}`)}
+            onStop={stopWC}
+            onFixWithAI={msg => setFixPrompt(
+              `The preview crashed with this error. Review the current files and fix only the root cause — do not regenerate unrelated files:\n\n${msg}`
+            )}
             onClearLogs={clearLogs}
             showConsole={showConsole}
             onToggleConsole={() => setShowConsole(v => !v)}
@@ -492,7 +531,7 @@ export default function ProjectPage() {
         token={token}
         isOpen={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        onRestored={async () => { await refreshFiles(); await syncFiles(files) }}
+        onRestored={async () => { const fresh = await refreshFiles(); await syncFiles(fresh) }}
       />
       <DeployHistoryPanel
         projectId={id}

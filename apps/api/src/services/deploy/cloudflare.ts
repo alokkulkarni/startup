@@ -1,8 +1,9 @@
 import { createHash } from 'crypto'
+import { sanitiseFiles } from './utils.js'
+import type { DeployFile } from './utils.js'
 
 const CF_API = 'https://api.cloudflare.com/client/v4'
 
-interface DeployFile { path: string; content: string }
 interface DeployResult { providerId: string; deployUrl: string }
 
 export async function deployToCloudflare(
@@ -16,6 +17,7 @@ export async function deployToCloudflare(
 
   const headers = { Authorization: `Bearer ${token}` }
   const projectName = `forge-${projectSlug.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
+  const safeFiles = sanitiseFiles(files)
 
   // Create project if not exists (ignore 409 conflict)
   await fetch(`${CF_API}/accounts/${accountId}/pages/projects`, {
@@ -28,7 +30,7 @@ export async function deployToCloudflare(
   const formData = new FormData()
   const manifest: Record<string, string> = {}
 
-  for (const f of files) {
+  for (const f of safeFiles) {
     const blob = new Blob([f.content], { type: 'text/plain' })
     const sha = createHash('sha256').update(f.content, 'utf8').digest('hex')
     formData.append(f.path, blob, f.path)

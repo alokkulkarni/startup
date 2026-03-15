@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: 'Forge AI — Build apps with AI',
   description: 'Build production-ready web apps from natural language. Ship faster with AI.',
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost'),
+  icons: {
+    icon: '/logo.svg',
+    shortcut: '/logo.svg',
+    apple: '/logo.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

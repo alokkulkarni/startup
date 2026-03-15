@@ -107,15 +107,16 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
     onFilesChanged,
   )
   const bottomRef = useRef<HTMLDivElement>(null)
-  const prevStreamingRef = useRef(false)
   const [input, setInput] = useState('')
-  const autoSentRef = useRef(false)
+  const autoSentRef = useRef<string | null>(null)
 
-  // Pre-fill OR auto-send initial prompt (e.g., from onboarding "Start Building")
+  // Pre-fill OR auto-send initial prompt (e.g., from onboarding "Start Building" or "Fix with AI")
   useEffect(() => {
     if (!initialPrompt) return
-    if (autoSendPrompt && !autoSentRef.current && !isStreaming) {
-      autoSentRef.current = true
+    if (autoSendPrompt && autoSentRef.current !== initialPrompt && !isStreaming) {
+      // Track by prompt string so each unique prompt is sent exactly once,
+      // even across multiple fix cycles in the same session.
+      autoSentRef.current = initialPrompt
       onPromptConsumed?.()
       sendMessage(initialPrompt)
     } else if (!autoSendPrompt) {
@@ -130,9 +131,15 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
     }
   }, [authenticated, loadHistory])
 
+  const messagesLenRef = useRef(0)
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isStreaming])
+    const newMessage = messages.length > messagesLenRef.current
+    messagesLenRef.current = messages.length
+    // Use instant scroll during streaming (smooth scroll per-token freezes the browser)
+    // Only smooth-scroll when a new message is added
+    bottomRef.current?.scrollIntoView({ behavior: newMessage ? 'smooth' : 'instant' })
+  }, [messages.length, isStreaming])
 
   // Notify parent when rate limit is hit
   useEffect(() => {
@@ -141,34 +148,14 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
     }
   }, [rateLimit?.remaining]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Notify parent when AI finishes streaming (files may have changed)
-  useEffect(() => {
-    if (prevStreamingRef.current && !isStreaming && messages.length > 0) {
-      onFilesChanged?.()
-    }
-    prevStreamingRef.current = isStreaming
-  }, [isStreaming, messages.length, onFilesChanged])
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-700">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <svg
-              className="w-3.5 h-3.5 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-              />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Forge AI" className="w-6 h-6 rounded-lg" />
           <span className="text-sm font-semibold text-white">Forge AI</span>
         </div>
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-lg border border-gray-700">
@@ -211,6 +198,7 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
                 content={msg.content}
                 createdAt={msg.createdAt}
                 isStreaming={msg.isStreaming}
+                changedPaths={msg.changedPaths}
               />
             ))}
             {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (

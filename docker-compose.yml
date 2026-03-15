@@ -128,6 +128,10 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       JWT_SECRET: ${JWT_SECRET:-forge-dev-secret-change-in-production}
+      FORGE_ENCRYPTION_KEY: ${FORGE_ENCRYPTION_KEY:-}
+      # GitHub OAuth App #1 — code integration (push/pull/import via API)
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       # Social login OAuth (separate from code-integration GITHUB_CLIENT_ID in apps/api/.env)
       GITHUB_LOGIN_CLIENT_ID: ${GITHUB_LOGIN_CLIENT_ID:-}
       GITHUB_LOGIN_CLIENT_SECRET: ${GITHUB_LOGIN_CLIENT_SECRET:-}
@@ -146,6 +150,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # ── Deployment providers ────────────────────────────────────────────────
+      FORGE_VERCEL_API_KEY: ${FORGE_VERCEL_API_KEY:-}
+      FORGE_NETLIFY_API_KEY: ${FORGE_NETLIFY_API_KEY:-}
+      FORGE_CF_API_TOKEN: ${FORGE_CF_API_TOKEN:-}
+      FORGE_CF_ACCOUNT_ID: ${FORGE_CF_ACCOUNT_ID:-}
+      # ── Preview containers ─────────────────────────────────────────────────
+      PREVIEW_PORT_START: "40000"
+      PREVIEW_PORT_END: "40999"
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages:/app/packages
@@ -153,6 +165,8 @@ services:
       - /app/node_modules
       # Mount host AWS credentials so the container can use named profiles / SSO
       - ${HOME}/.aws:/root/.aws:ro
+      # Docker socket — required for spinning up per-project preview containers
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

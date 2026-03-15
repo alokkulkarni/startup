@@ -18,7 +18,7 @@ interface UseFileTreeReturn {
   error: string | null
   activeFile: FileNode | null
   setActiveFile: (file: FileNode | null) => void
-  refreshFiles: () => Promise<void>
+  refreshFiles: () => Promise<FileNode[]>
   createFile: (path: string, content?: string) => Promise<FileNode>
   updateFile: (path: string, content: string) => Promise<void>
   deleteFile: (path: string) => Promise<void>
@@ -38,24 +38,25 @@ export function useFileTree(projectId: string, token: string | null): UseFileTre
   }, [files])
 
   const doFetch = useCallback(async (): Promise<FileNode[]> => {
-    const res = await api.get<{ files: FileNode[] }>(`/v1/projects/${projectId}/files`)
-    const updated = res.data?.files ?? []
+    const res = await api.get<FileNode[]>(`/v1/projects/${projectId}/files`)
+    const updated = res.data ?? []
     setFiles(updated)
     return updated
   }, [projectId])
 
-  const refreshFiles = useCallback(async (): Promise<void> => {
-    if (!projectId || !token) return
+  const refreshFiles = useCallback(async (): Promise<FileNode[]> => {
+    if (!projectId) return []
     setIsLoading(true)
     setError(null)
     try {
-      await doFetch()
+      return await doFetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load files')
+      return []
     } finally {
       setIsLoading(false)
     }
-  }, [projectId, token, doFetch])
+  }, [projectId, doFetch])
 
   const createFile = useCallback(async (path: string, content = ''): Promise<FileNode> => {
     await api.put(`/v1/projects/${projectId}/files/${encodeURIComponent(path)}`, { content })
@@ -96,11 +97,11 @@ export function useFileTree(projectId: string, token: string | null): UseFileTre
   }, [projectId, doFetch])
 
   useEffect(() => {
-    if (projectId && token) {
+    if (projectId) {
       refreshFiles()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, token])
+  }, [projectId])
 
   return {
     files,

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { useDeployments } from '@/hooks/useDeployments'
+import { useDeployments, isWarmingUp } from '@/hooks/useDeployments'
 import type { Deployment } from '@/hooks/useDeployments'
 
 interface DeployHistoryPanelProps {
@@ -51,10 +51,21 @@ export function DeployHistoryPanel({
   const { deployments, isDeploying, isLoading, triggerDeploy, rollback, refresh } =
     useDeployments(projectId, token)
   const [deployMenuOpen, setDeployMenuOpen] = useState(false)
+  // tick forces a re-render every 5s so isWarmingUp() is rechecked per row
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     if (isOpen) refresh()
   }, [isOpen, refresh])
+
+  // Re-render every 5s so warming-up rows update when warm-up expires
+  useEffect(() => {
+    if (!isOpen) return
+    const hasWarmingDeployment = deployments.some(d => isWarmingUp(d))
+    if (!hasWarmingDeployment) return
+    const id = setInterval(() => setTick(t => t + 1), 5000)
+    return () => clearInterval(id)
+  }, [isOpen, deployments])
 
   if (!isOpen) return null
 
@@ -146,14 +157,21 @@ export function DeployHistoryPanel({
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       {deployment.status === 'deployed' && deployment.deployUrl && (
-                        <a
-                          href={deployment.deployUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                          Live ↗
-                        </a>
+                        isWarmingUp(deployment) ? (
+                          <span className="text-xs text-amber-400 flex items-center gap-1">
+                            <span className="w-2 h-2 border border-amber-400 border-t-transparent rounded-full animate-spin" />
+                            Warming up…
+                          </span>
+                        ) : (
+                          <a
+                            href={deployment.deployUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                          >
+                            Live ↗
+                          </a>
+                        )
                       )}
                       {deployment.status === 'deployed' && index > 0 && (
                         <button
@@ -166,8 +184,8 @@ export function DeployHistoryPanel({
                     </div>
                   </div>
                   {deployment.status === 'failed' && deployment.errorMessage && (
-                    <p className="mt-1 text-xs text-red-400 truncate">
-                      {deployment.errorMessage.slice(0, 80)}
+                    <p className="mt-1.5 text-xs text-red-400 break-words leading-relaxed">
+                      {deployment.errorMessage}
                     </p>
                   )}
                 </li>

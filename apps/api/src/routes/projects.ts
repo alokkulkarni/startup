@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { eq, and, desc, isNull } from 'drizzle-orm'
 import { z } from 'zod'
+import archiver from 'archiver'
 import { projects, projectFiles, workspaceMembers } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { trackEvent } from '../services/analytics.js'
@@ -318,9 +319,55 @@ export async function projectRoutes(app: FastifyInstance) {
 
     const files = await app.db.query.projectFiles.findMany({
       where: (f, { eq }) => eq(f.projectId, id),
-      columns: { projectId: true, path: true, mimeType: true, sizeBytes: true, updatedAt: true },
+      columns: { id: true, projectId: true, path: true, content: true, mimeType: true, sizeBytes: true, updatedAt: true },
     })
 
     return reply.send({ success: true, data: files })
+  })
+
+  // GET /api/v1/projects/:id/download — stream all project files as a ZIP
+  app.get('/:id/download', async (request, reply) => {
+    await requireAuth(request, reply)
+    if (!request.user) return
+
+    const { id } = request.params as { id: string }
+    const user = await getDbUser(app, request.user.id)
+    if (!user) return reply.code(404).send({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
+
+    const project = await assertProjectAccess(app, id, user.id)
+    if (!project) return reply.code(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } })
+
+    const files = await app.db.query.projectFiles.findMany({
+      where: (f, { eq: eqFn }) => eqFn(f.projectId, id),
+      columns: { path: true, content: true },
+    })
+
+    const slug = (project.name ?? 'project')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60) || 'project'
+
+    reply.raw.setHeader('Content-Type', 'application/zip')
+    reply.raw.setHeader('Content-Disposition', `attachment; filename="${slug}.zip"`)
+    reply.raw.setHeader('Cache-Control', 'no-store')
+
+    const archive = archiver('zip', { zlib: { level: 6 } })
+
+    archive.on('error', (err) => {
+      app.log.error({ err }, 'ZIP archive error')
+      if (!reply.raw.headersSent) {
+        reply.raw.writeHead(500)
+      }
+      reply.raw.end()
+    })
+
+    archive.pipe(reply.raw)
+
+    for (const file of files) {
+      archive.append(file.content, { name: file.path })
+    }
+
+    await archive.finalize()
   })
 }

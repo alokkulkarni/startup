@@ -14,6 +14,7 @@ const baseProps = {
   viewport: 'desktop' as Viewport,
   onViewportChange: vi.fn(),
   onRefresh: vi.fn(),
+  onStop: vi.fn(),
   onFixWithAI: vi.fn(),
   onClearLogs: vi.fn(),
   showConsole: false,

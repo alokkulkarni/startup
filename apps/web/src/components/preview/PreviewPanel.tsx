@@ -16,6 +16,7 @@ interface PreviewPanelProps {
   viewport: Viewport
   onViewportChange: (v: Viewport) => void
   onRefresh: () => void
+  onStop: () => void
   onFixWithAI: (errorMessage: string) => void
   onClearLogs: () => void
   showConsole: boolean
@@ -37,18 +38,20 @@ export function PreviewPanel({
   viewport,
   onViewportChange,
   onRefresh,
+  onStop,
   onFixWithAI,
   onClearLogs,
   showConsole,
   onToggleConsole,
 }: PreviewPanelProps) {
-  // Track dismissed error to allow hiding overlay without mutating WC state
-  const [dismissedMsg, setDismissedMsg] = useState<string | null>(null)
+  // Track whether the user has dismissed the current error session.
+  // Only reset when the preview restarts (status goes idle) — NOT on every new error message,
+  // because repeated proxy errors have slightly different messages each time.
+  const [isDismissed, setIsDismissed] = useState(false)
 
-  // Reset dismissed state when a new/different error arrives
   useEffect(() => {
-    if (error?.message !== dismissedMsg) setDismissedMsg(null)
-  }, [error?.message]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (status === 'idle' || status === 'stopped') setIsDismissed(false)
+  }, [status])
 
   // Ctrl+Shift+R keyboard shortcut
   const handleKeyDown = useCallback(
@@ -66,9 +69,9 @@ export function PreviewPanel({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  const isLoading = status !== 'ready' && status !== 'idle' && status !== 'error'
+  const isLoading = status !== 'ready' && status !== 'idle' && status !== 'stopped' && status !== 'error'
   const maxWidth = VIEWPORT_WIDTHS[viewport]
-  const visibleError = error && error.message !== dismissedMsg ? error : null
+  const visibleError = error && !isDismissed ? error : null
 
   return (
     <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
@@ -76,6 +79,17 @@ export function PreviewPanel({
       <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900">
         <ViewportToggle current={viewport} onChange={onViewportChange} />
         <div className="flex-1" />
+
+        {/* Stop */}
+        <button
+          onClick={onStop}
+          disabled={status === 'idle' || status === 'stopped'}
+          title="Stop preview"
+          aria-label="Stop preview"
+          className="p-1.5 rounded-lg transition-colors text-base leading-none disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400 hover:bg-gray-800"
+        >
+          ⏹
+        </button>
 
         {/* Refresh */}
         <button
@@ -125,10 +139,18 @@ export function PreviewPanel({
 
       {/* Preview area */}
       <div className="flex-1 relative overflow-hidden">
-        {/* Idle placeholder */}
-        {status === 'idle' && (
-          <div className="flex items-center justify-center h-full bg-gray-900 text-gray-600 text-sm">
-            <p>Preview not started</p>
+        {/* Idle / stopped placeholder */}
+        {(status === 'idle' || status === 'stopped') && (
+          <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-gray-600 text-sm gap-2">
+            <p>{status === 'stopped' ? 'Preview stopped' : 'Preview not started'}</p>
+            {status === 'stopped' && (
+              <button
+                onClick={onRefresh}
+                className="text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+              >
+                Restart preview
+              </button>
+            )}
           </div>
         )}
 
@@ -144,11 +166,23 @@ export function PreviewPanel({
           </div>
         )}
 
-        {/* Loading overlay */}
+        {/* Loading overlay — shows terminal tail when starting so user can see progress */}
         {isLoading && (
-          <div className="absolute inset-0 bg-gray-950 flex flex-col items-center justify-center gap-3 z-10">
-            <div className="w-7 h-7 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+          <div className="absolute inset-0 bg-gray-950 flex flex-col items-center justify-center gap-3 z-10 px-4">
+            <div className="w-7 h-7 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
             <p className="text-sm text-gray-400">{STATUS_MESSAGES[status] ?? status}</p>
+            {status === 'starting' && logs.length > 0 && (
+              <div className="w-full max-w-xl mt-2 bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+                <div className="px-3 py-1.5 bg-gray-800 text-xs text-gray-500 font-mono">Terminal output</div>
+                <div className="p-3 font-mono text-xs text-gray-400 space-y-0.5 max-h-40 overflow-y-auto">
+                  {logs.slice(-12).map((l, i) => (
+                    <div key={i} className={l.type === 'stderr' ? 'text-red-400' : 'text-gray-400'}>
+                      {l.text.trim()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -156,7 +190,7 @@ export function PreviewPanel({
         <ErrorOverlay
           error={visibleError}
           onFixWithAI={onFixWithAI}
-          onDismiss={() => setDismissedMsg(error?.message ?? null)}
+          onDismiss={() => setIsDismissed(true)}
         />
       </div>
 

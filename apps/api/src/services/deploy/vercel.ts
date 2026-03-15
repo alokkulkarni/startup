@@ -1,8 +1,9 @@
 import { createHash } from 'crypto'
+import { sanitiseFiles } from './utils.js'
+import type { DeployFile } from './utils.js'
 
 const VERCEL_API = 'https://api.vercel.com'
 
-interface DeployFile { path: string; content: string }
 interface DeployResult { providerId: string; deployUrl: string }
 
 export async function deployToVercel(
@@ -15,8 +16,11 @@ export async function deployToVercel(
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 
+  // Patch package.json before upload — fixes AI-generated missing CSS toolchain deps
+  const safeFiles = sanitiseFiles(files)
+
   // 1. Upload files
-  const fileRefs = await Promise.all(files.map(async (f) => {
+  const fileRefs = await Promise.all(safeFiles.map(async (f) => {
     const buf = Buffer.from(f.content, 'utf8')
     const sha = createHash('sha1').update(buf).digest('hex')
 
@@ -38,18 +42,26 @@ export async function deployToVercel(
       name: deployName,
       files: fileRefs,
       projectSettings: { framework: 'vite', buildCommand: 'npm run build', outputDirectory: 'dist', installCommand: 'npm install' },
-      env: Object.entries(envVars).map(([k, v]) => ({ key: k, value: v, type: 'plain' })),
+      env: envVars,
       target: 'production',
     }),
   })
 
   if (!deployRes.ok) {
-    const err = await deployRes.text()
-    throw new Error(`Vercel deploy failed: ${err}`)
+    const errText = await deployRes.text()
+    let errMsg: string
+    try {
+      const errJson = JSON.parse(errText)
+      errMsg = errJson?.error?.message ?? errText
+    } catch {
+      errMsg = errText
+    }
+    throw new Error(`Vercel: ${errMsg}`)
   }
 
   const deploy = await deployRes.json() as { id: string; url: string }
-  return { providerId: deploy.id, deployUrl: `https://${deploy.url}` }
+  // Use the stable production alias (always {name}.vercel.app), not the per-deployment hash URL
+  return { providerId: deploy.id, deployUrl: `https://${deployName}.vercel.app` }
 }
 
 export async function pollVercelDeployment(providerId: string): Promise<'ready' | 'error' | 'pending'> {

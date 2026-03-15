@@ -5,7 +5,8 @@ import { aiConversations, aiMessages } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { streamAIResponse } from '../services/ai.js'
 import { buildSystemPrompt, getConversationHistory } from '../services/context.js'
-import { parseAIResponse, applyDiffs } from '../services/diff.js'
+import { parseAIResponse, applyDiffs, applyDiffsNoSnapshot, extractNewlyCompletedFiles, writeSingleFile } from '../services/diff.js'
+import { createSnapshot } from '../services/snapshot.js'
 import { getUserPlanLimit } from '../services/stripe.js'
 import { trackEvent } from '../services/analytics.js'
 
@@ -113,7 +114,11 @@ export async function aiRoutes(app: FastifyInstance) {
 
       // Build context
       const messages = [...history, { role: 'user' as const, content: prompt }]
-      const systemPrompt = await buildSystemPrompt(projectId, app.db)
+      const systemPrompt = await buildSystemPrompt(projectId, app.db, {
+        name: project.name,
+        framework: project.framework,
+        description: project.description,
+      })
 
       // Log the full prompt for debugging (first 2000 chars of system prompt + user prompt)
       app.log.info({
@@ -138,12 +143,34 @@ export async function aiRoutes(app: FastifyInstance) {
       const write = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
       let fullContent = ''
+      // Track files written incrementally during streaming
+      const writtenDuringStream = new Set<string>()
+      let snapshotTaken = false
 
       try {
         for await (const chunk of streamAIResponse(messages, systemPrompt)) {
           if (chunk.type === 'text' && chunk.text) {
             fullContent += chunk.text
             write({ type: 'text', text: chunk.text })
+
+            // Incrementally write any newly-completed <file> blocks to DB
+            const newFiles = extractNewlyCompletedFiles(fullContent, writtenDuringStream)
+            if (newFiles.length > 0) {
+              // Take snapshot once, before the first write
+              if (!snapshotTaken) {
+                snapshotTaken = true
+                await createSnapshot(project.id, app.db, 'ai', prompt)
+              }
+              for (const fileDiff of newFiles) {
+                writtenDuringStream.add(fileDiff.path)
+                try {
+                  await writeSingleFile(project.id, fileDiff, app.db)
+                  write({ type: 'file_written', path: fileDiff.path })
+                } catch (err) {
+                  app.log.warn({ msg: '[AI] Incremental file write failed', path: fileDiff.path, err })
+                }
+              }
+            }
           } else if (chunk.type === 'done') {
             // Save assistant message
             await app.db.insert(aiMessages).values({
@@ -153,24 +180,33 @@ export async function aiRoutes(app: FastifyInstance) {
               tokensUsed: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0),
             })
 
-            // Parse and apply any file diffs; notify frontend of changed files
+            // Apply any remaining files not yet written (modify/delete actions, or if
+            // incremental parsing missed anything due to format quirks)
             const { diffs } = parseAIResponse(fullContent)
+            const remainingDiffs = diffs.filter(d => !writtenDuringStream.has(d.path))
 
             // Log response analysis
             app.log.info({
               msg: '[AI] Response complete',
               responseLength: fullContent.length,
               hasForgeChanges: fullContent.includes('<forge_changes>'),
-              filesDetected: diffs.length,
-              filePaths: diffs.map(d => `${d.isNew ? '+' : d.isDeleted ? '-' : '~'}${d.path}`),
+              filesStreamed: writtenDuringStream.size,
+              filesRemaining: remainingDiffs.length,
               tokens: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0),
             })
 
-            if (diffs.length > 0) {
-              const changedPaths = await applyDiffs(project.id, diffs, app.db, prompt)
-              if (changedPaths.length > 0) {
-                write({ type: 'files_changed', paths: changedPaths })
-              }
+            let allChangedPaths: string[] = [...writtenDuringStream]
+
+            if (remainingDiffs.length > 0) {
+              // applyDiffs takes its own snapshot; skip if we already took one
+              const extra = snapshotTaken
+                ? await applyDiffsNoSnapshot(project.id, remainingDiffs, app.db)
+                : await applyDiffs(project.id, remainingDiffs, app.db, prompt)
+              allChangedPaths = [...new Set([...allChangedPaths, ...extra])]
+            }
+
+            if (allChangedPaths.length > 0) {
+              write({ type: 'files_changed', paths: allChangedPaths })
             }
 
             write({ type: 'done' })

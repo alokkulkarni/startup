@@ -89,10 +89,26 @@ export async function applyDiffs(
   description?: string,
 ): Promise<string[]> {
   if (diffs.length === 0) return []
-
-  // Auto-snapshot before applying AI changes
   await createSnapshot(projectId, db, 'ai', description)
+  await runDiffTransaction(projectId, diffs, db)
+  return diffs.map(d => d.path)
+}
 
+/**
+ * Same as `applyDiffs` but skips the snapshot step (use when a snapshot was
+ * already taken earlier in the same generation pass).
+ */
+export async function applyDiffsNoSnapshot(
+  projectId: string,
+  diffs: FileDiff[],
+  db: DrizzleDB,
+): Promise<string[]> {
+  if (diffs.length === 0) return []
+  await runDiffTransaction(projectId, diffs, db)
+  return diffs.map(d => d.path)
+}
+
+async function runDiffTransaction(projectId: string, diffs: FileDiff[], db: DrizzleDB): Promise<void> {
   await db.transaction(async (tx) => {
     for (const fileDiff of diffs) {
       if (fileDiff.isDeleted) {
@@ -180,9 +196,6 @@ export async function applyDiffs(
         )
     }
   })
-
-  // Return list of changed file paths
-  return diffs.map(d => d.path)
 }
 
 function detectMimeType(path: string): string {
@@ -194,6 +207,95 @@ function detectMimeType(path: string): string {
     sql: 'application/sql', sh: 'application/x-sh', yaml: 'text/x-yaml', yml: 'text/x-yaml',
   }
   return map[ext] ?? 'text/plain'
+}
+
+// ---------------------------------------------------------------------------
+// Incremental streaming helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan a growing buffer for newly-completed <file>…</file> blocks.
+ * Returns the FileDiffs for any blocks that have fully arrived and have NOT
+ * already been written (tracked in `alreadyWritten`).
+ *
+ * Call this each time new text is appended to the buffer.
+ */
+export function extractNewlyCompletedFiles(
+  buffer: string,
+  alreadyWritten: Set<string>,
+): FileDiff[] {
+  const results: FileDiff[] = []
+
+  // Only operate inside a <forge_changes> block (complete or partial open)
+  const forgeOpen = buffer.indexOf('<forge_changes>')
+  if (forgeOpen === -1) return results
+
+  // Work on the portion inside the open forge_changes tag
+  const inner = buffer.slice(forgeOpen + '<forge_changes>'.length)
+
+  const fileRe = /<file\s+path="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/file>/g
+  let m: RegExpExecArray | null
+
+  while ((m = fileRe.exec(inner)) !== null) {
+    const path = m[1].trim()
+    if (alreadyWritten.has(path)) continue
+
+    const action = (m[2] ?? '').trim().toLowerCase()
+    const fileContent = m[3] ?? ''
+
+    if (action === 'delete') {
+      results.push({ path, diff: '', isNew: false, isDeleted: true })
+    } else {
+      const rawContent = fileContent.trimStart().replace(/^\n/, '')
+      results.push({ path, diff: rawContent, isNew: true, isDeleted: false })
+    }
+  }
+
+  return results
+}
+
+/**
+ * Write (upsert) a single file to the project — used for incremental streaming.
+ * Does NOT take a snapshot (the snapshot is taken before the first file is written).
+ */
+export async function writeSingleFile(
+  projectId: string,
+  fileDiff: FileDiff,
+  db: DrizzleDB,
+): Promise<void> {
+  if (fileDiff.isDeleted) {
+    await db
+      .delete(schema.projectFiles)
+      .where(
+        and(
+          eq(schema.projectFiles.projectId, projectId),
+          eq(schema.projectFiles.path, fileDiff.path),
+        ),
+      )
+    return
+  }
+
+  // For incremental streaming, content is always "full content" (action="create")
+  const content = fileDiff.diff
+  const mimeType = detectMimeType(fileDiff.path)
+
+  await db
+    .insert(schema.projectFiles)
+    .values({
+      projectId,
+      path: fileDiff.path,
+      content,
+      mimeType,
+      sizeBytes: Buffer.byteLength(content, 'utf8'),
+    })
+    .onConflictDoUpdate({
+      target: [schema.projectFiles.projectId, schema.projectFiles.path],
+      set: {
+        content,
+        sizeBytes: Buffer.byteLength(content, 'utf8'),
+        updatedAt: new Date(),
+      },
+    })
 }
 
 /**
