@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { BeforeMount } from '@monaco-editor/react'
+import type { BeforeMount, OnMount } from '@monaco-editor/react'
 import type { FileNode } from '@/hooks/useFileTree'
 import { cn } from '@/lib/utils'
+import { useCollaboration } from '@/hooks/useCollaboration'
 
 const LANG_MAP: Record<string, string> = {
   ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
@@ -30,6 +31,8 @@ interface CodeEditorProps {
   activeFile: FileNode | null
   onSave: (path: string, content: string) => Promise<void>
   onFileClick: (file: FileNode) => void
+  /** Enable real-time collaborative editing via Yjs WebSocket */
+  collaborationEnabled?: boolean
 }
 
 // Lazy-load Monaco — @monaco-editor/react handles dynamic loading internally
@@ -50,10 +53,20 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ),
 })
 
-export function CodeEditor({ files, activeFile, onSave }: CodeEditorProps) {
+export function CodeEditor({ projectId, files, activeFile, onSave, collaborationEnabled = false }: CodeEditorProps) {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const editorRef = useRef<any>(null)
+  const bindingController = useRef<{ binding: { destroy: () => void } | null }>({ binding: null })
+
+  // Yjs collaboration — only active when collaborationEnabled + a file is open
+  const { yText, provider } = useCollaboration({
+    projectId,
+    filePath: collaborationEnabled ? activeTabPath : null,
+    enabled: collaborationEnabled,
+  })
 
   // When activeFile changes, add it to open tabs if not already there
   useEffect(() => {
@@ -134,6 +147,40 @@ export function CodeEditor({ files, activeFile, onSave }: CodeEditorProps) {
     })
   }, [])
 
+  const handleMount: OnMount = useCallback((editor) => {
+    editorRef.current = editor
+  }, [])
+
+  // Create/destroy MonacoBinding when collaborative mode is active
+  useEffect(() => {
+    if (!collaborationEnabled || !yText || !editorRef.current) return
+
+    const ctrl = bindingController.current
+    // Destroy any previous binding before creating a new one
+    ctrl.binding?.destroy()
+    ctrl.binding = null
+
+    import('y-monaco')
+      .then(({ MonacoBinding }) => {
+        if (!editorRef.current || !yText) return
+        const model = editorRef.current.getModel()
+        if (!model) return
+        ctrl.binding = new MonacoBinding(
+          yText,
+          model,
+          new Set([editorRef.current]),
+          provider?.awareness ?? null
+        )
+      })
+      .catch(console.error)
+
+    return () => {
+      ctrl.binding?.destroy()
+      ctrl.binding = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collaborationEnabled, yText, provider?.awareness])
+
   const activeTab = openTabs.find(t => t.path === activeTabPath)
 
   if (openTabs.length === 0) {
@@ -199,9 +246,11 @@ export function CodeEditor({ files, activeFile, onSave }: CodeEditorProps) {
           <MonacoEditor
             height="100%"
             language={activeTab.language}
-            value={activeTab.content}
+            // In collaborative mode Yjs owns the model content — skip the controlled value
+            value={collaborationEnabled ? undefined : activeTab.content}
             theme="forge-dark"
             beforeMount={handleBeforeMount}
+            onMount={handleMount}
             onChange={value => handleEditorChange(value, activeTab.path)}
             options={{
               minimap: { enabled: false },

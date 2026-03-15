@@ -27,7 +27,7 @@ export function CategoryFilter({ selected, onChange }: CategoryFilterProps) {
           className={[
             'text-sm px-4 py-1.5 rounded-full whitespace-nowrap transition-all font-medium',
             selected === cat.value
-              ? 'bg-violet-600 text-white'
+              ? 'bg-gray-700/60 text-violet-300 border border-violet-900/50'
               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white',
           ].join(' ')}
         >
