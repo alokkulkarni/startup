@@ -145,7 +145,11 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         setStatus('starting')
         setProgress(70)
       }
-      if (text.includes('Local:') || text.includes('ready in') || text.includes('App running')) {
+      if (text.includes('__FORGE_SERVER_READY__') ||
+          text.includes('Local:') || text.includes('ready in') || text.includes('App running') ||
+          text.includes('✓ Ready') || text.includes('started server on') ||
+          text.toLowerCase().includes('listening at') || text.toLowerCase().includes('listening on') ||
+          text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')) {
         setStatus('ready')
         setProgress(100)
         setError(null)

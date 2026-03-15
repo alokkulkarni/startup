@@ -34,6 +34,7 @@ export interface PreviewInstance {
   logs: string[]
   subscribers: Set<(log: string) => void>
   ttlTimer: ReturnType<typeof setTimeout> | null
+  readySent?: boolean
 }
 
 // ── Docker client ─────────────────────────────────────────────────────────────
@@ -241,10 +242,30 @@ export async function start(projectId: string, db: DrizzleDB): Promise<number> {
         if (text.includes('__FORGE_INSTALL_DONE__')) {
           instance.status = 'running'
           pushLog(instance, '✅ Packages installed — dev server starting…')
-        } else if (text.includes('ready in') || text.includes('Local:')) {
-          pushLog(instance, `✅ ${text}`)
         } else {
-          pushLog(instance, text)
+          // Detect server-ready across all frameworks:
+          //  Vite:    "ready in", "Local:"
+          //  Node/Fastify: "listening at/on" in pino JSON logs
+          //  Next.js: "✓ Ready", "started server on"
+          //  Express/Hapi/etc: common "listening" patterns
+          const lower = text.toLowerCase()
+          const isReady =
+            text.includes('ready in') ||
+            text.includes('Local:') ||
+            text.includes('✓ Ready') ||
+            text.includes('started server on') ||
+            lower.includes('listening at') ||
+            lower.includes('listening on') ||
+            lower.includes('server listening') ||
+            lower.includes('server running') ||
+            lower.includes('app running')
+
+          pushLog(instance, isReady ? `✅ ${text}` : text)
+
+          if (isReady && !instance.readySent) {
+            instance.readySent = true
+            pushLog(instance, '__FORGE_SERVER_READY__')
+          }
         }
         cb()
       },
