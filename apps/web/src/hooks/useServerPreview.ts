@@ -78,6 +78,8 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   const startingRef = useRef(false)
   const startFailedRef = useRef(false)  // prevents auto-restart loop when API itself errors
   const previewUrlRef = useRef<string | null>(null)
+  // true while a container is running — used by cleanup to decide whether to stop
+  const containerActiveRef = useRef(false)
 
   // ── Log helpers ──────────────────────────────────────────────────────────────
   const logBufRef = useRef<LogEntry[]>([])
@@ -189,6 +191,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         `/v1/projects/${projectId}/preview/start`
       )
       previewUrlRef.current = data.previewUrl
+      containerActiveRef.current = true
 
       // Timestamp-bust the URL on each start so the iframe actually reloads
       setPreviewUrl(`${data.previewUrl}?t=${Date.now()}`)
@@ -216,12 +219,29 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     }
   }, [enabled, status]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Cleanup SSE on unmount ───────────────────────────────────────────────────
+  // ── Cleanup on unmount / navigation away ────────────────────────────────────
+  // Stop the preview container when the user navigates to another page or
+  // closes the tab.  keepalive:true ensures the fetch survives page unload.
   useEffect(() => {
-    return () => {
-      sseRef.current?.close()
+    const stopContainer = () => {
+      if (!containerActiveRef.current) return
+      containerActiveRef.current = false
+      fetch(`${API_URL}/v1/projects/${projectId}/preview/stop`, {
+        method: 'DELETE',
+        credentials: 'include',
+        keepalive: true,   // fires even if the page is being unloaded
+      }).catch(() => {})
     }
-  }, [])
+
+    // Extra safety: fire on browser tab/window close before React unmounts
+    window.addEventListener('beforeunload', stopContainer)
+
+    return () => {
+      window.removeEventListener('beforeunload', stopContainer)
+      sseRef.current?.close()
+      stopContainer()    // navigation away (component unmount)
+    }
+  }, [projectId])  // re-register when projectId changes
 
   // ── Public API ───────────────────────────────────────────────────────────────
   const syncFiles = useCallback(async (_files?: FileNode[]) => {
@@ -257,6 +277,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
 
   const stop = useCallback(() => {
     sseRef.current?.close()
+    containerActiveRef.current = false
     setStatus('stopped')
     setPreviewUrl(null)
     setProgress(0)
