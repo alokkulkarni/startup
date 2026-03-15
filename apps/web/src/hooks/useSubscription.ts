@@ -71,7 +71,12 @@ export function useSubscription() {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.post<{ url: string }>('/v1/billing/checkout', { priceId })
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+      const res = await api.post<{ url: string }>('/v1/billing/checkout', {
+        priceId,
+        successUrl: `${origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${origin}/pricing`,
+      })
       if (res.data?.url) {
         window.location.href = res.data.url
       }

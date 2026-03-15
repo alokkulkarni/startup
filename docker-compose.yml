@@ -218,6 +218,11 @@ services:
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost/api
+      # Stripe publishable price IDs (set these to real Stripe price IDs when configuring billing)
+      NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID: ${STRIPE_PRO_MONTHLY_PRICE_ID:-price_pro_monthly}
+      NEXT_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID: ${STRIPE_PRO_YEARLY_PRICE_ID:-price_pro_yearly}
+      NEXT_PUBLIC_STRIPE_TEAM_MONTHLY_PRICE_ID: ${STRIPE_TEAM_MONTHLY_PRICE_ID:-price_team_monthly}
+      NEXT_PUBLIC_STRIPE_TEAM_YEARLY_PRICE_ID: ${STRIPE_TEAM_YEARLY_PRICE_ID:-price_team_yearly}
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages
