@@ -175,8 +175,18 @@ export function PreviewPanel({
       <div className="flex-1 relative overflow-hidden">
         {/* Idle / stopped placeholder */}
         {(status === 'idle' || status === 'stopped') && (
-          <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-gray-600 text-sm gap-2">
-            <p>{status === 'stopped' ? 'Preview stopped' : 'Preview not started'}</p>
+          <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-gray-500 text-sm gap-3 px-6 text-center">
+            <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-xl">
+              {status === 'stopped' ? '⏹' : '▶'}
+            </div>
+            <p className="font-medium text-gray-400">
+              {status === 'stopped' ? 'Preview stopped' : 'Live Preview'}
+            </p>
+            <p className="text-xs text-gray-600 max-w-48">
+              {status === 'stopped'
+                ? 'Click below or press Ctrl+Shift+R to restart'
+                : 'Start chatting to generate files — the preview will appear here automatically'}
+            </p>
             {status === 'stopped' && (
               <button
                 onClick={onRefresh}

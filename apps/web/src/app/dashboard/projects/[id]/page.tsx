@@ -65,6 +65,7 @@ export default function ProjectPage() {
   const [showEditor, setShowEditor] = useState(true)
   const showFileTreeRef = useRef(true)
   const showEditorRef = useRef(true)
+  const showPreviewRef = useRef(true)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Capture token once authenticated
@@ -86,12 +87,13 @@ export default function ProjectPage() {
       try {
         const saved = localStorage.getItem(`forge:panel:${id}`)
         if (saved) {
-          const parsed = JSON.parse(saved) as Partial<typeof DEFAULT_WIDTHS> & { showFileTree?: boolean; showEditor?: boolean }
+          const parsed = JSON.parse(saved) as Partial<typeof DEFAULT_WIDTHS> & { showFileTree?: boolean; showEditor?: boolean; showPreview?: boolean }
           const merged = { ...DEFAULT_WIDTHS, ...parsed }
           setPanelWidths(merged)
           panelWidthsRef.current = merged
           if (parsed.showFileTree != null) { setShowFileTree(parsed.showFileTree); showFileTreeRef.current = parsed.showFileTree }
           if (parsed.showEditor != null) { setShowEditor(parsed.showEditor); showEditorRef.current = parsed.showEditor }
+          if (parsed.showPreview != null) { setShowPreview(parsed.showPreview); showPreviewRef.current = parsed.showPreview }
         }
       } catch {
         // ignore
@@ -106,6 +108,7 @@ export default function ProjectPage() {
 
   useEffect(() => { showFileTreeRef.current = showFileTree }, [showFileTree])
   useEffect(() => { showEditorRef.current = showEditor }, [showEditor])
+  useEffect(() => { showPreviewRef.current = showPreview }, [showPreview])
 
   useEffect(() => {
     if (!authLoading && !authenticated) router.push('/login')
@@ -199,22 +202,36 @@ export default function ProjectPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [undoLast])
 
-  // Keyboard shortcuts: Cmd+B = toggle file tree, Cmd+Shift+E = toggle editor
+  // Keyboard shortcuts: Cmd+B = toggle file tree, Cmd+Shift+E = toggle editor, Cmd+Shift+P = toggle preview
   useEffect(() => {
+    const savePanelState = (overrides: Record<string, unknown>) => {
+      if (typeof window !== 'undefined')
+        localStorage.setItem(`forge:panel:${id}`, JSON.stringify({
+          ...panelWidthsRef.current,
+          showFileTree: showFileTreeRef.current,
+          showEditor: showEditorRef.current,
+          showPreview: showPreviewRef.current,
+          ...overrides,
+        }))
+    }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'b') {
         e.preventDefault()
         const next = !showFileTreeRef.current
         setShowFileTree(next)
-        if (typeof window !== 'undefined')
-          localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: next, showEditor: showEditorRef.current }))
+        savePanelState({ showFileTree: next })
       }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'e') {
         e.preventDefault()
         const next = !showEditorRef.current
         setShowEditor(next)
-        if (typeof window !== 'undefined')
-          localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: next }))
+        savePanelState({ showEditor: next })
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault()
+        const next = !showPreviewRef.current
+        setShowPreview(next)
+        savePanelState({ showPreview: next })
       }
     }
     window.addEventListener('keydown', handler)
@@ -327,8 +344,18 @@ export default function ProjectPage() {
   // Compute effective panel widths — redistributes hidden-panel space to visible panels
   const displayWidths = useMemo(() => {
     const { fileTree, chat, editor, preview } = panelWidths
+    const total = fileTree + chat + editor + preview
+
+    if (!showPreview) {
+      // Preview hidden — redistribute its space to editor (or chat if editor hidden)
+      if (!showFileTree && !showEditor) {
+        return { fileTree: 0, chat: total, editor: 0, preview: 0 }
+      }
+      if (!showFileTree) return { fileTree: 0, chat, editor: editor + preview + fileTree, preview: 0 }
+      if (!showEditor) return { fileTree, chat: chat + editor + preview, editor: 0, preview: 0 }
+      return { fileTree, chat, editor: editor + preview, preview: 0 }
+    }
     if (!showFileTree && !showEditor) {
-      const total = fileTree + chat + editor + preview
       const chatRatio = chat / (chat + preview)
       return { fileTree: 0, chat: total * chatRatio, editor: 0, preview: total * (1 - chatRatio) }
     }
@@ -338,7 +365,7 @@ export default function ProjectPage() {
       return { fileTree, chat: chat + editor * chatRatio, editor: 0, preview: preview + editor * (1 - chatRatio) }
     }
     return panelWidths
-  }, [panelWidths, showFileTree, showEditor])
+  }, [panelWidths, showFileTree, showEditor, showPreview])
 
   if (authLoading || loading) {
     return (
@@ -377,7 +404,7 @@ export default function ProjectPage() {
                 const next = !showFileTree
                 setShowFileTree(next)
                 if (typeof window !== 'undefined')
-                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: next, showEditor: showEditorRef.current }))
+                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: next, showEditor: showEditorRef.current, showPreview: showPreviewRef.current }))
               }}
               title={`${showFileTree ? 'Hide' : 'Show'} file tree (⌘B)`}
               className={`px-2 py-1.5 transition-colors ${showFileTree ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}`}
@@ -389,12 +416,24 @@ export default function ProjectPage() {
                 const next = !showEditor
                 setShowEditor(next)
                 if (typeof window !== 'undefined')
-                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: next }))
+                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: next, showPreview: showPreviewRef.current }))
               }}
               title={`${showEditor ? 'Hide' : 'Show'} editor (⌘⇧E)`}
               className={`px-2 py-1.5 border-l border-gray-700/60 transition-colors ${showEditor ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}`}
             >
               <PanelEditorIcon />
+            </button>
+            <button
+              onClick={() => {
+                const next = !showPreview
+                setShowPreview(next)
+                if (typeof window !== 'undefined')
+                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: showEditorRef.current, showPreview: next }))
+              }}
+              title={`${showPreview ? 'Hide' : 'Show'} preview (⌘⇧P)`}
+              className={`px-2 py-1.5 border-l border-gray-700/60 transition-colors ${showPreview ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}`}
+            >
+              <PanelPreviewIcon />
             </button>
           </div>
           {/* Undo last AI change */}
@@ -600,40 +639,45 @@ export default function ProjectPage() {
           />
         )}
 
-        {/* Drag handle 2 — editor ↔ preview (only when editor is expanded) */}
-        {showEditor && (
+        {/* Drag handle 2 — editor ↔ preview (only when both are expanded) */}
+        {showEditor && showPreview && (
           <div
             className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
             onMouseDown={e => handleDragStart(e, 2)}
           />
         )}
 
-        {/* Panel 4 — Preview (always visible, flex-1 so it fills remaining space
-             without overflowing — fixed panels like CollapsedPanel strips and drag
-             handles consume fixed px; percentage widths on other panels would push
-             this past the viewport edge if we used shrink-0 + % width) */}
-        <div
-          className="flex-1 min-w-[240px] flex flex-col overflow-hidden transition-all duration-200"
-        >
-          <PreviewPanel
-            status={wcStatus}
-            previewUrl={previewUrl}
-            progress={wcProgress}
-            logs={consoleLogs}
-            error={wcError}
-            viewport={viewport}
-            onViewportChange={setViewport}
-            onRefresh={restartWC}
-            onStop={stopWC}
-            onFixWithAI={msg => setFixPrompt(
-              `The preview crashed with this error. Review the current files and fix only the root cause — do not regenerate unrelated files:\n\n${msg}`
-            )}
-            onClearLogs={clearLogs}
-            showConsole={showConsole}
-            onToggleConsole={() => setShowConsole(v => !v)}
-            framework={project?.framework}
+        {/* Panel 4 — Preview (or collapsed strip) */}
+        {showPreview ? (
+          <div
+            className="flex-1 min-w-[240px] flex flex-col overflow-hidden transition-all duration-200"
+          >
+            <PreviewPanel
+              status={wcStatus}
+              previewUrl={previewUrl}
+              progress={wcProgress}
+              logs={consoleLogs}
+              error={wcError}
+              viewport={viewport}
+              onViewportChange={setViewport}
+              onRefresh={restartWC}
+              onStop={stopWC}
+              onFixWithAI={msg => setFixPrompt(
+                `The preview crashed with this error. Review the current files and fix only the root cause — do not regenerate unrelated files:\n\n${msg}`
+              )}
+              onClearLogs={clearLogs}
+              showConsole={showConsole}
+              onToggleConsole={() => setShowConsole(v => !v)}
+              framework={project?.framework}
+            />
+          </div>
+        ) : (
+          <CollapsedPanel
+            label="Preview"
+            icon={<PanelPreviewIcon />}
+            onExpand={() => setShowPreview(true)}
           />
-        </div>
+        )}
       </div>
 
       {/* Status bar */}
@@ -723,6 +767,17 @@ function PanelEditorIcon() {
       <polyline points="4.5,5 1.5,8 4.5,11" />
       <polyline points="11.5,5 14.5,8 11.5,11" />
       <line x1="9.5" y1="3" x2="6.5" y2="13" />
+    </svg>
+  )
+}
+
+/** Icon for the "show/hide preview" toggle button in the header */
+function PanelPreviewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1.5" y="2" width="13" height="12" rx="1.5" />
+      <line x1="10.5" y1="2" x2="10.5" y2="14" />
+      <polygon points="5,6 5,10 8,8" fill="currentColor" stroke="none" />
     </svg>
   )
 }
