@@ -8,7 +8,7 @@ interface UpgradePromptProps {
 
 const MESSAGES: Record<UpgradePromptProps['type'], string> = {
   rate_limit:
-    "You've used all 50 AI requests for today. Upgrade to Pro for 500/day.",
+    "You've used all 20 AI requests for today. Upgrade to Pro for 300/day.",
   project_limit:
     "You've reached the 3-project limit on the Free plan. Upgrade to create more.",
 }

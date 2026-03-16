@@ -23,7 +23,7 @@ const ONBOARDING_PLANS = [
     price: '$0/mo',
     badge: null,
     description: 'Great for learning & side projects',
-    features: ['3 projects', '50 AI requests/day', 'Community support'],
+    features: ['3 projects', '20 AI requests/day', 'Community support'],
     cta: 'Start free',
     highlight: false,
   },

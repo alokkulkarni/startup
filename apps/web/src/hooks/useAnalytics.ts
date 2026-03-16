@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { api } from '@/lib/api'
 
 interface OverviewData {
   aiRequests: number
@@ -34,24 +35,27 @@ export function useAnalytics() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
   const fetchAll = useCallback(async () => {
     try {
-      const [ovRes, usageRes, actRes] = await Promise.all([
-        fetch(`${apiBase}/api/v1/analytics/overview`, { credentials: 'include' }),
-        fetch(`${apiBase}/api/v1/analytics/ai-usage`, { credentials: 'include' }),
-        fetch(`${apiBase}/api/v1/analytics/activity?limit=20`, { credentials: 'include' }),
+      // Use the api lib so auth cookies + base URL are handled consistently.
+      // API routes return raw objects (not ApiResponse-wrapped), so we cast directly.
+      const [ovRaw, usageRaw, actRaw] = await Promise.all([
+        api.get<OverviewData>('/v1/analytics/overview'),
+        api.get<{ series: UsageSeries[] }>('/v1/analytics/ai-usage'),
+        api.get<{ events: ActivityEvent[] }>('/v1/analytics/activity?limit=20'),
       ])
-      if (ovRes.ok) setOverview(await ovRes.json())
-      if (usageRes.ok) { const d = await usageRes.json(); setAiSeries(d.series ?? []) }
-      if (actRes.ok) { const d = await actRes.json(); setActivity(d.events ?? []) }
+      const ov = ovRaw as unknown as OverviewData
+      const usage = usageRaw as unknown as { series: UsageSeries[] }
+      const act = actRaw as unknown as { events: ActivityEvent[] }
+      if (ov) setOverview(ov)
+      if (usage?.series) setAiSeries(usage.series)
+      if (act?.events) setActivity(act.events)
     } catch {
       setError('Failed to load analytics')
     } finally {
       setLoading(false)
     }
-  }, [apiBase])
+  }, [])
 
   useEffect(() => {
     fetchAll()

@@ -124,7 +124,7 @@ export function useAIChat(
 
       if (response.status === 429) {
         clearTimeout(streamingTimeout)
-        setRateLimit({ remaining: 0, limit: 50 })
+        setRateLimit({ remaining: 0, limit: 20 })
         setMessages(prev => prev.filter(m => m.id !== assistantId))
         setIsStreaming(false)
         setError('Rate limit reached. Please wait before sending another message.')

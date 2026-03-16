@@ -44,8 +44,9 @@ export function useSubscription() {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get<SubscriptionInfo>('/v1/billing/subscription')
-      setSubscription(res.data ?? DEFAULT_FREE_SUBSCRIPTION)
+      // Billing routes return raw objects, not ApiResponse-wrapped — cast directly.
+      const data = await api.get<SubscriptionInfo>('/v1/billing/subscription')
+      setSubscription((data as unknown as SubscriptionInfo) ?? DEFAULT_FREE_SUBSCRIPTION)
     } catch {
       // On any error, silently fall back to free tier so the page still renders
       setSubscription(DEFAULT_FREE_SUBSCRIPTION)
@@ -57,8 +58,9 @@ export function useSubscription() {
   const fetchUsage = async () => {
     setLoading(true)
     try {
-      const res = await api.get<UsageInfo>('/v1/billing/usage')
-      setUsage(res.data ?? null)
+      // Billing routes return raw objects, not ApiResponse-wrapped — cast directly.
+      const data = await api.get<UsageInfo>('/v1/billing/usage')
+      setUsage((data as unknown as UsageInfo) ?? null)
     } catch {
       // Non-critical — leave usage null
     } finally {
