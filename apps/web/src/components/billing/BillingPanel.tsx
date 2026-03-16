@@ -5,10 +5,11 @@ import { useSubscription } from '@/hooks/useSubscription'
 import { PlanBadge } from './PlanBadge'
 import { UsageBar } from './UsageBar'
 
-const PLAN_NAMES: Record<'free' | 'pro' | 'team', string> = {
+const PLAN_NAMES: Record<'free' | 'pro' | 'team' | 'enterprise', string> = {
   free: 'Free',
   pro: 'Pro',
   team: 'Team',
+  enterprise: 'Enterprise',
 }
 
 function formatDate(dateStr: string): string {
@@ -27,7 +28,7 @@ export function BillingPanel() {
   }
 
   const tier = subscription?.tier ?? 'free'
-  const isPaid = tier === 'pro' || tier === 'team'
+  const isPaid = tier === 'pro' || tier === 'team' || tier === 'enterprise'
 
   return (
     <div className="bg-gray-800 rounded-2xl p-6 space-y-6 border border-gray-700">

@@ -86,7 +86,7 @@ export async function aiRoutes(app: FastifyInstance) {
             .header('X-RateLimit-Remaining', '0')
             .send({
               success: false,
-              error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.' },
+              error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.', limit: planLimit },
             })
         }
       }

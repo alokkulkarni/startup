@@ -1,7 +1,7 @@
 'use client'
 
 interface PlanBadgeProps {
-  tier: 'free' | 'pro' | 'team'
+  tier: 'free' | 'pro' | 'team' | 'enterprise'
   size?: 'sm' | 'md'
 }
 
@@ -9,6 +9,7 @@ const PLAN_CONFIG = {
   free: { bg: 'bg-gray-700', text: 'text-gray-300', label: 'Free', icon: null },
   pro: { bg: 'bg-violet-600', text: 'text-white', label: 'Pro', icon: '⚡' },
   team: { bg: 'bg-amber-500', text: 'text-white', label: 'Team', icon: '🚀' },
+  enterprise: { bg: 'bg-emerald-600', text: 'text-white', label: 'Enterprise', icon: '👑' },
 } as const
 
 export function PlanBadge({ tier, size = 'md' }: PlanBadgeProps) {

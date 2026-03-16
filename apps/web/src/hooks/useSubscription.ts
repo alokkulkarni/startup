@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 
 export interface SubscriptionInfo {
-  tier: 'free' | 'pro' | 'team'
+  tier: 'free' | 'pro' | 'team' | 'enterprise'
   status: string
   periodEnd: string | null
   cancelAtPeriodEnd: boolean

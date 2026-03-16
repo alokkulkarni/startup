@@ -123,6 +123,9 @@ async function ensureAdminTier(db: any, user: { id: string; email: string; plan:
     .set({ plan: tier, updatedAt: new Date() })
     .where(eq(users.id, user.id))
 
+  // Update the in-memory user object so the JWT is signed with the correct plan
+  ;(user as any).plan = tier
+
   // Upgrade all their workspaces + subscriptions
   const memberships = await db.query.workspaceMembers.findMany({
     where: (m: any, { eq }: any) => eq(m.userId, user.id),
