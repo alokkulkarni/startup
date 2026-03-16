@@ -49,6 +49,8 @@ export interface PreviewInstance {
   /** Handle for the 10-minute inactivity teardown timer. */
   idleTimer: ReturnType<typeof setTimeout> | null
   readySent?: boolean
+  /** Last-synced package.json content — used to detect dependency changes. */
+  lastPackageJson?: string
 }
 
 // ── Docker client ─────────────────────────────────────────────────────────────
@@ -473,29 +475,37 @@ export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void>
     .from(schema.projectFiles)
     .where(eq(schema.projectFiles.projectId, projectId))
 
-  const packageJsonBefore = files.find(f => f.path === 'package.json')?.content ?? ''
+  const currentPackageJson = files.find(f => f.path === 'package.json')?.content ?? ''
   const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
   const container = docker.getContainer(instance.containerName)
   await container.putArchive(tar, { path: '/' })
 
-  // If package.json changed (new deps added by AI), run npm install inside container.
-  const packageJsonAfter = files.find(f => f.path === 'package.json')?.content ?? ''
-  const packageJsonChanged = packageJsonBefore !== packageJsonAfter && packageJsonAfter !== ''
+  // Detect real package.json changes by comparing against the last-synced content.
+  const packageJsonChanged = currentPackageJson !== '' && currentPackageJson !== (instance.lastPackageJson ?? '')
+  instance.lastPackageJson = currentPackageJson
 
   // Docker putArchive writes via overlay FS which does NOT fire inotify events.
-  // Touch only src/ and public/ files — never config files like vite.config.ts
-  // (touching vite.config.ts causes a full Vite server restart which is slow).
+  // Touch source files so Vite's chokidar watcher detects the changes.
+  // Include all common source directories — not just src/ and public/.
   try {
     const installCmd = packageJsonChanged
       ? 'cd /app && npm install --prefer-offline --no-audit --no-fund 2>/dev/null; '
       : ''
     const exec = await container.exec({
-      Cmd: ['sh', '-c', `${installCmd}find /app/src /app/public -type f 2>/dev/null | xargs touch 2>/dev/null; true`],
-      AttachStdout: false,
-      AttachStderr: false,
+      Cmd: ['sh', '-c', `${installCmd}find /app/src /app/public /app/app /app/pages /app/styles /app/components /app/lib /app/assets -type f 2>/dev/null | xargs touch 2>/dev/null; true`],
+      AttachStdout: true,
+      AttachStderr: true,
     })
     const stream = await exec.start({ hijack: false, stdin: false })
-    stream.resume()
+    // Wait for exec to complete instead of fire-and-forget — ensures files are
+    // touched and npm install finishes before the frontend reloads the iframe.
+    await new Promise<void>((resolve) => {
+      stream.on('end', resolve)
+      stream.on('error', () => resolve())
+      // Safety timeout: don't block forever if exec hangs
+      setTimeout(resolve, 30_000)
+      stream.resume()
+    })
     if (packageJsonChanged) {
       pushLog(instance, '📦 Installing new packages…')
     }

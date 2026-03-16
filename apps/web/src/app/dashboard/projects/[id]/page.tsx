@@ -216,12 +216,12 @@ export default function ProjectPage() {
 
   const handleSave = useCallback(async (path: string, content: string) => {
     await updateFile(path, content)
-    // Sync to WebContainer FS for HMR
-    await writeFile(path, content)
+    // Sync updated file to the preview container so Vite picks up the change
+    await syncFiles()
     setAutoSaved(true)
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => setAutoSaved(false), 2000)
-  }, [updateFile, writeFile])
+  }, [updateFile, syncFiles])
 
   const handleCreateFile = useCallback(async (path: string) => {
     await createFile(path, '')

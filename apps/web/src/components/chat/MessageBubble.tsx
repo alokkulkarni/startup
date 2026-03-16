@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 
 interface MessageBubbleProps {
@@ -39,6 +39,163 @@ function stripFileXml(text: string): string {
     .replace(/```[\w.\-/ ]*\n[\s\S]*/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+// ── Lightweight Markdown Renderer ──────────────────────────────────────────
+// Only used for completed messages — never during streaming (avoids freeze).
+
+interface InlineNode {
+  type: 'text' | 'bold' | 'italic' | 'code' | 'link'
+  text: string
+  href?: string
+}
+
+function parseInlines(line: string): InlineNode[] {
+  const nodes: InlineNode[] = []
+  // Match bold, italic, inline code, and links
+  const rx = /(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|_(.+?)_)|(`([^`]+?)`)|(\[([^\]]+?)\]\(([^)]+?)\))/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = rx.exec(line)) !== null) {
+    if (m.index > last) nodes.push({ type: 'text', text: line.slice(last, m.index) })
+    if (m[1]) nodes.push({ type: 'bold', text: m[2] ?? m[3] })
+    else if (m[4]) nodes.push({ type: 'italic', text: m[5] ?? m[6] })
+    else if (m[7]) nodes.push({ type: 'code', text: m[8] })
+    else if (m[9]) nodes.push({ type: 'link', text: m[10], href: m[11] })
+    last = m.index + m[0].length
+  }
+  if (last < line.length) nodes.push({ type: 'text', text: line.slice(last) })
+  return nodes
+}
+
+function renderInlines(nodes: InlineNode[], keyPrefix: string) {
+  return nodes.map((n, i) => {
+    const key = `${keyPrefix}-${i}`
+    switch (n.type) {
+      case 'bold':
+        return <strong key={key} className="font-semibold text-white">{n.text}</strong>
+      case 'italic':
+        return <em key={key} className="italic text-gray-300">{n.text}</em>
+      case 'code':
+        return <code key={key} className="px-1.5 py-0.5 bg-gray-700/60 rounded text-indigo-300 text-xs font-mono">{n.text}</code>
+      case 'link':
+        return <a key={key} href={n.href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">{n.text}</a>
+      default:
+        return <span key={key}>{n.text}</span>
+    }
+  })
+}
+
+interface Block {
+  type: 'heading' | 'code' | 'bullet' | 'numbered' | 'paragraph'
+  content: string
+  lang?: string
+  level?: number
+}
+
+function parseBlocks(text: string): Block[] {
+  const lines = text.split('\n')
+  const blocks: Block[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Fenced code block
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim()
+      const codeLines: string[] = []
+      i++
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i])
+        i++
+      }
+      i++ // skip closing ```
+      blocks.push({ type: 'code', content: codeLines.join('\n'), lang })
+      continue
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)/)
+    if (headingMatch) {
+      blocks.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length })
+      i++
+      continue
+    }
+
+    // Bullet list item
+    if (line.match(/^\s*[-*+]\s+/)) {
+      blocks.push({ type: 'bullet', content: line.replace(/^\s*[-*+]\s+/, '') })
+      i++
+      continue
+    }
+
+    // Numbered list item
+    if (line.match(/^\s*\d+[.)]\s+/)) {
+      blocks.push({ type: 'numbered', content: line.replace(/^\s*\d+[.)]\s+/, '') })
+      i++
+      continue
+    }
+
+    // Empty line — skip
+    if (!line.trim()) {
+      i++
+      continue
+    }
+
+    // Paragraph
+    blocks.push({ type: 'paragraph', content: line })
+    i++
+  }
+
+  return blocks
+}
+
+function AssistantMarkdown({ text }: { text: string }) {
+  const blocks = useMemo(() => parseBlocks(text), [text])
+
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-gray-100">
+      {blocks.map((block, idx) => {
+        const key = `b-${idx}`
+        switch (block.type) {
+          case 'heading': {
+            const Tag = (`h${Math.min(block.level ?? 2, 4)}`) as 'h1' | 'h2' | 'h3' | 'h4'
+            const sizes = { h1: 'text-base font-bold', h2: 'text-sm font-bold', h3: 'text-sm font-semibold', h4: 'text-sm font-medium' }
+            return <Tag key={key} className={cn(sizes[Tag], 'text-white mt-1')}>{renderInlines(parseInlines(block.content), key)}</Tag>
+          }
+          case 'code':
+            return (
+              <div key={key} className="rounded-lg overflow-hidden border border-gray-700 my-1">
+                {block.lang && (
+                  <div className="bg-gray-800/80 px-3 py-1 border-b border-gray-700">
+                    <span className="text-xs text-gray-400 font-mono">{block.lang}</span>
+                  </div>
+                )}
+                <pre className="bg-gray-950 p-3 overflow-x-auto">
+                  <code className="text-xs font-mono text-gray-300 leading-relaxed">{block.content}</code>
+                </pre>
+              </div>
+            )
+          case 'bullet':
+            return (
+              <div key={key} className="flex gap-2 pl-2">
+                <span className="text-gray-500 shrink-0">•</span>
+                <span>{renderInlines(parseInlines(block.content), key)}</span>
+              </div>
+            )
+          case 'numbered':
+            return (
+              <div key={key} className="flex gap-2 pl-2">
+                <span>{renderInlines(parseInlines(block.content), key)}</span>
+              </div>
+            )
+          default:
+            return <p key={key}>{renderInlines(parseInlines(block.content), key)}</p>
+        }
+      })}
+    </div>
+  )
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -124,9 +281,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div className="max-w-[85%] w-full">
         <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
           {displayText ? (
-            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-gray-100">
-              {displayText}
-            </p>
+            <AssistantMarkdown text={displayText} />
           ) : (
             <p className="text-sm text-gray-400 italic">✓ Done</p>
           )}

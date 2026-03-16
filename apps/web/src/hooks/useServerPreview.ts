@@ -39,7 +39,7 @@ export interface UseWebContainerReturn {
   error: WCError | null
   progress: number
   writeFile: (path: string, content: string) => Promise<void>
-  syncFiles: (files: FileNode[]) => Promise<void>
+  syncFiles: (files?: FileNode[]) => Promise<void>
   restart: () => Promise<void>
   stop: () => void
   clearLogs: () => void
