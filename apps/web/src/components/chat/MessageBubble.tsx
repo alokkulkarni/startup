@@ -336,12 +336,15 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
     const isWritingFiles = forgeOpen !== -1 && forgeClose === -1
     const explanationRaw = forgeOpen !== -1 ? content.slice(0, forgeOpen).trim() : content
 
-    // Strip any residual XML/markdown patterns from the visible explanation
-    // Cap at 1200 chars to prevent huge whitespace-pre-wrap nodes from locking
-    // the main thread when the AI generates a very large response.
+    // Strip code blocks entirely (fence + content) from streaming explanation.
+    // The old regex only removed the opening ``` fence but left all code lines visible.
+    // Now we: 1) strip complete blocks, 2) strip unclosed trailing block, 3) strip stray fences.
+    // Cap at 1200 chars to prevent large whitespace-pre-wrap nodes locking the main thread.
     const MAX_STREAM_CHARS = 1200
     const fullExplanation = explanationRaw
-      .replace(/```[\w.\-/ ]*\n?/g, '')
+      .replace(/```[\s\S]*?```/g, '')  // strip fully-closed code blocks (content + fences)
+      .replace(/```[\s\S]*/g, '')       // strip unclosed trailing code block (still streaming)
+      .replace(/`[^`\n]+`/g, (m) => m) // keep short inline backtick spans as-is
       .replace(/\n{3,}/g, '\n\n')
       .trim()
     const explanation = fullExplanation.length > MAX_STREAM_CHARS
@@ -372,6 +375,12 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
                 </p>
               </div>
             )}
+            {!explanation && !isWritingFiles && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                Thinking…
+              </span>
+            )}
             {isWritingFiles && (
               <div className="space-y-1">
                 {streamingFilePaths.length > 0 ? (
@@ -383,9 +392,6 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
                   </span>
                 )}
               </div>
-            )}
-            {!explanation && !isWritingFiles && (
-              <span className="inline-block w-0.5 h-4 bg-indigo-400 align-middle animate-pulse" />
             )}
           </div>
           <p className="text-xs text-gray-500 mt-1 pl-1">{formatRelativeTime(createdAt)}</p>
