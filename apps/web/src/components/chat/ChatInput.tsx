@@ -4,18 +4,20 @@ import { useRef, useCallback, useState, type KeyboardEvent, type ChangeEvent } f
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
-  onSend: (prompt: string) => void
+  onSend: (prompt: string, mode: 'agent' | 'plan') => void
   isStreaming: boolean
   disabled?: boolean
   value: string
   onChange: (value: string) => void
   files?: { path: string }[]
+  mode: 'agent' | 'plan'
+  onModeChange: (mode: 'agent' | 'plan') => void
 }
 
 const MAX_CHARS = 4000
 const CHAR_COUNT_THRESHOLD = 3000
 
-export function ChatInput({ onSend, isStreaming, disabled, value, onChange, files }: ChatInputProps) {
+export function ChatInput({ onSend, isStreaming, disabled, value, onChange, files, mode, onModeChange }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [mentionSuggestions, setMentionSuggestions] = useState<string[]>([])
 
@@ -52,12 +54,12 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange, file
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed || isStreaming || disabled) return
-    onSend(trimmed)
+    onSend(trimmed, mode)
     onChange('')
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [value, isStreaming, disabled, onSend, onChange])
+  }, [value, isStreaming, disabled, onSend, onChange, mode])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -104,10 +106,25 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange, file
           </div>
         </div>
       )}
+
+      {/* Mode indicator strip — shown when plan mode is active */}
+      {mode === 'plan' && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/40 border border-amber-700/40">
+          <svg className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+          <p className="text-xs text-amber-300/90 flex-1">
+            <span className="font-semibold">Plan mode:</span> AI will create a step-by-step plan for your approval before writing any code.
+          </p>
+        </div>
+      )}
+
       <div
         className={cn(
           'flex items-end gap-3 rounded-2xl border bg-gray-800 px-4 py-3',
-          'border-gray-700 focus-within:border-indigo-500',
+          mode === 'plan'
+            ? 'border-amber-700/50 focus-within:border-amber-500'
+            : 'border-gray-700 focus-within:border-indigo-500',
           'transition-all duration-200',
           disabled && 'opacity-60',
         )}
@@ -117,7 +134,7 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange, file
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Forge AI to build something..."
+          placeholder={mode === 'plan' ? 'Describe what you want to plan...' : 'Ask Forge AI to build something...'}
           disabled={disabled || isStreaming}
           rows={1}
           className={cn(
@@ -152,11 +169,12 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange, file
               'shrink-0 w-8 h-8 flex items-center justify-center rounded-xl',
               'transition-all duration-200',
               canSend
-                ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                ? mode === 'plan'
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                 : 'bg-gray-700 text-gray-500 cursor-not-allowed',
             )}
           >
-            {/* Arrow-up icon */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -173,15 +191,54 @@ export function ChatInput({ onSend, isStreaming, disabled, value, onChange, file
         )}
       </div>
 
+      {/* Bottom bar: mode toggle + char count + hint */}
       <div className="flex items-center justify-between px-1">
-        <p className="text-xs text-gray-600">
-          {isStreaming ? 'Generating...' : '⌘↵ to send'}
-        </p>
-        {showCharCount && (
-          <p className={cn('text-xs', isOverLimit ? 'text-red-400' : 'text-gray-500')}>
-            {charCount}/{MAX_CHARS}
+        {/* Mode toggle */}
+        <div className="flex items-center gap-0.5 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
+          <button
+            type="button"
+            onClick={() => onModeChange('agent')}
+            title="Agent mode: AI executes your request immediately"
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150',
+              mode === 'agent'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-200',
+            )}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Agent
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange('plan')}
+            title="Plan mode: AI creates a step-by-step plan for your approval before writing code"
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150',
+              mode === 'plan'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-200',
+            )}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+            Plan
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {showCharCount && (
+            <p className={cn('text-xs', isOverLimit ? 'text-red-400' : 'text-gray-500')}>
+              {charCount}/{MAX_CHARS}
+            </p>
+          )}
+          <p className="text-xs text-gray-600">
+            {isStreaming ? 'Generating...' : '⌘↵ to send'}
           </p>
-        )}
+        </div>
       </div>
     </div>
   )

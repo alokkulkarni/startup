@@ -24,6 +24,8 @@ vi.mock('@/hooks/useAIChat', () => ({
     error: null,
     rateLimit: null,
     sendMessage: vi.fn(),
+      pendingPlan: false,
+      clearPendingPlan: vi.fn(),
     loadHistory: vi.fn(),
   })),
 }))
@@ -41,6 +43,8 @@ describe('ChatPanel', () => {
       error: null,
       rateLimit: null,
       sendMessage: vi.fn(),
+      pendingPlan: false,
+      clearPendingPlan: vi.fn(),
       loadHistory: vi.fn(),
     })
   })
@@ -73,6 +77,8 @@ describe('ChatPanel', () => {
       error: null,
       rateLimit: null,
       sendMessage: vi.fn(),
+      pendingPlan: false,
+      clearPendingPlan: vi.fn(),
       loadHistory: vi.fn(),
     })
 
@@ -96,6 +102,8 @@ describe('ChatPanel', () => {
       error: null,
       rateLimit: null,
       sendMessage: vi.fn(),
+      pendingPlan: false,
+      clearPendingPlan: vi.fn(),
       loadHistory: vi.fn(),
     })
 
