@@ -88,6 +88,8 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   // True once the server has emitted its ready sentinel — prevents false positives
   // from matching app runtime console.error() output against build-error patterns
   const serverReadyRef = useRef(false)
+  // Tracks previous `enabled` value to detect false→true transitions
+  const prevEnabledRef = useRef(enabled)
 
   // ── Log helpers ──────────────────────────────────────────────────────────────
   const logBufRef = useRef<LogEntry[]>([])
@@ -303,6 +305,30 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       startPreview()
     }
   }, [enabled, status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Reset on enabled false→true ────────────────────────────────────────────
+  // When the user toggles preview ON (or files appear after starting empty),
+  // clear any stale failure/error state so auto-start can fire again.
+  useEffect(() => {
+    if (enabled && !prevEnabledRef.current) {
+      // Clear previous failure flag — user explicitly re-enabled preview
+      startFailedRef.current = false
+
+      // If status is stuck on error/stopped from a previous session, reset to
+      // idle so the auto-start effect above can kick in.
+      if (status === 'error' || status === 'stopped') {
+        sseRef.current?.close()
+        startingRef.current = false
+        serverReadyRef.current = false
+        errorBufRef.current = ''
+        setStatus('idle')
+        setPreviewUrl(null)
+        setProgress(0)
+        setError(null)
+      }
+    }
+    prevEnabledRef.current = enabled
+  }, [enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cleanup on unmount / navigation away ────────────────────────────────────
   // Stop the preview container when the user navigates to another page or
