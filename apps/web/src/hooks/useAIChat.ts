@@ -160,6 +160,10 @@ export function useAIChat(
               setMessages(prev =>
                 prev.map(m => {
                   if (m.id !== assistantId) return m
+                  // Once writing mode starts (streamingFilePaths defined), stop
+                  // accumulating text. The model continues streaming XML/code which
+                  // must NOT enter React state — it causes unbounded growth and freezes.
+                  if (m.streamingFilePaths !== undefined) return m
                   const newContent = m.content + data.text!
 
                   // Find the earliest truncation boundary
