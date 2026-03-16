@@ -79,15 +79,20 @@ export function PreviewPanel({
 
   return (
     <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900">
-        {!isApiProject && <ViewportToggle current={viewport} onChange={onViewportChange} />}
-        {isApiProject && (
-          <span className="text-xs font-medium text-indigo-400 px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
-            API Explorer
-          </span>
-        )}
-        <div className="flex-1" />
+      {/* Header — flex-nowrap so controls never push off-screen */}
+      <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900 min-w-0 overflow-hidden">
+        {/* Viewport toggle — allowed to shrink/hide when panel is narrow */}
+        <div className="shrink-1 min-w-0 overflow-hidden">
+          {!isApiProject && <ViewportToggle current={viewport} onChange={onViewportChange} />}
+          {isApiProject && (
+            <span className="text-xs font-medium text-indigo-400 px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
+              API Explorer
+            </span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0" />
+        {/* Controls — shrink-0 so they're always visible */}
+        <div className="shrink-0 flex items-center gap-1">
 
         {/* Stop */}
         <button
@@ -134,7 +139,8 @@ export function PreviewPanel({
         >
           ≡
         </button>
-      </div>
+        </div>{/* end controls */}
+      </div>{/* end header */}
 
       {/* Progress bar */}
       {isLoading && (

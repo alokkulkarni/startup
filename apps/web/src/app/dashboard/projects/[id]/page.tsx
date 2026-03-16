@@ -588,10 +588,12 @@ export default function ProjectPage() {
           />
         )}
 
-        {/* Panel 4 — Preview (always visible) */}
+        {/* Panel 4 — Preview (always visible, flex-1 so it fills remaining space
+             without overflowing — fixed panels like CollapsedPanel strips and drag
+             handles consume fixed px; percentage widths on other panels would push
+             this past the viewport edge if we used shrink-0 + % width) */}
         <div
-          className="shrink-0 flex flex-col overflow-hidden transition-all duration-200"
-          style={{ width: `${displayWidths.preview}%` }}
+          className="flex-1 min-w-[240px] flex flex-col overflow-hidden transition-all duration-200"
         >
           <PreviewPanel
             status={wcStatus}
