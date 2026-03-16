@@ -1,130 +1,75 @@
-import type { Metadata } from 'next'
-import { DocsProse } from '@/app/docs/_components/DocsProse'
-import { Callout } from '@/app/docs/_components/Callout'
-
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Code Editor',
-  description: 'A full-featured Monaco editor with TypeScript intellisense, real-time collaboration, and auto-save.',
+  description: 'The Forge AI code editor provides a full-featured development environment with real-time collaboration.',
 }
+
+import { Callout } from '../../_components/Callout'
 
 export default function CodeEditorPage() {
   return (
-    <DocsProse>
+    <div>
       <h1>Code Editor</h1>
-      <p className="lead">
-        A full-featured Monaco editor (the engine behind VS Code) with TypeScript
-        intellisense, real-time collaboration, and auto-save.
+
+      <p>
+        The Forge AI code editor provides a full-featured development environment inside your
+        browser. It looks and feels like VS Code, with syntax highlighting, autocompletion,
+        error highlighting, and multi-file navigation.
       </p>
 
-      <h2>Overview</h2>
-      <p>
-        The code editor panel is a Monaco Editor instance with full TypeScript language
-        services loaded. It supports syntax highlighting, inline error squiggles,
-        autocompletion with type-aware suggestions, go-to-definition, and multi-cursor
-        editing. If you've used VS Code, the experience is immediately familiar.
-      </p>
-
-      <h2>Supported languages</h2>
-      <p>
-        The editor provides syntax highlighting and language intelligence for: TypeScript,
-        JavaScript, TSX, JSX, CSS, SCSS, HTML, JSON, Markdown, YAML, TOML, and more. Any
-        file in your project can be opened and edited.
-      </p>
+      <h2>Key features</h2>
+      <ul>
+        <li><strong>Syntax highlighting</strong> — for TypeScript, JavaScript, JSX/TSX, CSS, HTML, JSON, and more</li>
+        <li><strong>IntelliSense</strong> — autocompletion and type hints powered by the TypeScript language service</li>
+        <li><strong>Error highlighting</strong> — type errors and linting issues are underlined inline</li>
+        <li><strong>Multi-file tabs</strong> — work on several files at once with a familiar tabbed interface</li>
+        <li><strong>File tree</strong> — full project structure in the left panel; create, rename, and delete files</li>
+        <li><strong>Find &amp; replace</strong> — search across a single file or the entire project</li>
+      </ul>
 
       <h2>Real-time collaboration</h2>
       <p>
-        When multiple team members open the same project simultaneously, their changes
-        sync in real time using <strong>Yjs CRDTs</strong> (conflict-free replicated data
-        types). Unlike traditional file locking, Yjs merges concurrent edits
-        automatically — two people can type in the same file at the same time without
-        overwriting each other's work.
-      </p>
-      <p>
-        Collaborators' cursors and text selections appear in the editor in distinct
-        colours, with their name attached as a label. You can see exactly where everyone
-        is working at a glance.
+        When multiple collaborators are in the same project, their edits appear in your editor
+        in real time. Each collaborator's cursor is shown with a colour-coded label. Changes from
+        all collaborators are merged automatically — there are no conflicts and no file locking.
       </p>
 
-      <Callout type="info">
-        Real-time collaboration requires all collaborators to have the Editor or Owner
-        role. Viewers can read files in the editor but cannot make changes.
+      <Callout type="tip">
+        Real-time co-editing is available on the Team plan. See the{' '}
+        <a href="/docs/features/collaboration">Collaboration</a> page for full details.
       </Callout>
 
       <h2>Auto-save</h2>
       <p>
-        Files are auto-saved on every keystroke and synced to the WebContainer for
-        instant HMR pickup. The status bar at the bottom of the screen shows{' '}
-        <strong>✓ Auto-saved</strong> briefly after each save — you never need to press
-        ⌘S manually, though it still works if you reach for it out of habit.
-      </p>
-      <p>
-        Press <strong>⌘Z</strong> to undo the last AI-generated change as a single atomic
-        operation. This is different from the editor's own undo stack — use ⌘Z for
-        "revert what the AI just did" and the editor's internal undo (also ⌘Z within the
-        editor input) for character-level keypress undos.
-      </p>
-
-      <h2>The file tree</h2>
-      <p>
-        The left panel shows your project's full directory structure. From the file tree
-        you can:
-      </p>
-      <ul>
-        <li>
-          <strong>Create</strong> new files and folders using the icons in the panel
-          header
-        </li>
-        <li>
-          <strong>Rename</strong> any file or folder by double-clicking its name
-        </li>
-        <li>
-          <strong>Delete</strong> files and folders using the right-click context menu
-          (note: deletion is irreversible — use version history to recover deleted content)
-        </li>
-        <li>
-          <strong>Open</strong> any file in the editor by clicking it
-        </li>
-      </ul>
-
-      <h2>Hiding panels for focus</h2>
-      <p>
-        All four panels in the workspace can be toggled to maximise the space you need
-        most. The shortcuts are:
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Shortcut</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>⌘B</code></td>
-            <td>Toggle file tree panel</td>
-          </tr>
-          <tr>
-            <td><code>⌘⇧E</code></td>
-            <td>Toggle code editor panel</td>
-          </tr>
-          <tr>
-            <td>Both hidden</td>
-            <td>Maximum chat + preview space</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>
-        When a panel is hidden it collapses to a thin 28px strip showing a rotated label.
-        Click the strip at any time to restore the panel to its previous width.
+        Files are saved automatically on every keystroke. There is no manual save step. The live
+        preview reflects saved state continuously.
       </p>
 
       <h2>Keyboard shortcuts</h2>
       <p>
-        See the <a href="/docs/reference/keyboard-shortcuts">Keyboard Shortcuts</a>{' '}
-        reference for the full list of editor-level shortcuts. The Monaco editor also
-        supports all standard VS Code editing shortcuts — multi-cursor, column select,
-        go to definition, and more.
+        The editor supports standard VS Code keyboard shortcuts. See the full list in{' '}
+        <a href="/docs/reference/keyboard-shortcuts">Keyboard Shortcuts</a>.
       </p>
-    </DocsProse>
+
+      <h2>AI-assisted editing</h2>
+      <p>
+        You can ask the AI to edit specific files or sections by referencing them in the chat
+        panel. For example: <em>"Update the Header component in <code>src/components/Header.tsx</code>{' '}
+        to add a search bar."</em>
+      </p>
+      <p>
+        The AI edits exactly the files you reference and leaves others untouched.
+      </p>
+
+      <h2>Hiding the editor pane</h2>
+      <p>
+        Use the <strong>hide panel</strong> icon at the top of the editor or file tree to collapse
+        them and give more screen space to the chat or the live preview.
+      </p>
+
+      <Callout type="info">
+        Version history is tracked per project so you can roll back to any previous state. See{' '}
+        <a href="/docs/features/version-history">Version History</a>.
+      </Callout>
+    </div>
   )
 }

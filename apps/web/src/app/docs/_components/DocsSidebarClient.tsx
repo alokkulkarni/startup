@@ -29,10 +29,15 @@ const NAV = [
   {
     group: 'Guides',
     items: [
-      { label: 'Prompting Tips',        href: '/docs/guides/prompting-tips' },
-      { label: 'Building a SaaS App',   href: '/docs/guides/building-saas' },
+      { label: 'Prompting Tips',          href: '/docs/guides/prompting-tips' },
+      { label: 'Building a SaaS App',     href: '/docs/guides/building-saas' },
       { label: 'Building a Landing Page', href: '/docs/guides/building-landing' },
-      { label: 'Building a Dashboard',  href: '/docs/guides/building-dashboard' },
+      { label: 'Building a Dashboard',    href: '/docs/guides/building-dashboard' },
+      { label: 'Building with Next.js',   href: '/docs/guides/building-nextjs' },
+      { label: 'Building with Angular',   href: '/docs/guides/building-angular' },
+      { label: 'Building with Flutter',   href: '/docs/guides/building-flutter' },
+      { label: 'Building with Vue',       href: '/docs/guides/building-vue' },
+      { label: 'Building with Svelte',    href: '/docs/guides/building-svelte' },
     ],
   },
   {
@@ -48,7 +53,6 @@ const NAV = [
     items: [
       { label: 'Keyboard Shortcuts',    href: '/docs/reference/keyboard-shortcuts' },
       { label: 'Supported Frameworks',  href: '/docs/reference/supported-frameworks' },
-      { label: 'AI Models',             href: '/docs/reference/ai-models' },
     ],
   },
 ]
@@ -93,7 +97,7 @@ export function DocsSidebarClient() {
 
   return (
     <>
-      {/* Mobile toggle button */}
+      {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(v => !v)}
         className="lg:hidden fixed bottom-4 right-4 z-50 w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center shadow-xl text-white"
@@ -108,10 +112,7 @@ export function DocsSidebarClient() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Mobile drawer */}

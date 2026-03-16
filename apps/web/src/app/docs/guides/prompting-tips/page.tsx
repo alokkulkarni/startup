@@ -106,7 +106,7 @@ placeholder. Use a dark gradient background with indigo accents."
 in real time as the user types, matching product name and description."
 
 // Debugging an error
-"The form submission is throwing 'Cannot POST /api/contact'. Check the Fastify API
+"The form submission is throwing 'Cannot POST /api/contact'. Check the API
 route and fix the issue."
 
 // Styling tweaks

@@ -45,7 +45,7 @@ export default function QuickstartPage() {
           The workspace is split into four panels: <strong>File Tree</strong> on the left,
           <strong>AI Chat</strong>, <strong>Code Editor</strong>, and{' '}
           <strong>Live Preview</strong> on the right. The preview boots your app inside a
-          WebContainer — a full Node.js runtime running entirely in your browser, so there
+          a live browser-based runtime, so there
           are no cold starts and no external servers involved.
         </Step>
 

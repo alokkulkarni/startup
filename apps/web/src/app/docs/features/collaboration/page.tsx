@@ -1,131 +1,109 @@
-import type { Metadata } from 'next'
-import { DocsProse } from '@/app/docs/_components/DocsProse'
-import { Callout } from '@/app/docs/_components/Callout'
-
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Team Collaboration',
-  description: 'Real-time multi-user editing, shared AI chat history, and role-based access control.',
+  description: 'Real-time multi-user editing, shared AI chat history, and role-based access in Forge AI.',
 }
+
+import { Callout } from '../../_components/Callout'
 
 export default function CollaborationPage() {
   return (
-    <DocsProse>
+    <div>
       <h1>Team Collaboration</h1>
-      <p className="lead">
-        Real-time multi-user editing, shared AI chat history, and role-based access
-        control so teams can build together efficiently.
+
+      <p>
+        Forge AI is built for teams. Multiple people can edit the same project simultaneously,
+        share an AI chat history, and work within a clear permission structure — all in real time.
       </p>
 
-      <h2>Real-time editing</h2>
+      <h2>Real-time co-editing</h2>
       <p>
-        Multiple team members can edit the same file simultaneously. Changes are synced
-        using <strong>Yjs</strong> — a CRDT (conflict-free replicated data type) library
-        that merges concurrent edits automatically. Two people can type in the same
-        component at the same time and both changes are preserved without conflict, without
-        either person needing to pull or merge manually.
-      </p>
-      <p>
-        Collaborators' cursors and text selections are visible in the Monaco editor in
-        real time, each in a distinct colour with the collaborator's name attached. You
-        always know exactly where your teammates are working.
+        Every collaborator's changes appear immediately in every other collaborator's editor.
+        Forge AI uses a real-time sync engine that merges concurrent edits without conflicts — no
+        file locking, no stale state, no lost work.
       </p>
 
-      <Callout type="info">
-        Real-time editing is powered by a WebSocket-based Yjs server. Edits are merged
-        automatically — no manual conflict resolution is ever needed.
+      <ul>
+        <li>Cursor positions for each collaborator are shown with colour-coded labels</li>
+        <li>All file changes — code, assets, configuration — are synced in real time</li>
+        <li>Changes persist even if one collaborator's connection drops momentarily</li>
+      </ul>
+
+      <Callout type="tip">
+        Real-time collaboration is available on the <strong>Team plan</strong>. Pro users can share
+        a project via GitHub Sync.
       </Callout>
 
-      <h2>Shared AI chat</h2>
+      <h2>Shared AI chat history</h2>
       <p>
-        All AI conversation messages are shared across the project workspace. Every team
-        member with project access can see the full chat history, understand the rationale
-        behind every AI-generated change, and continue building on previous conversations.
-        This means no context is lost when multiple people work on the same project across
-        different sessions.
+        On Team plan workspaces, all collaborators share the same AI chat history for each project.
+        This means:
+      </p>
+      <ul>
+        <li>Every teammate can see what was asked and why decisions were made</li>
+        <li>New team members can get up to speed by reading the conversation history</li>
+        <li>Any team member can continue an AI conversation that another started</li>
+      </ul>
+
+      <h2>Role-based access control</h2>
+      <p>
+        Every workspace member has one of three roles. Roles are enforced on both the frontend and
+        the backend — not just a UI restriction.
       </p>
 
-      <h2>Roles and permissions</h2>
-      <p>
-        Forge AI uses a three-level RBAC hierarchy:{' '}
-        <strong>Owner (3) → Editor (2) → Viewer (1)</strong>. Higher numbers have more
-        permissions.
-      </p>
       <table>
         <thead>
           <tr>
-            <th>Action</th>
-            <th>Owner</th>
-            <th>Editor</th>
-            <th>Viewer</th>
+            <th>Role</th>
+            <th>What they can do</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>View files &amp; chat history</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
+            <td><strong>Admin</strong></td>
+            <td>
+              Full access. Manage members, billing, and settings. Create, edit, and delete any
+              project.
+            </td>
           </tr>
           <tr>
-            <td>Edit files in editor</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>❌</td>
+            <td><strong>Member</strong></td>
+            <td>
+              Create and edit projects, use AI chat, push to GitHub, and deploy. Cannot manage
+              billing or remove other members.
+            </td>
           </tr>
           <tr>
-            <td>Send AI prompts</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>❌</td>
-          </tr>
-          <tr>
-            <td>Deploy project</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>❌</td>
-          </tr>
-          <tr>
-            <td>Manage env vars</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>❌</td>
-          </tr>
-          <tr>
-            <td>Invite / manage members</td>
-            <td>✅</td>
-            <td>❌</td>
-            <td>❌</td>
-          </tr>
-          <tr>
-            <td>Delete project</td>
-            <td>✅</td>
-            <td>❌</td>
-            <td>❌</td>
+            <td><strong>Viewer</strong></td>
+            <td>
+              Read-only access. Can view projects, browse files, and read AI chat history. Cannot
+              make changes or trigger deployments.
+            </td>
           </tr>
         </tbody>
       </table>
 
-      <h2>Inviting team members</h2>
+      <h2>Inviting collaborators</h2>
+      <ol>
+        <li>Open your workspace settings</li>
+        <li>Navigate to the <strong>Members</strong> tab</li>
+        <li>Enter an email address and select a role</li>
+        <li>Click <strong>Send invite</strong></li>
+      </ol>
       <p>
-        Go to <strong>Settings → Members</strong> in the editor. Enter the email address
-        of the person you want to invite, select their role (Editor or Viewer), and click{' '}
-        <strong>Invite</strong>. They receive an email with a link to join the project.
-        If they don't have a Forge AI account yet, they'll be prompted to create one.
+        The invited person receives an email with a link to join the workspace. See{' '}
+        <a href="/docs/workspace/members-roles">Members &amp; Roles</a> for full details.
       </p>
 
-      <Callout type="info" title="Plan limits">
-        Team collaboration is available on all plans, but the number of members per
-        project varies. Free and Pro plans support 1 member (owner only). The Team plan
-        supports up to 10 members. Enterprise plans support unlimited members.
+      <h2>Project visibility</h2>
+      <p>
+        Projects are private by default. Only workspace members with the appropriate role can view
+        or edit them.
+      </p>
+
+      <Callout type="info">
+        Team plan workspaces support up to 999 projects and 1,500 AI messages per day shared across
+        the workspace. See <a href="/docs/workspace/billing">Billing &amp; Plans</a> for limits.
       </Callout>
-
-      <h2>Changing and revoking roles</h2>
-      <p>
-        Project owners can change a member's role or remove them entirely from{' '}
-        <strong>Settings → Members</strong>. Role changes take effect immediately — an
-        editor demoted to viewer loses the ability to send AI prompts and edit code
-        instantly, without needing to refresh the page or log out.
-      </p>
-    </DocsProse>
+    </div>
   )
 }

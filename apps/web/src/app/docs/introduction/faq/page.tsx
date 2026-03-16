@@ -1,114 +1,99 @@
-import type { Metadata } from 'next'
-import { DocsProse } from '@/app/docs/_components/DocsProse'
-import { Callout } from '@/app/docs/_components/Callout'
-
-export const metadata: Metadata = {
+export const metadata = {
   title: 'FAQ',
-  description: 'Answers to the most common questions about Forge AI.',
+  description: 'Frequently asked questions about Forge AI.',
+}
+
+import { Callout } from '../../_components/Callout'
+
+function Q({ q, children }: { q: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-6">
+      <h3 className="mt-0 mb-2">{q}</h3>
+      <div>{children}</div>
+    </div>
+  )
 }
 
 export default function FaqPage() {
   return (
-    <DocsProse>
+    <div>
       <h1>FAQ</h1>
-      <p className="lead">
-        Answers to the most common questions about Forge AI.
-      </p>
 
-      <h3>What is Forge AI?</h3>
-      <p>
-        Forge AI is an AI-powered platform that lets you build full-stack web applications
-        by describing what you want in plain English. The AI generates production-ready code
-        across React, Next.js, Vue, Svelte, Angular, and Flutter — with backend, database
-        schema, and authentication all included.
-      </p>
+      <Q q="Do I need to install anything?">
+        No. Forge AI runs entirely in your browser. There is no CLI to install, no local Node.js
+        version to manage, and no Docker setup required. Your app is previewed live in a browser
+        tab.
+      </Q>
 
-      <h3>Do I need coding experience?</h3>
-      <p>
-        No. Forge AI is designed for all skill levels. Non-technical users can build
-        complete applications entirely through the AI chat interface. Developers can also
-        directly edit the generated code in the Monaco editor, extending or customising
-        anything the AI produces.
-      </p>
+      <Q q="What programming languages and frameworks are supported?">
+        Forge AI supports React, Next.js, Vue 3, SvelteKit, Angular, and Flutter Web on the
+        frontend, plus Node.js backends with TypeScript. See the{' '}
+        <a href="/docs/reference/supported-frameworks">Supported Frameworks</a> page for the full
+        list.
+      </Q>
 
-      <h3>What languages and frameworks are supported?</h3>
-      <p>
-        <strong>Frontend:</strong> React, Next.js, Vue 3, SvelteKit, Angular, and Flutter
-        Web. <strong>Backend:</strong> Node.js with Fastify. See the{' '}
-        <a href="/docs/reference/supported-frameworks">Supported Frameworks</a> reference
-        for the full list of templates and capabilities.
-      </p>
+      <Q q="Can multiple people edit the same project at once?">
+        Yes. Forge AI has built-in real-time collaboration. Changes from every collaborator are
+        merged instantly with no conflicts. See the{' '}
+        <a href="/docs/features/collaboration">Collaboration</a> feature page for details.
+      </Q>
 
-      <h3>How does billing work?</h3>
-      <p>
-        Forge AI uses Stripe for all payments. A free plan is available with 50 AI
-        messages per day. The Pro plan is $29/month with 500 messages per day. See{' '}
-        <a href="/docs/workspace/billing">Billing &amp; Plans</a> for a full feature
-        comparison.
-      </p>
+      <Q q="Where is my code stored?">
+        Your code is stored securely on the Forge AI server. You can optionally sync to a GitHub
+        repository at any time via the{' '}
+        <a href="/docs/features/github-sync">GitHub Sync</a> feature.
+      </Q>
 
-      <h3>How many AI messages can I send?</h3>
-      <p>
-        Message limits depend on your plan: <strong>Free</strong> — 50 per day;{' '}
-        <strong>Pro</strong> — 500 per day; <strong>Team</strong> — 2,000 per day;{' '}
-        <strong>Enterprise</strong> — unlimited. Limits reset daily at midnight UTC.
-      </p>
+      <Q q="Which AI model does Forge AI use?">
+        Forge AI uses Claude as its primary AI model, with OpenAI (GPT) and Google Gemini as
+        intelligent fallbacks. You never need to choose or configure a model — Forge AI always
+        selects the best available option automatically.
+      </Q>
 
-      <h3>Can multiple people collaborate on the same project?</h3>
-      <p>
-        Yes. Invite team members from <strong>Settings → Members</strong>. Users with the
-        Editor or Owner role can send AI prompts and edit code simultaneously — changes are
-        merged in real time using Yjs CRDTs, so there are no conflicts. See{' '}
-        <a href="/docs/features/collaboration">Team Collaboration</a> for details.
-      </p>
+      <Q q="Is my code safe?">
+        Yes. Your code and credentials are encrypted at rest. The live preview runs entirely inside
+        your browser — no code is sent to external execution servers. GitHub tokens are stored
+        encrypted and are never exposed in the UI.
+      </Q>
 
-      <h3>Where is my code stored?</h3>
-      <p>
-        Your code is stored in PostgreSQL on the Forge AI server. You can optionally sync
-        it to your GitHub repository at any time. You always have full ownership of
-        everything you build.
-      </p>
+      <Q q="How does the live preview work?">
+        The live preview runs a full Node.js runtime directly in your browser tab. Your app starts
+        instantly — there are no remote servers to spin up.
+      </Q>
 
-      <h3>Can I export my code?</h3>
-      <p>
-        Yes. Click <strong>Download</strong> in the editor header to download your entire
-        project as a ZIP file. You can also connect GitHub and push at any point for full
-        portability via version control.
-      </p>
+      <Q q="How many AI messages can I send?">
+        <ul>
+          <li><strong>Free plan:</strong> 20 messages per day</li>
+          <li><strong>Pro plan:</strong> 300 messages per day</li>
+          <li><strong>Team plan:</strong> 1,500 messages per day (shared across the workspace)</li>
+        </ul>
+        See the <a href="/docs/workspace/billing">Billing &amp; Plans</a> page for full details.
+      </Q>
 
-      <h3>How do I connect GitHub?</h3>
-      <p>
-        Click the GitHub button in the editor header, authorise Forge AI via OAuth, and
-        choose a repository. See the <a href="/docs/features/github-sync">GitHub Sync</a>{' '}
-        guide for the complete walkthrough.
-      </p>
+      <Q q="Can I export my code?">
+        Yes. Use the <strong>Export ZIP</strong> button in any project to download all source
+        files. You can also push to GitHub directly using{' '}
+        <a href="/docs/features/github-sync">GitHub Sync</a>.
+      </Q>
 
-      <h3>What AI models does Forge AI use?</h3>
-      <p>
-        The primary model is Claude accessed via AWS Bedrock. If Bedrock is unavailable,
-        Forge AI falls back automatically to Anthropic direct → Gemini 2.0 Flash → GPT-4o.
-        The selection is transparent — you always receive a response. See{' '}
-        <a href="/docs/reference/ai-models">AI Models</a> for the full architecture.
-      </p>
+      <Q q="What deploy targets are supported?">
+        Forge AI supports Vercel, Netlify, and Cloudflare Pages with one-click deploy. See the{' '}
+        <a href="/docs/features/deploy">Deploy</a> feature page.
+      </Q>
 
-      <h3>Is my data secure?</h3>
-      <p>
-        Yes. Credentials and API keys are encrypted at rest. GitHub tokens are stored using
-        AES encryption. Critically, no code is sent to external servers for execution —
-        your app runs entirely inside a WebContainer in your browser, keeping your code
-        local.
-      </p>
+      <Q q="Can I use Forge AI for a commercial project?">
+        Yes. All plans allow commercial use. The Team plan is designed for professional teams and
+        includes additional collaboration features and higher limits.
+      </Q>
 
-      <Callout type="info" title="Browser-native execution">
-        The live preview runs in WebContainers — a browser-native Node.js runtime. Your
-        code never leaves your machine for execution purposes.
+      <Q q="Is there an API?">
+        Not yet. The Forge AI API is on the roadmap. Join the waitlist by contacting support.
+      </Q>
+
+      <Callout type="info">
+        Have a question not answered here?{' '}
+        <a href="mailto:support@forgeai.dev">Email support</a> or open a discussion on GitHub.
       </Callout>
-
-      <h3>How do I report a bug or request a feature?</h3>
-      <p>
-        Open an issue on the Forge AI GitHub repository, or use the feedback button in the
-        app header. Feature requests and bug reports are reviewed by the core team.
-      </p>
-    </DocsProse>
+    </div>
   )
 }

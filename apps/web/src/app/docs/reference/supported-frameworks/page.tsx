@@ -1,212 +1,101 @@
-import type { Metadata } from 'next'
-import { DocsProse } from '@/app/docs/_components/DocsProse'
-import { Callout } from '@/app/docs/_components/Callout'
-
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Supported Frameworks',
-  description: 'Forge AI can generate, run, and deploy applications in six frontend frameworks and one backend framework.',
+  description: 'Forge AI supports a wide range of frontend and backend frameworks.',
 }
+
+import { Callout } from '../../_components/Callout'
 
 export default function SupportedFrameworksPage() {
   return (
-    <DocsProse>
+    <div>
       <h1>Supported Frameworks</h1>
-      <p className="lead">
-        Forge AI can generate, run, and deploy applications in six frontend frameworks
-        and one backend framework.
+
+      <p>
+        Forge AI can scaffold, run, and iterate on projects across a wide range of frontend and
+        backend frameworks. The live preview runs your chosen framework natively — there is no
+        conversion layer.
       </p>
 
       <h2>Frontend frameworks</h2>
 
       <h3>React</h3>
       <p>
-        React 18 with Vite 5, TypeScript, and Tailwind CSS. The most popular choice on
-        Forge AI — 5 templates available. Best for: single-page applications, component
-        libraries, dashboards, and anything that pairs well with a Fastify backend.
+        The most popular choice for UI-heavy apps, dashboards, component libraries, and anything
+        requiring a rich client-side experience. Works with Vite, Next.js, or Create React App.
       </p>
 
       <h3>Next.js</h3>
       <p>
-        Next.js 14 with the App Router, TypeScript, and Tailwind CSS. 2 templates
-        available (SaaS Starter and Blog). Best for: full-stack SaaS applications,
-        marketing sites, and projects that need server-side rendering or API routes in
-        the same codebase.
+        Full-stack React with App Router or Pages Router. Great for content sites, SaaS apps, and
+        anything that benefits from server-side rendering or API routes in one project. See the{' '}
+        <a href="/docs/guides/building-nextjs">Next.js guide</a>.
       </p>
 
       <h3>Vue 3</h3>
       <p>
-        Vue 3 Composition API with Vite and TypeScript. 1 template available. Best for:
-        interactive UIs and teams with existing Vue expertise who want to move quickly
-        without switching frameworks.
+        Progressive JavaScript framework with Composition API and Vite. Ideal for interactive UIs
+        and single-page applications with a gentle learning curve. See the{' '}
+        <a href="/docs/guides/building-vue">Vue guide</a>.
       </p>
 
       <h3>SvelteKit</h3>
       <p>
-        SvelteKit with <code>adapter-auto</code> and TypeScript. 1 template available.
-        Best for: high-performance marketing sites, minimal-bundle-size applications, and
-        developers who enjoy Svelte's reactive model.
+        Fast, lightweight framework with a compiler-based approach. No virtual DOM. Good for
+        performance-critical apps and leaner bundles. See the{' '}
+        <a href="/docs/guides/building-svelte">SvelteKit guide</a>.
       </p>
 
       <h3>Angular</h3>
       <p>
-        Angular 18 with standalone components, Angular Material, and the new Signals
-        reactive model. 3 templates available (Angular Starter, Angular Material
-        Dashboard, Angular Signals App). Best for: enterprise applications, large
-        development teams, and projects that benefit from Angular's strong conventions
-        and tooling.
+        Enterprise-grade framework with TypeScript-first design, a strong component model, and
+        Angular Material for UI. Great for large-scale apps with strict structure requirements.
+        See the <a href="/docs/guides/building-angular">Angular guide</a>.
       </p>
 
       <h3>Flutter Web</h3>
       <p>
-        Flutter 3 with Dart, including a WebAssembly (WASM) canvas variant for
-        graphics-heavy applications. 3 templates available (Flutter Starter, Flutter Web
-        Dashboard, Flutter WASM Canvas). Best for: cross-platform applications, teams
-        with Dart experience, and canvas-heavy or animation-rich applications.
+        Build pixel-perfect, cross-platform UIs in Dart that compile to web, iOS, and Android from
+        a single codebase. See the <a href="/docs/guides/building-flutter">Flutter guide</a>.
+      </p>
+
+      <h3>Plain HTML / CSS / JavaScript</h3>
+      <p>
+        Static sites, landing pages, and simple demos. No build step required.
       </p>
 
       <h2>Backend</h2>
 
-      <h3>Node.js (Fastify)</h3>
+      <h3>Node.js (TypeScript)</h3>
       <p>
-        Fastify 4 with TypeScript, Drizzle ORM, and PostgreSQL. This is the backend
-        framework used throughout the Forge AI platform itself. Best for: REST APIs,
-        server-side business logic, and full-stack projects that pair with any of the
-        frontend frameworks above.
+        Server-side TypeScript with REST or tRPC API routes. Forge AI generates typed API routes
+        with request validation and connects them to your database automatically.
       </p>
 
-      <h2>Build tools</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Framework</th>
-            <th>Build tool</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>React</td>
-            <td>Vite 5</td>
-          </tr>
-          <tr>
-            <td>Vue 3</td>
-            <td>Vite 5</td>
-          </tr>
-          <tr>
-            <td>SvelteKit</td>
-            <td>Vite (via SvelteKit)</td>
-          </tr>
-          <tr>
-            <td>Next.js</td>
-            <td>Next.js build (Turbopack in dev)</td>
-          </tr>
-          <tr>
-            <td>Angular</td>
-            <td>Angular CLI (esbuild)</td>
-          </tr>
-          <tr>
-            <td>Flutter Web</td>
-            <td>Flutter Web compiler (WASM variant available)</td>
-          </tr>
-        </tbody>
-      </table>
+      <h2>Database</h2>
+      <p>
+        Forge AI generates type-safe database schemas, migrations, and query helpers for
+        relational databases. Tables, relations, and migrations are kept in sync with your API
+        layer.
+      </p>
 
-      <h2>Styling support</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Framework</th>
-            <th>Styling options</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>React</td>
-            <td>Tailwind CSS, CSS Modules, vanilla CSS</td>
-          </tr>
-          <tr>
-            <td>Next.js</td>
-            <td>Tailwind CSS, CSS Modules, vanilla CSS</td>
-          </tr>
-          <tr>
-            <td>Vue 3</td>
-            <td>Tailwind CSS, scoped CSS</td>
-          </tr>
-          <tr>
-            <td>SvelteKit</td>
-            <td>Tailwind CSS, scoped CSS</td>
-          </tr>
-          <tr>
-            <td>Angular</td>
-            <td>Angular Material, Tailwind CSS, SCSS</td>
-          </tr>
-          <tr>
-            <td>Flutter Web</td>
-            <td>Flutter Material 3, custom themes</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h2>Deployment compatibility</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Framework</th>
-            <th>Vercel</th>
-            <th>Netlify</th>
-            <th>Cloudflare Pages</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>React</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>Next.js</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>Vue 3</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>SvelteKit</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>Angular</td>
-            <td>✅</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>Flutter Web</td>
-            <td>⚠️ requires config</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-          <tr>
-            <td>Flutter WASM</td>
-            <td>⚠️ requires config</td>
-            <td>✅</td>
-            <td>✅</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <Callout type="info">
-        Flutter Web deployments to Vercel require a custom build command configuration
-        in the Vercel project settings. Netlify and Cloudflare Pages deploy Flutter Web
-        without additional configuration.
+      <h2>Choosing a framework</h2>
+      <Callout type="tip">
+        When you create a new project from a template, the framework is pre-selected. You can
+        also start a blank project and ask Forge AI: <em>"Set up a Vue 3 app with Vite and
+        Tailwind CSS."</em>
       </Callout>
-    </DocsProse>
+
+      <p>
+        If you are unsure which framework to pick:
+      </p>
+      <ul>
+        <li><strong>SaaS product</strong> — Next.js or React</li>
+        <li><strong>Marketing site or landing page</strong> — Next.js, SvelteKit, or plain HTML</li>
+        <li><strong>Admin dashboard</strong> — React or Angular</li>
+        <li><strong>Mobile + Web from one codebase</strong> — Flutter</li>
+        <li><strong>Enterprise app with strict structure</strong> — Angular</li>
+        <li><strong>Fastest possible bundle size</strong> — SvelteKit</li>
+      </ul>
+    </div>
   )
 }

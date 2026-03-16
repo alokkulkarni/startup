@@ -1,15 +1,23 @@
-import { ReactNode } from 'react'
+import { Children, ReactNode, isValidElement, cloneElement } from 'react'
 
 export function Steps({ children }: { children: ReactNode }) {
+  let stepIndex = 0
+  const numbered = Children.map(children, (child) => {
+    if (isValidElement(child) && (child as React.ReactElement<{ step?: number }>).props.step === undefined) {
+      stepIndex++
+      return cloneElement(child as React.ReactElement<{ step?: number }>, { step: stepIndex })
+    }
+    return child
+  })
   return (
     <div className="my-6 relative">
       <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-800" aria-hidden />
-      <ol className="space-y-6 list-none p-0 m-0">{children}</ol>
+      <ol className="space-y-6 list-none p-0 m-0">{numbered}</ol>
     </div>
   )
 }
 
-export function Step({ title, children, step }: { title: string; children?: ReactNode; step: number }) {
+export function Step({ title, children, step = 0 }: { title: string; children?: ReactNode; step?: number }) {
   return (
     <li className="relative flex gap-4">
       <div className="shrink-0 w-8 h-8 rounded-full bg-indigo-600 border-2 border-indigo-500 flex items-center justify-center z-10 text-xs font-bold text-white shadow">

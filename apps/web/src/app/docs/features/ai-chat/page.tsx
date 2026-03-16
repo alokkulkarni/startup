@@ -1,154 +1,121 @@
-import type { Metadata } from 'next'
-import { DocsProse } from '@/app/docs/_components/DocsProse'
-import { Callout } from '@/app/docs/_components/Callout'
-import { NumberedSteps } from '@/app/docs/_components/Steps'
-
-export const metadata: Metadata = {
+export const metadata = {
   title: 'AI Chat',
-  description: 'The AI chat panel is your primary interface for building with Forge AI.',
+  description: 'Use the AI chat panel to generate, edit, and debug your application using natural language.',
 }
+
+import { Callout } from '../../_components/Callout'
+import { Steps, Step } from '../../_components/Steps'
 
 export default function AiChatPage() {
   return (
-    <DocsProse>
+    <div>
       <h1>AI Chat</h1>
-      <p className="lead">
-        The AI chat panel is your primary interface for building with Forge AI. Describe
-        what you want — the AI understands your entire codebase and makes targeted changes.
+
+      <p>
+        The AI chat panel is the core of Forge AI. Every message you send is processed by Claude
+        as the primary model, with automatic fallback to OpenAI (GPT) and Google Gemini if needed.
+        You never need to think about which model is running — Forge AI always picks the best
+        available option.
       </p>
 
-      <h2>Overview</h2>
-      <p>
-        Every message you send is processed by Claude (via AWS Bedrock) as the primary
-        model, with automatic fallback to Anthropic direct, then Gemini 2.0 Flash, then
-        GPT-4o. You never need to think about which model is running — Forge AI always
-        gives you a response. The AI has full access to your project's file tree on every
-        single request, so it always understands the architecture of what it's working on.
-      </p>
+      <h2>How to use the chat</h2>
+      <Steps>
+        <Step title="Open a project">
+          Create a new project from the dashboard or open an existing one. The AI chat panel is on
+          the left side of the editor.
+        </Step>
+        <Step title="Describe what you want">
+          Type a message describing the feature, component, or fix you want. Use plain language —
+          you do not need to be technical.
+        </Step>
+        <Step title="Review generated code">
+          Forge AI writes the code and applies it to your project. The live preview refreshes
+          automatically.
+        </Step>
+        <Step title="Iterate">
+          Ask follow-up questions, request changes, or describe new features. The AI has full
+          context of your entire project.
+        </Step>
+      </Steps>
 
-      <h2>Sending prompts</h2>
-      <p>
-        Type any natural language instruction in the chat input and press{' '}
-        <strong>Enter</strong> (or click Send). You can reference specific files,
-        components, and behaviours. Here are some examples of effective prompts:
-      </p>
+      <h2>What you can ask the AI</h2>
       <ul>
-        <li>"Add a dark mode toggle that persists to localStorage"</li>
-        <li>
-          "In <code>UserCard.tsx</code>, replace the placeholder avatar with an initials
-          circle"
-        </li>
-        <li>
-          "Add form validation to the signup form using react-hook-form"
-        </li>
+        <li>Generate new pages, components, or features</li>
+        <li>Fix bugs — paste an error message and ask the AI to resolve it</li>
+        <li>Refactor existing code</li>
+        <li>Add styling, animations, or layout changes</li>
+        <li>Connect frontend forms to backend API endpoints</li>
+        <li>Add authentication, validation, or access control</li>
+        <li>Write tests for existing components</li>
       </ul>
 
-      <h2>Streaming responses</h2>
+      <Callout type="tip">
+        See the <a href="/docs/guides/prompting-tips">Prompting Tips</a> guide for advice on
+        writing prompts that produce the best results.
+      </Callout>
+
+      <h2>Context awareness</h2>
       <p>
-        Responses stream in real time via Server-Sent Events (SSE). As the AI generates
-        code, you see its thinking and file changes appear live in the chat panel. File
-        updates are applied incrementally to the editor and picked up by the live preview's
-        HMR — you often see the app change before the response has finished streaming.
+        Forge AI automatically includes your current project files as context in every message.
+        This means you can reference file names, component names, or API routes directly and the
+        AI will understand what you mean.
       </p>
 
-      <h2>Full codebase context</h2>
+      <h2>Chat history</h2>
       <p>
-        The AI receives your complete file tree and file contents with every request. This
-        means it understands your component hierarchy, data models, and existing patterns.
-        It doesn't just append code — it integrates changes that fit naturally into your
-        existing architecture. You don't need to paste code into the chat; the AI can see
-        it all.
-      </p>
-
-      <h2>Conversation history</h2>
-      <p>
-        Your entire chat history is saved and visible to all workspace members with
-        project access. Every AI-generated change has a permanent record of the prompt
-        that created it, making it easy to understand why the code looks the way it does
-        — even weeks later or for a new team member onboarding to the project.
+        Your conversation history is saved per project. You can scroll back through all previous
+        messages. On Team plan workspaces, all collaborators share the same chat history so
+        everyone can see what was asked and why decisions were made.
       </p>
 
       <h2>Rate limits</h2>
-      <p>
-        The number of AI messages you can send per day depends on your plan:
-      </p>
       <table>
         <thead>
           <tr>
             <th>Plan</th>
-            <th>Daily limit</th>
+            <th>Messages per day</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>Free</td>
-            <td>50 messages</td>
+            <td>20</td>
           </tr>
           <tr>
             <td>Pro</td>
-            <td>500 messages</td>
+            <td>300</td>
           </tr>
           <tr>
             <td>Team</td>
-            <td>2,000 messages</td>
-          </tr>
-          <tr>
-            <td>Enterprise</td>
-            <td>Unlimited</td>
+            <td>1,500 (shared per workspace)</td>
           </tr>
         </tbody>
       </table>
 
       <Callout type="info">
-        Rate limits reset daily at midnight UTC. When you reach the limit, the chat panel
-        shows an upgrade prompt with a link to the billing page.
+        Rate limits reset at midnight UTC every day. Upgrade your plan in{' '}
+        <a href="/docs/workspace/billing">Billing &amp; Plans</a> to increase your limit.
       </Callout>
 
-      <h2>Auto-healing</h2>
+      <h2>Streaming responses</h2>
       <p>
-        When the live preview crashes or throws an unhandled error, Forge AI doesn't just
-        show you the red screen — it automatically attempts to fix the problem:
-      </p>
-      <ol>
-        <li>Captures the full error message and stack trace from the WebContainer</li>
-        <li>Sends a targeted diagnostic fix prompt to the AI on your behalf</li>
-        <li>Applies the fix and restarts the live preview</li>
-      </ol>
-      <p>
-        This auto-healing loop runs up to <strong>3 times</strong> before Forge AI pauses
-        and asks for your input.
+        AI responses stream in real time as the model generates them. Code changes are applied
+        progressively to your editor so you can see the output being written character by character.
       </p>
 
-      <Callout type="tip" title="Let auto-healing work">
-        Allow the 3 auto-heal attempts before intervening. The AI uses the real stack
-        trace from the crash to make precise, targeted fixes — often resolving the issue
-        without you needing to type a single thing.
-      </Callout>
+      <h2>Error fixing</h2>
+      <p>
+        If your app throws a runtime error, a <strong>Fix with AI</strong> button appears in the
+        error overlay. Clicking it sends the full error, stack trace, and relevant file context to
+        the AI automatically — no copying and pasting required.
+      </p>
 
-      <h2>Best practices</h2>
-      <NumberedSteps>
-        <div>
-          <strong>Be specific</strong> — Include file names when you know them and describe
-          what you see (the user-facing behaviour), not the implementation detail. "The
-          dropdown doesn't close when you click outside it" is better than "add an
-          onClickOutside handler".
-        </div>
-        <div>
-          <strong>One feature at a time</strong> — Don't describe your entire application
-          in a single prompt. Break work into discrete features and send them one at a
-          time. Each prompt builds on the last.
-        </div>
-        <div>
-          <strong>Reference components by name</strong> — "In the{' '}
-          <code>Header</code> component, add a notification bell icon" is more precise
-          than "add a notification bell somewhere in the header area".
-        </div>
-        <div>
-          <strong>Include error messages when debugging</strong> — Paste the full error
-          text into the chat. The AI uses the exact error message and line number to make
-          precise fixes rather than guessing.
-        </div>
-      </NumberedSteps>
-    </DocsProse>
+      <h2>Shared AI context in teams</h2>
+      <p>
+        On Team plan workspaces, every member contributes to and reads from a shared conversation
+        history. When one member asks the AI to add a feature, the next member to open the project
+        can see exactly what was requested and how the AI responded.
+      </p>
+    </div>
   )
 }
