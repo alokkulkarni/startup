@@ -78,6 +78,13 @@
       "when": 1741870800000,
       "tag": "0010_native_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1742126400000,
+      "tag": "0011_email_verified",
+      "breakpoints": true
     }
   ]
 }

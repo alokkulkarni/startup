@@ -62,7 +62,7 @@ async function upsertOAuthUser(db: any, opts: {
     user = await db.query.users.findFirst({ where: (u: any, { eq }: any) => eq(u.email, email) })
     if (user) {
       const [updated] = await db.update(users)
-        .set({ authProvider: provider, authProviderId: providerId, avatarUrl: avatarUrl ?? user.avatarUrl, updatedAt: new Date() })
+        .set({ authProvider: provider, authProviderId: providerId, avatarUrl: avatarUrl ?? user.avatarUrl, emailVerified: true, updatedAt: new Date() })
         .where(eq(users.id, user.id))
         .returning()
       return { user: updated, isNew: false }
@@ -73,7 +73,7 @@ async function upsertOAuthUser(db: any, opts: {
     isNew = true
     const slug = await uniqueSlug(db, slugify(name || email.split('@')[0]))
     const [newUser] = await db.insert(users)
-      .values({ email, name: name || email.split('@')[0], avatarUrl, authProvider: provider, authProviderId: providerId, plan: 'free', emailVerified: false })
+      .values({ email, name: name || email.split('@')[0], avatarUrl, authProvider: provider, authProviderId: providerId, plan: 'free', emailVerified: true })
       .returning()
     user = newUser
 
@@ -163,11 +163,7 @@ export async function authRoutes(app: FastifyInstance) {
     const token = await (app as any).signToken({ id: user.id, email: user.email, name: user.name, plan: user.plan, roles: [] })
     reply.setCookie('forge_token', token, COOKIE_OPTS)
 
-    // New users or unverified users must verify email
-    if (isNew || !user.emailVerified) {
-      await sendOtpToUser(app, user)
-      return reply.redirect(`${APP_URL}/verify-email`)
-    }
+    // OAuth users are verified by the provider — redirect straight to destination
     return reply.redirect(`${APP_URL}${next}`)
   })
 
@@ -223,10 +219,7 @@ export async function authRoutes(app: FastifyInstance) {
     const token = await (app as any).signToken({ id: user.id, email: user.email, name: user.name, plan: user.plan, roles: [] })
     reply.setCookie('forge_token', token, COOKIE_OPTS)
 
-    if (isNew || !user.emailVerified) {
-      await sendOtpToUser(app, user)
-      return reply.redirect(`${APP_URL}/verify-email`)
-    }
+    // OAuth users are verified by Google — redirect straight to destination
     return reply.redirect(`${APP_URL}${next}`)
   })
 
