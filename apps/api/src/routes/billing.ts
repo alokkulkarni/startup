@@ -59,7 +59,15 @@ export async function billingRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'No workspace found. Create a workspace first.' })
       }
 
-      const stripe = getStripeClient()
+      let stripe: ReturnType<typeof getStripeClient>
+      try {
+        stripe = getStripeClient()
+      } catch {
+        return reply.code(503).send({
+          error: 'Payments are not configured yet. Please contact support to upgrade your plan.',
+        })
+      }
+
       const customerId = await getOrCreateCustomer(stripe, userId, email)
 
       // Upsert subscription with the Stripe customer ID
@@ -105,7 +113,14 @@ export async function billingRoutes(app: FastifyInstance) {
         })
       }
 
-      const stripe = getStripeClient()
+      let stripe: ReturnType<typeof getStripeClient>
+      try {
+        stripe = getStripeClient()
+      } catch {
+        return reply.code(503).send({
+          error: 'Payments are not configured yet. Please contact support.',
+        })
+      }
       const session = await createPortalSession(stripe, sub.stripeCustomerId, returnUrl)
 
       return reply.code(200).send({ url: session.url })

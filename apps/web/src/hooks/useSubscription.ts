@@ -79,8 +79,10 @@ export function useSubscription() {
       if (res.data?.url) {
         window.location.href = res.data.url
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout')
+    } catch (err: unknown) {
+      // Extract server-provided message if available; never show raw HTTP status codes.
+      const serverMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(serverMsg ?? 'Unable to start checkout. Please try again or contact support.')
     } finally {
       setLoading(false)
     }
@@ -94,8 +96,9 @@ export function useSubscription() {
       if (res.data?.url) {
         window.location.href = res.data.url
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open portal')
+    } catch (err: unknown) {
+      const serverMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(serverMsg ?? 'Unable to open billing portal. Please try again or contact support.')
     } finally {
       setLoading(false)
     }

@@ -65,22 +65,29 @@ export async function aiRoutes(app: FastifyInstance) {
       }
 
       // Rate limit: check per-plan daily limit
-      const rateLimitKey = `ratelimit:ai:${user.id}`
-      const [currentCount, planLimit] = await Promise.all([
-        app.redis.incr(rateLimitKey),
-        getUserPlanLimit(app.db, user.id),
-      ])
-      if (currentCount === 1) {
-        await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
-      }
-      if (currentCount > planLimit) {
-        return reply
-          .code(429)
-          .header('X-RateLimit-Remaining', '0')
-          .send({
-            success: false,
-            error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.' },
-          })
+      // Bypass list: comma-separated emails in RATE_LIMIT_BYPASS_EMAILS env var skip enforcement.
+      const bypassEmails = (process.env.RATE_LIMIT_BYPASS_EMAILS ?? '')
+        .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+      const isRateLimitBypassed = bypassEmails.includes((user.email ?? '').toLowerCase())
+
+      if (!isRateLimitBypassed) {
+        const rateLimitKey = `ratelimit:ai:${user.id}`
+        const [currentCount, planLimit] = await Promise.all([
+          app.redis.incr(rateLimitKey),
+          getUserPlanLimit(app.db, user.id),
+        ])
+        if (currentCount === 1) {
+          await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
+        }
+        if (currentCount > planLimit) {
+          return reply
+            .code(429)
+            .header('X-RateLimit-Remaining', '0')
+            .send({
+              success: false,
+              error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.' },
+            })
+        }
       }
 
       // Assert project belongs to user's workspace
