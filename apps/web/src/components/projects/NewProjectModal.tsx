@@ -61,6 +61,9 @@ export function NewProjectModal({ onClose, onCreate, activeWorkspaceId = '' }: N
       })
       .catch(() => {})
       .finally(() => setWsLoading(false))
+
+    // Pre-fetch templates so "From Template" tab is populated on open
+    fetchTemplates()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectTemplate = (tpl: Template) => {

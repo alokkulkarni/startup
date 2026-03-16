@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { eq, and, or, desc, ilike, sql, count } from 'drizzle-orm'
+import { eq, and, or, ne, desc, ilike, sql, count } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   templates,
@@ -213,8 +213,8 @@ export async function templateRoutes(app: FastifyInstance) {
     const [{ value: projectCount }] = await app.db
       .select({ value: count() })
       .from(projects)
-      .where(eq(projects.workspaceId, membership!.workspaceId))
-    if (projectCount >= limits.maxProjects) {
+      .where(and(eq(projects.workspaceId, membership!.workspaceId), ne(projects.status, 'deleted')))
+    if (limits.maxProjects !== -1 && projectCount >= limits.maxProjects) {
       return reply.code(403).send({
         success: false,
         error: {
