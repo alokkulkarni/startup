@@ -106,6 +106,11 @@ export function useAIChat(
     setMessages(prev => [...prev, userMessage, assistantPlaceholder])
     setIsStreaming(true)
 
+    // Safety net: if the server never sends 'done' (network drop, crash, etc.)
+    // abort after 5 minutes so the Stop button doesn't stay up forever.
+    const abortController = new AbortController()
+    const streamingTimeout = setTimeout(() => abortController.abort(), 300_000)
+
     try {
       const response = await fetch(`${API_URL}/v1/projects/${projectId}/ai/chat`, {
         method: 'POST',
@@ -114,9 +119,11 @@ export function useAIChat(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prompt, mode }),
+        signal: abortController.signal,
       })
 
       if (response.status === 429) {
+        clearTimeout(streamingTimeout)
         setRateLimit({ remaining: 0, limit: 50 })
         setMessages(prev => prev.filter(m => m.id !== assistantId))
         setIsStreaming(false)
@@ -135,9 +142,14 @@ export function useAIChat(
 
       // Stream text tokens directly into React state. React 18 automatic batching
       // groups all setState calls inside a single reader.read() chunk into one render.
-      // KEY OPTIMIZATION: once <forge_changes> appears we stop accumulating raw XML
-      // into React state (it can be 100-200KB of file bodies). File progress is
-      // tracked separately via file_written events from the server.
+      // KEY OPTIMIZATION: stop accumulating raw file/code content in React state.
+      // We truncate at two boundaries:
+      //   1. <forge_changes> — model using proper XML format
+      //   2. \n``` — model writing code directly (non-compliant, but must be handled)
+      // In both cases, once we hit these markers we flip the message into
+      // "writing files" mode (streamingFilePaths defined) which shows the spinner/
+      // file badge UI instead of rendering raw code in the chat bubble.
+      // File paths are populated via file_written server events.
 
       const parser = createParser({
         onEvent(event) {
@@ -149,11 +161,25 @@ export function useAIChat(
                 prev.map(m => {
                   if (m.id !== assistantId) return m
                   const newContent = m.content + data.text!
-                  // Once forge_changes XML starts, stop accumulating file bodies in state.
-                  // The explanation text before the tag is all we need to display.
+
+                  // Find the earliest truncation boundary
                   const forgeIdx = newContent.indexOf('<forge_changes>')
-                  if (forgeIdx !== -1) {
-                    return { ...m, content: newContent.slice(0, forgeIdx).trimEnd() }
+                  // Detect code fence opening: newline then ``` (multi-line code block)
+                  const fenceIdx = newContent.search(/\n```[\w.\-/ ]*\n/)
+
+                  const truncateAt = Math.min(
+                    forgeIdx !== -1 ? forgeIdx : Infinity,
+                    fenceIdx !== -1 ? fenceIdx : Infinity,
+                  )
+
+                  if (truncateAt !== Infinity) {
+                    // Switch to writing-files mode: keep only explanation before the boundary.
+                    // streamingFilePaths: [] (defined but empty) signals "writing phase started".
+                    return {
+                      ...m,
+                      content: newContent.slice(0, truncateAt).trimEnd(),
+                      streamingFilePaths: m.streamingFilePaths ?? [],
+                    }
                   }
                   return { ...m, content: newContent }
                 }),
@@ -177,10 +203,11 @@ export function useAIChat(
               )
               onFilesChanged?.()
             } else if (data.type === 'done') {
+              clearTimeout(streamingTimeout)
               setMessages(prev =>
                 prev.map(m => {
                   if (m.id !== assistantId) return m
-                  // content is already explanation-only (XML was stripped during streaming).
+                  // content is already explanation-only (XML/code stripped during streaming).
                   // extractExplanation runs once as a safety net for any residual tags.
                   return {
                     ...m,
@@ -196,6 +223,7 @@ export function useAIChat(
               }
               onFilesChanged?.()
             } else if (data.type === 'error') {
+              clearTimeout(streamingTimeout)
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
               setIsStreaming(false)
@@ -213,7 +241,8 @@ export function useAIChat(
       }
 
       // Ensure streaming flag is cleared if stream ended without explicit done event.
-      // content is already explanation-only (XML stripped during streaming).
+      // content is already explanation-only (XML/code stripped during streaming).
+      clearTimeout(streamingTimeout)
       setMessages(prev =>
         prev.map(m => m.id === assistantId
           ? { ...m, content: extractExplanation(m.content), isStreaming: false }
@@ -221,6 +250,17 @@ export function useAIChat(
       )
       setIsStreaming(false)
     } catch (err) {
+      clearTimeout(streamingTimeout)
+      // AbortError = our 5-min safety timeout fired — clean up silently
+      if (err instanceof Error && err.name === 'AbortError') {
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId
+            ? { ...m, content: extractExplanation(m.content), isStreaming: false }
+            : m),
+        )
+        setIsStreaming(false)
+        return
+      }
       setError(err instanceof Error ? err.message : 'Network error. Please try again.')
       setMessages(prev => prev.filter(m => m.id !== assistantId))
       setIsStreaming(false)

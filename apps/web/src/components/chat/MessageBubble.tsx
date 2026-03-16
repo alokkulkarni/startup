@@ -298,11 +298,13 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
   }
 
   // ── Assistant bubble — STREAMING ─────────────────────────────────────────
-  // content is explanation-only (XML is stripped in useAIChat before entering state).
-  // streamingFilePaths is populated from server file_written events — no parsing needed.
+  // content is explanation-only (XML/code stripped in useAIChat before entering state).
+  // streamingFilePaths === undefined  → still in explanation phase (show text + cursor)
+  // streamingFilePaths === []         → writing phase started, no confirmed files yet
+  // streamingFilePaths === [...]      → files confirmed written (show path badges)
   if (isStreaming) {
-    const hasFilePaths = (streamingFilePaths?.length ?? 0) > 0
-    const isWritingFiles = hasFilePaths
+    // "writing files" mode: triggered as soon as <forge_changes> or a code fence appears
+    const isWritingFiles = streamingFilePaths !== undefined
 
     return (
       <div className="flex justify-start mb-4">
@@ -324,7 +326,15 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
             )}
             {isWritingFiles && (
               <div className="space-y-1 mt-1">
-                {streamingFilePaths!.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)}
+                {streamingFilePaths!.length > 0 ? (
+                  streamingFilePaths!.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)
+                ) : (
+                  // Writing phase started but no file_written events yet
+                  <span className="inline-flex items-center gap-1.5 text-xs text-violet-400">
+                    <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+                    Writing files…
+                  </span>
+                )}
               </div>
             )}
           </div>
