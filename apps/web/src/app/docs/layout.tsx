@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: { template: '%s — Forge AI Docs', default: 'Forge AI Documentation' },
   description:
-    'Learn how to build full-stack applications with Forge AI — the AI-powered app builder powered by Claude, GPT-4o, and Gemini.',
+    'Learn how to build full-stack applications with Forge AI — the AI-powered app builder.',
 }
 
 export default function DocsLayout({ children }: { children: ReactNode }) {

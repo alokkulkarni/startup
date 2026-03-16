@@ -65,7 +65,7 @@ export default function ProjectsPage() {
           <tr>
             <td>Live Preview</td>
             <td>30%</td>
-            <td>Running app in a WebContainer</td>
+            <td>Running the live preview</td>
           </tr>
         </tbody>
       </table>

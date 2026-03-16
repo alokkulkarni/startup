@@ -78,7 +78,7 @@ export default function BuildingDashboardPage() {
         <Step step={7} title="Make it real">
           <em>
             "Replace the mock data arrays with <code>fetch()</code> calls to
-            <code>/api/v1/metrics</code>. Create the Fastify API endpoints in{' '}
+            <code>/api/v1/metrics</code>. Create the API endpoints in{' '}
             <code>apps/api/src/routes/metrics.ts</code> that return the metrics data as
             JSON. Use TypeScript interfaces for the response shapes."
           </em>

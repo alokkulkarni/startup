@@ -53,7 +53,7 @@ export default function TemplatesPage() {
           "Add a pricing section below the features grid with three plan cards"
         </li>
         <li>
-          "Connect the contact form to a Fastify endpoint at <code>/api/contact</code>"
+          "Connect the contact form to the backend API at <code>/api/contact</code>"
         </li>
       </ul>
 
@@ -111,7 +111,7 @@ export default function TemplatesPage() {
             <td>Content sites</td>
           </tr>
           <tr>
-            <td>Fastify REST API</td>
+            <td>REST API</td>
             <td>Node.js</td>
             <td>API</td>
             <td>Backend services</td>
