@@ -335,7 +335,8 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     try {
       await apiPost(`/v1/projects/${projectId}/preview/sync`)
       if (previewUrlRef.current) {
-        // Refresh timestamp so iframe picks up changes
+        // Wait for Vite to detect the touched files and recompile before reloading
+        await new Promise(r => setTimeout(r, 800))
         setPreviewUrl(`${previewUrlRef.current}?t=${Date.now()}`)
       }
     } catch (err) {

@@ -476,6 +476,22 @@ export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void>
   const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
   const container = docker.getContainer(instance.containerName)
   await container.putArchive(tar, { path: '/' })
+
+  // Docker putArchive writes via overlay FS which does NOT fire inotify events.
+  // Touch all source files so chokidar (Vite's watcher) picks up the changes.
+  try {
+    const exec = await container.exec({
+      Cmd: ['sh', '-c', 'find /app/src /app/public /app -maxdepth 1 -type f \\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \\) -exec touch {} + 2>/dev/null; true'],
+      AttachStdout: false,
+      AttachStderr: false,
+    })
+    const stream = await exec.start({ hijack: false, stdin: false })
+    // Fire-and-forget: stream cleanup
+    stream.resume()
+  } catch {
+    // Non-fatal — preview will still show updated files on next iframe reload
+  }
+
   pushLog(instance, `🔄 Synced ${files.length} file(s)`)
 }
 
