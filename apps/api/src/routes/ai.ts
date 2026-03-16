@@ -79,7 +79,8 @@ export async function aiRoutes(app: FastifyInstance) {
         if (currentCount === 1) {
           await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
         }
-        if (currentCount > planLimit) {
+        // -1 means unlimited (enterprise tier)
+        if (planLimit !== -1 && currentCount > planLimit) {
           return reply
             .code(429)
             .header('X-RateLimit-Remaining', '0')

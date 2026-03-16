@@ -30,6 +30,7 @@ import { deploymentRoutes } from './routes/deployments.js'
 import { githubRoutes } from './routes/github.js'
 import { templateRoutes } from './routes/templates.js'
 import { billingRoutes } from './routes/billing.js'
+import { adminRoutes } from './routes/admin.js'
 import websocket from '@fastify/websocket'
 import { collaborationRoutes } from './routes/collaboration.js'
 import { presenceRoutes } from './routes/presence.js'
@@ -103,6 +104,7 @@ await app.register(deploymentRoutes, { prefix: '/api/v1/projects' })
 await app.register(githubRoutes, { prefix: '/api/v1' })
 await app.register(templateRoutes, { prefix: '/api/v1' })
 await app.register(billingRoutes, { prefix: '/api/v1' })
+await app.register(adminRoutes, { prefix: '/api/v1' })
 await app.register(collaborationRoutes, { prefix: '/api/v1' })
 await app.register(presenceRoutes, { prefix: '/api/v1' })
 await app.register(collabRoutes, { prefix: '/api/v1' })

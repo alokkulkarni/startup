@@ -136,12 +136,12 @@ async function* streamGemini(
   systemPrompt: string,
   maxTokens: number,
 ): AsyncGenerator<AIStreamChunk> {
-  // Gemini 2.0 Flash via OpenAI-compat endpoint
+  // Gemini 3.1 Pro via OpenAI-compat endpoint
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GEMINI_API_KEY not set')
 
   const body = {
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-pro-preview',
     max_tokens: maxTokens,
     system: systemPrompt,
     messages,

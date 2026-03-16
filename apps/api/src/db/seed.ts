@@ -1,4 +1,5 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
+import { eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import * as schema from './schema.js'
 import { TEMPLATE_SEEDS } from './templateSeeds.js'
@@ -31,6 +32,54 @@ if (user) {
     ownerId: user.id,
     plan: 'pro',
   }).onConflictDoNothing()
+}
+
+// ── Admin / platform-owner plan overrides ─────────────────────────────────────
+// Set plan tiers for admin emails listed in ADMIN_EMAILS env var.
+// This runs on every seed so the owner always has enterprise access.
+const adminEmails = (process.env.ADMIN_EMAILS ?? '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean)
+
+for (const email of adminEmails) {
+  const adminUser = await db.query.users.findFirst({
+    where: (u, { eq }) => eq(u.email, email),
+  })
+  if (adminUser) {
+    // Upgrade user record
+    await db
+      .update(schema.users)
+      .set({ plan: 'enterprise', updatedAt: new Date() })
+      .where(eq(schema.users.id, adminUser.id))
+
+    // Find their workspaces and upgrade subscriptions
+    const memberships = await db.query.workspaceMembers.findMany({
+      where: (m, { eq }) => eq(m.userId, adminUser.id),
+    })
+    for (const m of memberships) {
+      await db
+        .update(schema.workspaces)
+        .set({ plan: 'enterprise', updatedAt: new Date() })
+        .where(eq(schema.workspaces.id, m.workspaceId))
+
+      await (db as any)
+        .insert(schema.subscriptions)
+        .values({
+          workspaceId: m.workspaceId,
+          plan: 'enterprise',
+          planTier: 'enterprise',
+          status: 'active',
+        })
+        .onConflictDoUpdate({
+          target: schema.subscriptions.workspaceId,
+          set: { plan: 'enterprise', planTier: 'enterprise', status: 'active' },
+        })
+    }
+    console.log(`✅ Admin ${email} → enterprise tier`)
+  } else {
+    console.log(`⚠ Admin ${email} not found in DB (they need to sign up first)`)
+  }
 }
 
 // Seed templates

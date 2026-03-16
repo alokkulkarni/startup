@@ -15,7 +15,7 @@ const TIER_LIMITS: Record<string, PlanLimits> = {
   free:       { maxProjects: 3,   aiRequestsPerDay: 20,   maxFilesPerProject: 20  },
   pro:        { maxProjects: 50,  aiRequestsPerDay: 300,  maxFilesPerProject: 200 },
   team:       { maxProjects: 999, aiRequestsPerDay: 1500, maxFilesPerProject: 999 },
-  enterprise: { maxProjects: 999, aiRequestsPerDay: 9999, maxFilesPerProject: 999 },
+  enterprise: { maxProjects: -1,  aiRequestsPerDay: -1,   maxFilesPerProject: -1  },
 }
 
 export interface PlanGate {
@@ -61,10 +61,10 @@ export function usePlanGate(): PlanGate {
   const aiLimit = usage?.limit ?? limits.aiRequestsPerDay
 
   return {
-    canCreateProject: projectsUsed < limits.maxProjects,
+    canCreateProject: limits.maxProjects === -1 || projectsUsed < limits.maxProjects,
     projectsUsed,
     projectsLimit: limits.maxProjects,
-    canSendAI: aiUsed < aiLimit,
+    canSendAI: limits.aiRequestsPerDay === -1 || aiUsed < aiLimit,
     aiUsed,
     aiLimit,
     tier,

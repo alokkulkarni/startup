@@ -7,9 +7,10 @@ import { subscriptions } from '../db/schema.js'
 type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>
 
 export const PLAN_LIMITS = {
-  free: { aiRequestsPerDay: 20,   maxProjects: 3,   maxFilesPerProject: 20  },
-  pro:  { aiRequestsPerDay: 300,  maxProjects: 50,  maxFilesPerProject: 200 },
-  team: { aiRequestsPerDay: 1500, maxProjects: 999, maxFilesPerProject: 999 },
+  free:       { aiRequestsPerDay: 20,   maxProjects: 3,   maxFilesPerProject: 20   },
+  pro:        { aiRequestsPerDay: 300,  maxProjects: 50,  maxFilesPerProject: 200  },
+  team:       { aiRequestsPerDay: 1500, maxProjects: 999, maxFilesPerProject: 999  },
+  enterprise: { aiRequestsPerDay: -1,   maxProjects: -1,  maxFilesPerProject: -1   },
 }
 
 export const STRIPE_PRICE_IDS = {
