@@ -384,6 +384,16 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
               ? <AssistantMarkdown text={explanation} />
               : <p className="text-sm text-gray-400 italic">✓ Done</p>
             }
+            {changedPaths.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {changedPaths.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-green-950/50 border border-green-800/50 rounded-lg">
+                    <span className="text-green-400 text-xs shrink-0">✓</span>
+                    <span className="text-xs font-mono text-green-300 truncate">{p}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-1 pl-1">{formatRelativeTime(createdAt)}</p>
         </div>

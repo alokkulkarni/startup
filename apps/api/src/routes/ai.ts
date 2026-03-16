@@ -163,11 +163,37 @@ export async function aiRoutes(app: FastifyInstance) {
       const writtenDuringStream = new Set<string>()
       let snapshotTaken = false
 
+      // ── Text-token batching ─────────────────────────────────────────────────
+      // The LLM streams one token at a time (~1–5 chars each). Sending a
+      // separate SSE event per token means 2,000–5,000 events for a typical
+      // response. Each event triggers a React setState + re-render on the
+      // client, which blocks the browser main thread and causes "Page
+      // Unresponsive". Batching flushes accumulated text every 80 ms (or when
+      // the buffer hits 150 chars), reducing client renders to ~15–25 total.
+      let textBuffer = ''
+      let textFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+      const flushTextBuffer = () => {
+        if (textFlushTimer) { clearTimeout(textFlushTimer); textFlushTimer = null }
+        if (textBuffer) {
+          write({ type: 'text', text: textBuffer })
+          textBuffer = ''
+        }
+      }
+
       try {
         for await (const chunk of streamAIResponse(messages, systemPrompt)) {
           if (chunk.type === 'text' && chunk.text) {
             fullContent += chunk.text
-            write({ type: 'text', text: chunk.text })
+
+            // Batch tokens: flush immediately if buffer is large, otherwise
+            // let the timer coalesce small tokens into one SSE event.
+            textBuffer += chunk.text
+            if (textBuffer.length >= 150) {
+              flushTextBuffer()
+            } else if (!textFlushTimer) {
+              textFlushTimer = setTimeout(flushTextBuffer, 80)
+            }
 
             // In plan mode, no file writes — just stream the plan text
             if (mode !== 'plan') {
@@ -183,6 +209,8 @@ export async function aiRoutes(app: FastifyInstance) {
                   writtenDuringStream.add(fileDiff.path)
                   try {
                     await writeSingleFile(project.id, fileDiff, app.db)
+                    // Flush buffered text before file event so client sees text first
+                    flushTextBuffer()
                     write({ type: 'file_written', path: fileDiff.path })
                   } catch (err) {
                     app.log.warn({ msg: '[AI] Incremental file write failed', path: fileDiff.path, err })
@@ -191,6 +219,9 @@ export async function aiRoutes(app: FastifyInstance) {
               }
             }
           } else if (chunk.type === 'done') {
+            // Flush any remaining buffered text before processing done
+            flushTextBuffer()
+
             // Save assistant message (plan text or code response)
             await app.db.insert(aiMessages).values({
               conversationId: conversation!.id,
@@ -253,6 +284,7 @@ export async function aiRoutes(app: FastifyInstance) {
             }, app.log)
             return
           } else if (chunk.type === 'error') {
+            flushTextBuffer()
             write({ type: 'error', error: chunk.error })
             res.end()
             return
@@ -261,6 +293,7 @@ export async function aiRoutes(app: FastifyInstance) {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'AI stream error'
         try {
+          flushTextBuffer()
           write({ type: 'error', error: message })
           res.end()
         } catch { /* ignore */ }
