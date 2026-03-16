@@ -82,7 +82,7 @@ export default function DashboardPage() {
       fetchProjects()
       fetchTemplates({ sort: 'popular', perPage: 6 })
     }
-  }, [authenticated, fetchProjects])
+  }, [authenticated, fetchProjects, fetchTemplates])
 
   const handleNewProject = () => {
     const maxProjects = subscription?.limits.maxProjects ?? -1
