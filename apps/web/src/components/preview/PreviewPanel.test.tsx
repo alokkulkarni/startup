@@ -51,6 +51,7 @@ describe('PreviewPanel', () => {
   it('calls onFixWithAI when error overlay Fix with AI button is clicked', () => {
     const onFixWithAI = vi.fn()
     const error: WCError = {
+      kind: 'app',
       message: 'SyntaxError: unexpected token',
       stack: 'SyntaxError: unexpected token\n  at eval:1:1',
     }

@@ -14,6 +14,9 @@ export interface LogEntry {
 }
 
 export interface WCError {
+  /** 'app'      — user's code is broken (compile/runtime error); show Fix with AI
+   *  'platform' — WebContainer / infra issue (boot fail, install fail, server crash) */
+  kind: 'app' | 'platform'
   message: string
   file?: string
   line?: number
@@ -88,21 +91,48 @@ export function useWebContainer(projectId: string, files: FileNode[], enabled: b
   }, [])
 
   const parseError = useCallback((text: string): WCError | null => {
+    // Vite internal server error (compile/transform failure)
+    if (text.includes('[vite] Internal server error:')) {
+      const msgLine = text.split('\n').find(l => l.includes('[vite] Internal server error:'))
+      const message = msgLine?.replace(/.*\[vite\] Internal server error:\s*/, '').trim()
+        || 'Vite internal error'
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
+      return { kind: 'app', message, file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    // Failed to resolve import / module not found
+    if (text.includes('Failed to resolve import') || text.includes("Cannot find module '")) {
+      const importMatch = text.match(/Failed to resolve import "([^"]+)"|Cannot find module '([^']+)'/)
+      const mod = importMatch?.[1] ?? importMatch?.[2] ?? 'unknown'
+      return { kind: 'app', message: `Cannot find module "${mod}" — it may be missing from package.json`, stack: text }
+    }
+    // Syntax errors (SWC / Babel / TypeScript)
+    if (text.match(/SyntaxError:|Unexpected token|Unterminated string/)) {
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
+      return { kind: 'app', message: text.split('\n')[0].trim(), file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    // Vite build failures
+    if (text.includes('error during build') || text.match(/Build failed\.?\s*(\d+ error)?/)) {
+      const firstMeaningfulLine = text.split('\n').find(l => l.trim() && !l.includes('error during build')) ?? 'Build failed'
+      return { kind: 'app', message: firstMeaningfulLine.trim(), stack: text }
+    }
     // Missing source file (Vite ENOENT during build/HMR)
     if (text.includes('ENOENT') && text.includes('no such file or directory')) {
       const fileMatch = text.match(/open '([^']+)'/)
       const filePath = fileMatch?.[1]
       const fileName = filePath?.split('/').pop() ?? 'unknown'
       return {
+        kind: 'app',
         message: `Missing file: ${fileName} — use "Fix with AI" to generate it`,
         file: filePath,
         stack: text,
       }
     }
+    // TypeScript and general errors
     if (text.includes('Error:') || text.includes('error TS') || text.includes('Cannot find')) {
-      const fileMatch = text.match(/([^\s]+\.[jt]sx?):(\d+)/)
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
       return {
-        message: text.split('\n')[0],
+        kind: 'app',
+        message: text.split('\n')[0].trim(),
         file: fileMatch?.[1],
         line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined,
         stack: text,
@@ -146,7 +176,7 @@ export function useWebContainer(projectId: string, files: FileNode[], enabled: b
       if (installCode !== 0) {
         // Surface the last 3000 chars of install output so the user can debug
         addLog('stderr', installOutput.slice(-3000))
-        throw new Error(`npm install failed with code ${installCode}`)
+        throw new Error(`npm install failed with exit code ${installCode}. Check the console for details.`)
       }
       addLog('system', '✅ Packages installed')
       setProgress(70)
@@ -198,11 +228,11 @@ export function useWebContainer(projectId: string, files: FileNode[], enabled: b
                 } else {
                   addLog('stderr', out.slice(-1000))
                   setStatus('error')
-                  setError({ message: `Package "${pkg}" is missing from package.json. Use "Fix with AI" to add it.` })
+                  setError({ kind: 'app', message: `Package "${pkg}" is missing from package.json. Use "Fix with AI" to add it.` })
                 }
               } catch (e) {
                 setStatus('error')
-                setError({ message: String(e) })
+                setError({ kind: 'platform', message: String(e) })
               } finally {
                 healingRef.current = false
               }
@@ -210,6 +240,20 @@ export function useWebContainer(projectId: string, files: FileNode[], enabled: b
           }
         },
       }))
+
+      // Monitor dev server for unexpected exits (crash / port conflict / syntax error).
+      // devProcessRef is nulled before kill() on intentional stop, so code !== 0 guard
+      // plus the ref-equality check avoids false positives during restart.
+      devProcess.exit.then((code) => {
+        if (devProcessRef.current === devProcess && code !== 0) {
+          setStatus('error')
+          setError({
+            kind: 'platform',
+            message: `Development server stopped unexpectedly (exit ${code}). Check the console for details, or restart the preview.`,
+          })
+          addLog('stderr', `❌ Dev server exited with code ${code}`)
+        }
+      })
 
       wc.on('server-ready', (port: number, url: string) => {
         // For full-stack apps concurrently runs Express (:3001) + Vite (:5173).
@@ -230,7 +274,7 @@ export function useWebContainer(projectId: string, files: FileNode[], enabled: b
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setStatus('error')
-      setError({ message })
+      setError({ kind: 'platform', message })
       addLog('stderr', `❌ ${message}`)
     }
   }, [status, addLog, parseError])

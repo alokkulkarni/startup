@@ -55,6 +55,8 @@ export function PreviewPanel({
 
   useEffect(() => {
     if (status === 'idle' || status === 'stopped') setIsDismissed(false)
+    // When status flips to 'error' (new error session), re-show the overlay
+    if (status === 'error') setIsDismissed(false)
   }, [status])
 
   // Ctrl+Shift+R keyboard shortcut
@@ -75,7 +77,12 @@ export function PreviewPanel({
 
   const isLoading = status !== 'ready' && status !== 'idle' && status !== 'stopped' && status !== 'error'
   const maxWidth = VIEWPORT_WIDTHS[viewport]
-  const visibleError = error && !isDismissed ? error : null
+  // If status is 'error' but hook didn't set an explicit error (shouldn't normally happen),
+  // synthesise a fallback so the user always sees something instead of a blank screen.
+  const activeError = error ?? (status === 'error'
+    ? { kind: 'platform' as const, message: 'The preview stopped unexpectedly. Check the console for details, or restart the preview.' }
+    : null)
+  const visibleError = activeError && !isDismissed ? activeError : null
 
   return (
     <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
@@ -199,11 +206,13 @@ export function PreviewPanel({
           </div>
         )}
 
-        {/* Error overlay */}
+        {/* Error overlay — shown for both app errors (red) and platform errors (amber).
+             Always renders something when status=error so user is never left with a blank screen. */}
         <ErrorOverlay
           error={visibleError}
           onFixWithAI={onFixWithAI}
           onDismiss={() => setIsDismissed(true)}
+          onRestart={onRefresh}
         />
       </div>
 

@@ -23,6 +23,9 @@ export interface LogEntry {
 }
 
 export interface WCError {
+  /** 'app'      — user's code is broken (compile/runtime error); show Fix with AI
+   *  'platform' — WebContainer / infra issue (boot fail, server crash) */
+  kind: 'app' | 'platform'
   message: string
   file?: string
   line?: number
@@ -108,6 +111,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       const m = text.match(/open '([^']+)'/)
       const fp = m?.[1]
       return {
+        kind: 'app' as const,
         message: `Missing file: ${fp?.split('/').pop() ?? 'unknown'} — use "Fix with AI" to generate it`,
         file: fp,
         stack: text,
@@ -116,6 +120,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     if (text.includes('Error:') || text.includes('error TS') || text.includes('Cannot find')) {
       const m = text.match(/([^\s]+\.[jt]sx?):(\d+)/)
       return {
+        kind: 'app' as const,
         message: text.split('\n')[0],
         file: m?.[1],
         line: m?.[2] ? parseInt(m[2]) : undefined,
@@ -204,7 +209,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       const msg = (err as Error).message
       startFailedRef.current = true   // block auto-restart loop
       setStatus('error')
-      setError({ message: msg })
+      setError({ kind: 'platform', message: msg })
       addLog('stderr', `❌ ${msg}`)
     } finally {
       startingRef.current = false
