@@ -138,12 +138,32 @@ export function useAIChat(
       let pendingContent = ''
       let flushTimerId: ReturnType<typeof setTimeout> | null = null
 
+      // Only push content to React state once the file-writing phase begins.
+      // Pre-forge prose can grow to 5–8 KB and calling setMessages at 10fps
+      // on that growing string causes React layout to block the main thread
+      // long enough to trigger "Page Unresponsive". The "Thinking…" spinner in
+      // MessageBubble covers the silent accumulation phase.
       const flushContent = () => {
         flushTimerId = null
         const snapshot = pendingContent
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
-        )
+
+        // Runaway response guard: if content exceeds 80 KB without any
+        // <forge_changes> tag the model has gone off-script — abort early.
+        if (snapshot.length > 80_000 && !snapshot.includes('<forge_changes>')) {
+          reader.cancel()
+          setError('Response was too long without producing any file changes. Please try again with a more specific request.')
+          setMessages(prev => prev.filter(m => m.id !== assistantId))
+          setIsStreaming(false)
+          return
+        }
+
+        if (snapshot.includes('<forge_changes>')) {
+          setMessages(prev =>
+            prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
+          )
+        }
+        // else: still in the prose/thinking phase — suppress React update;
+        // the MessageBubble "Thinking…" spinner is already visible.
       }
 
       const parser = createParser({
