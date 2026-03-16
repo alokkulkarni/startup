@@ -473,21 +473,32 @@ export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void>
     .from(schema.projectFiles)
     .where(eq(schema.projectFiles.projectId, projectId))
 
+  const packageJsonBefore = files.find(f => f.path === 'package.json')?.content ?? ''
   const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
   const container = docker.getContainer(instance.containerName)
   await container.putArchive(tar, { path: '/' })
 
+  // If package.json changed (new deps added by AI), run npm install inside container.
+  const packageJsonAfter = files.find(f => f.path === 'package.json')?.content ?? ''
+  const packageJsonChanged = packageJsonBefore !== packageJsonAfter && packageJsonAfter !== ''
+
   // Docker putArchive writes via overlay FS which does NOT fire inotify events.
-  // Touch all source files so chokidar (Vite's watcher) picks up the changes.
+  // Touch only src/ and public/ files — never config files like vite.config.ts
+  // (touching vite.config.ts causes a full Vite server restart which is slow).
   try {
+    const installCmd = packageJsonChanged
+      ? 'cd /app && npm install --prefer-offline --no-audit --no-fund 2>/dev/null; '
+      : ''
     const exec = await container.exec({
-      Cmd: ['sh', '-c', 'find /app/src /app/public /app -maxdepth 1 -type f \\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \\) -exec touch {} + 2>/dev/null; true'],
+      Cmd: ['sh', '-c', `${installCmd}find /app/src /app/public -type f 2>/dev/null | xargs touch 2>/dev/null; true`],
       AttachStdout: false,
       AttachStderr: false,
     })
     const stream = await exec.start({ hijack: false, stdin: false })
-    // Fire-and-forget: stream cleanup
     stream.resume()
+    if (packageJsonChanged) {
+      pushLog(instance, '📦 Installing new packages…')
+    }
   } catch {
     // Non-fatal — preview will still show updated files on next iframe reload
   }
