@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { eq } from 'drizzle-orm'
-import { users, workspaces, workspaceMembers } from '../db/schema.js'
+import { users, workspaces, workspaceMembers, subscriptions } from '../db/schema.js'
 import bcrypt from 'bcryptjs'
 import { SignJWT, jwtVerify } from 'jose'
 import { sendOtpEmail } from '../services/email.js'
@@ -65,25 +65,81 @@ async function upsertOAuthUser(db: any, opts: {
         .set({ authProvider: provider, authProviderId: providerId, avatarUrl: avatarUrl ?? user.avatarUrl, emailVerified: true, updatedAt: new Date() })
         .where(eq(users.id, user.id))
         .returning()
-      return { user: updated, isNew: false }
+      user = updated
+      await ensureAdminTier(db, user)
+      return { user, isNew: false }
     }
   }
 
   if (!user) {
     isNew = true
+    const adminTier = getAdminTier(email)
     const slug = await uniqueSlug(db, slugify(name || email.split('@')[0]))
     const [newUser] = await db.insert(users)
-      .values({ email, name: name || email.split('@')[0], avatarUrl, authProvider: provider, authProviderId: providerId, plan: 'free', emailVerified: true })
+      .values({ email, name: name || email.split('@')[0], avatarUrl, authProvider: provider, authProviderId: providerId, plan: adminTier, emailVerified: true })
       .returning()
     user = newUser
 
     const [workspace] = await db.insert(workspaces)
-      .values({ name: `${user.name}'s Workspace`, slug, ownerId: user.id, plan: 'free' })
+      .values({ name: `${user.name}'s Workspace`, slug, ownerId: user.id, plan: adminTier })
       .returning()
     await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: user.id, role: 'owner' })
+
+    // Create subscription record for admin users so billing endpoints reflect their tier
+    if (adminTier !== 'free') {
+      await db.insert(subscriptions)
+        .values({ workspaceId: workspace.id, plan: adminTier, planTier: adminTier, status: 'active' })
+        .onConflictDoNothing()
+    }
+  } else {
+    await ensureAdminTier(db, user)
   }
 
   return { user, isNew }
+}
+
+/**
+ * Check if an email is in ADMIN_EMAILS and return the appropriate tier.
+ * Admin emails get 'enterprise'; everyone else gets 'free'.
+ */
+function getAdminTier(email: string): string {
+  const adminEmails = (process.env.ADMIN_EMAILS ?? '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+  return adminEmails.includes(email.toLowerCase()) ? 'enterprise' : 'free'
+}
+
+/**
+ * Ensure an existing admin user has enterprise tier on their user record,
+ * workspace, and subscription. Called on every login so admin status is
+ * always in sync with the ADMIN_EMAILS env var.
+ */
+async function ensureAdminTier(db: any, user: { id: string; email: string; plan: string }) {
+  const tier = getAdminTier(user.email)
+  if (tier === 'free') return // not an admin
+  if (user.plan === tier) return // already correct
+
+  // Upgrade user record
+  await db.update(users)
+    .set({ plan: tier, updatedAt: new Date() })
+    .where(eq(users.id, user.id))
+
+  // Upgrade all their workspaces + subscriptions
+  const memberships = await db.query.workspaceMembers.findMany({
+    where: (m: any, { eq }: any) => eq(m.userId, user.id),
+  })
+  for (const m of memberships) {
+    await db.update(workspaces)
+      .set({ plan: tier, updatedAt: new Date() })
+      .where(eq(workspaces.id, m.workspaceId))
+
+    await (db as any)
+      .insert(subscriptions)
+      .values({ workspaceId: m.workspaceId, plan: tier, planTier: tier, status: 'active' })
+      .onConflictDoUpdate({
+        target: subscriptions.workspaceId,
+        set: { plan: tier, planTier: tier, status: 'active' },
+      })
+  }
 }
 
 /** Sign a state JWT for OAuth flows (5 min expiry) */
@@ -244,11 +300,19 @@ export async function authRoutes(app: FastifyInstance) {
 
     const passwordHash = await bcrypt.hash(password, 12)
     const slug = await uniqueSlug(app.db, slugify(name || email.split('@')[0]))
+    const adminTier = getAdminTier(email)
 
-    const [user] = await app.db.insert(users).values({ email, name, passwordHash, authProvider: 'email', plan: 'free', emailVerified: false }).returning()
+    const [user] = await app.db.insert(users).values({ email, name, passwordHash, authProvider: 'email', plan: adminTier, emailVerified: false }).returning()
 
-    const [workspace] = await app.db.insert(workspaces).values({ name: `${user.name}'s Workspace`, slug, ownerId: user.id, plan: 'free' }).returning()
+    const [workspace] = await app.db.insert(workspaces).values({ name: `${user.name}'s Workspace`, slug, ownerId: user.id, plan: adminTier }).returning()
     await app.db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: user.id, role: 'owner' })
+
+    // Create subscription record for admin/enterprise users
+    if (adminTier !== 'free') {
+      await app.db.insert(subscriptions)
+        .values({ workspaceId: workspace.id, plan: adminTier, planTier: adminTier, status: 'active' })
+        .onConflictDoNothing()
+    }
 
     // Issue JWT and send OTP — user must verify email before using the app
     const token = await (app as any).signToken({ id: user.id, email: user.email, name: user.name, plan: user.plan, roles: [] })
@@ -264,21 +328,26 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { email, password } = request.body as { email: string; password: string }
 
-    const user = await app.db.query.users.findFirst({ where: (u: any, { eq }: any) => eq(u.email, email) })
+    let user = await app.db.query.users.findFirst({ where: (u: any, { eq }: any) => eq(u.email, email) })
     if (!user || !user.passwordHash) return reply.code(401).send({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } })
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return reply.code(401).send({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } })
 
-    const token = await (app as any).signToken({ id: user.id, email: user.email, name: user.name, plan: user.plan, roles: [] })
+    // Ensure admin users are upgraded on every login
+    await ensureAdminTier(app.db, user)
+    // Re-read to pick up any plan changes
+    const currentPlan = getAdminTier(user.email) !== 'free' ? getAdminTier(user.email) : user.plan
+
+    const token = await (app as any).signToken({ id: user.id, email: user.email, name: user.name, plan: currentPlan, roles: [] })
     reply.setCookie('forge_token', token, COOKIE_OPTS)
 
     // If returning unverified user, send them to verify
     if (!user.emailVerified) {
       await sendOtpToUser(app, user)
-      return reply.send({ success: true, data: { user: { id: user.id, email: user.email, name: user.name, plan: user.plan }, requiresVerification: true } })
+      return reply.send({ success: true, data: { user: { id: user.id, email: user.email, name: user.name, plan: currentPlan }, requiresVerification: true } })
     }
-    return reply.send({ success: true, data: { user: { id: user.id, email: user.email, name: user.name, plan: user.plan } } })
+    return reply.send({ success: true, data: { user: { id: user.id, email: user.email, name: user.name, plan: currentPlan } } })
   })
 
   // ── OTP send / verify ───────────────────────────────────────────────────────

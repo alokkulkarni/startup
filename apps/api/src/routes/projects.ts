@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { eq, and, desc, isNull, count } from 'drizzle-orm'
+import { eq, and, ne, desc, isNull, count } from 'drizzle-orm'
 import { z } from 'zod'
 import archiver from 'archiver'
 import { projects, projectFiles, workspaceMembers, workspaces } from '../db/schema.js'
@@ -148,11 +148,16 @@ export async function projectRoutes(app: FastifyInstance) {
     })
     const planTier = (ws?.plan ?? 'free') as keyof typeof PLAN_LIMITS
     const limits = PLAN_LIMITS[planTier] ?? PLAN_LIMITS.free
+    // Only count active projects — soft-deleted ones don't count toward the limit
     const [{ value: projectCount }] = await app.db
       .select({ value: count() })
       .from(projects)
-      .where(eq(projects.workspaceId, membership!.workspaceId))
-    if (projectCount >= limits.maxProjects) {
+      .where(and(
+        eq(projects.workspaceId, membership!.workspaceId),
+        ne(projects.status, 'deleted'),
+      ))
+    // -1 means unlimited (enterprise tier)
+    if (limits.maxProjects !== -1 && projectCount >= limits.maxProjects) {
       return reply.code(403).send({
         success: false,
         error: {
