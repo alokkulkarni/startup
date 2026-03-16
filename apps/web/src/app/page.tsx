@@ -19,6 +19,7 @@ export default function LandingPage() {
             <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
             <Link href="/templates" className="hover:text-white transition-colors">Templates</Link>
             <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
           </div>
 
           <div className="flex items-center gap-3">
@@ -264,6 +265,7 @@ export default function LandingPage() {
             <a href="#" className="hover:text-gray-400 transition-colors">Privacy</a>
             <a href="#" className="hover:text-gray-400 transition-colors">Terms</a>
             <Link href="/templates" className="hover:text-gray-400 transition-colors">Templates</Link>
+            <Link href="/docs" className="hover:text-gray-400 transition-colors">Docs</Link>
             <a href="mailto:hello@forge.ai" className="hover:text-gray-400 transition-colors">Contact</a>
           </div>
           <p>© {new Date().getFullYear()} Forge AI. All rights reserved.</p>
