@@ -138,32 +138,70 @@ export function useAIChat(
       let pendingContent = ''
       let flushTimerId: ReturnType<typeof setTimeout> | null = null
 
-      // Only push content to React state once the file-writing phase begins.
-      // Pre-forge prose can grow to 5–8 KB and calling setMessages at 10fps
-      // on that growing string causes React layout to block the main thread
-      // long enough to trigger "Page Unresponsive". The "Thinking…" spinner in
-      // MessageBubble covers the silent accumulation phase.
+      // ── CRITICAL: raw file content must NEVER enter React state ────────────
+      // Storing the full streaming content (prose + <forge_changes> XML with
+      // entire file bodies) in React state and calling setMessages at 10fps
+      // triggers expensive re-renders on a 50–200 KB whitespace-pre-wrap node,
+      // blocking the main thread and causing "Page Unresponsive".
+      //
+      // Solution: flushContent only ever puts METADATA into state:
+      //   • Thinking phase  → nothing (empty content → "Thinking…" spinner)
+      //   • Writing phase   → short explanation preview (≤400 chars) + file paths
+      //   • Done            → extractExplanation() strips XML → clean prose
+      //
+      // The pendingContent local var still accumulates the full raw stream so
+      // extractExplanation() can strip it correctly on done.
+
+      let thinkingStartMs: number | null = null
+
       const flushContent = () => {
         flushTimerId = null
         const snapshot = pendingContent
+        const forgeStart = snapshot.indexOf('<forge_changes>')
 
-        // Runaway response guard: if content exceeds 80 KB without any
-        // <forge_changes> tag the model has gone off-script — abort early.
-        if (snapshot.length > 80_000 && !snapshot.includes('<forge_changes>')) {
-          reader.cancel()
-          setError('Response was too long without producing any file changes. Please try again with a more specific request.')
-          setMessages(prev => prev.filter(m => m.id !== assistantId))
-          setIsStreaming(false)
+        if (forgeStart === -1) {
+          // ── Thinking phase ─────────────────────────────────────────────────
+          if (thinkingStartMs === null) thinkingStartMs = Date.now()
+          const elapsedMs = Date.now() - thinkingStartMs
+
+          // Guard: preamble is runaway-large OR model has been thinking too long
+          if (snapshot.length > 30_000 || elapsedMs > 120_000) {
+            reader.cancel()
+            const reason = elapsedMs > 120_000
+              ? 'The model took too long to respond. Please try again with a more specific request.'
+              : 'Response was unexpectedly large without producing file changes. Please try a more specific request.'
+            setError(reason)
+            setMessages(prev => prev.filter(m => m.id !== assistantId))
+            setIsStreaming(false)
+            return
+          }
+
+          // No state update — content stays '' → MessageBubble shows "Thinking…"
           return
         }
 
-        if (snapshot.includes('<forge_changes>')) {
-          setMessages(prev =>
-            prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
-          )
-        }
-        // else: still in the prose/thinking phase — suppress React update;
-        // the MessageBubble "Thinking…" spinner is already visible.
+        // ── File-writing phase ────────────────────────────────────────────────
+        // Extract file paths from partial XML (cheap regex on just the forge section)
+        const forgeSection = snapshot.slice(forgeStart)
+        const fileRe = /<file\s+path="([^"]+)"/g
+        const paths: string[] = []
+        let fm: RegExpExecArray | null
+        while ((fm = fileRe.exec(forgeSection)) !== null) paths.push(fm[1])
+
+        // Store ONLY the short explanation preview + file paths.
+        // Never store the file body content — it can be 100 KB+.
+        const shortExplanation = snapshot.slice(0, forgeStart)
+          .replace(/```[\s\S]*?```/g, '')
+          .replace(/```[\s\S]*/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+          .slice(0, 400)
+
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId
+            ? { ...m, content: shortExplanation, changedPaths: paths }
+            : m),
+        )
       }
 
       const parser = createParser({

@@ -330,67 +330,46 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
 
   // ── Assistant bubble — STREAMING ─────────────────────────────────────────
   if (isStreaming) {
-    // Detect if we're in the file-writing phase (XML opened but not closed)
-    const forgeOpen = content.indexOf('<forge_changes>')
-    const forgeClose = content.indexOf('</forge_changes>')
-    const isWritingFiles = forgeOpen !== -1 && forgeClose === -1
-    const explanationRaw = forgeOpen !== -1 ? content.slice(0, forgeOpen).trim() : content
-
-    // Strip code blocks entirely (fence + content) from streaming explanation.
-    // The old regex only removed the opening ``` fence but left all code lines visible.
-    // Now we: 1) strip complete blocks, 2) strip unclosed trailing block, 3) strip stray fences.
-    // Cap at 1200 chars to prevent large whitespace-pre-wrap nodes locking the main thread.
-    const MAX_STREAM_CHARS = 1200
-    const fullExplanation = explanationRaw
-      .replace(/```[\s\S]*?```/g, '')  // strip fully-closed code blocks (content + fences)
-      .replace(/```[\s\S]*/g, '')       // strip unclosed trailing code block (still streaming)
-      .replace(/`[^`\n]+`/g, (m) => m) // keep short inline backtick spans as-is
+    // useAIChat now puts ONLY metadata into state during streaming:
+    //   • content  = short explanation preview (≤400 chars), or '' in thinking phase
+    //   • changedPaths = file paths extracted from <forge_changes> (set once writing starts)
+    // We never receive raw <forge_changes> XML in content, so no expensive regex needed.
+    const isWritingFiles = !!changedPaths?.length
+    const explanation = content
       .replace(/\n{3,}/g, '\n\n')
       .trim()
-    const explanation = fullExplanation.length > MAX_STREAM_CHARS
-      ? fullExplanation.slice(0, MAX_STREAM_CHARS) + '…'
-      : fullExplanation
-
-    // Extract file paths from partial forge_changes block (for spinner badges)
-    const streamingFilePaths: string[] = []
-    if (isWritingFiles) {
-      const re = /<file\s+path="([^"]+)"/g
-      let m: RegExpExecArray | null
-      const partial = content.slice(forgeOpen)
-      while ((m = re.exec(partial)) !== null) streamingFilePaths.push(m[1])
-    }
 
     return (
       <div className="flex justify-start mb-4">
         <div className="max-w-[85%] w-full">
           <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
-            {explanation && (
-              <div className={isWritingFiles ? 'mb-3' : ''}>
-                {/* Plain text during streaming — no markdown parsing overhead */}
-                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100">
-                  {explanation}
-                  {!isWritingFiles && (
-                    <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
-                  )}
-                </p>
-              </div>
-            )}
+            {/* Thinking phase: no explanation, no files yet */}
             {!explanation && !isWritingFiles && (
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
                 <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
                 Thinking…
               </span>
             )}
+
+            {/* Explanation preview (may appear briefly before writing starts) */}
+            {explanation && !isWritingFiles && (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100">
+                {explanation}
+                <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
+              </p>
+            )}
+
+            {/* File-writing phase */}
             {isWritingFiles && (
-              <div className="space-y-1">
-                {streamingFilePaths.length > 0 ? (
-                  streamingFilePaths.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-violet-400">
-                    <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
-                    Writing files…
-                  </span>
+              <div className="space-y-2">
+                {explanation && (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100 mb-3">
+                    {explanation}
+                  </p>
                 )}
+                <div className="space-y-1">
+                  {changedPaths!.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)}
+                </div>
               </div>
             )}
           </div>
