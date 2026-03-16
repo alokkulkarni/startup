@@ -564,6 +564,16 @@ collect_inputs() {
   else
     FORGE_CF_ACCOUNT_ID=""
   fi
+
+  # Platform admin
+  divider
+  echo -e "\n${BOLD}Platform Admin${RESET} (owner bypass — enterprise tier + rate-limit skip)\n"
+  echo -e "  ${DIM}Enter the email(s) of platform owners/admins. These accounts get unlimited${RESET}"
+  echo -e "  ${DIM}usage (enterprise tier) and bypass AI rate limits on every login.${RESET}"
+  echo -e "  ${DIM}Comma-separated for multiple emails.${RESET}\n"
+
+  prompt_optional ADMIN_EMAILS "Admin email(s)" "you@example.com,cofounder@example.com"
+  RATE_LIMIT_BYPASS_EMAILS="${ADMIN_EMAILS}"
 }
 
 # ── Write env files ──────────────────────────────────────────────────────────
@@ -680,6 +690,12 @@ FORGE_CF_ACCOUNT_ID=${FORGE_CF_ACCOUNT_ID:-}
 
 # ── Observability (optional) ──────────────────────────────────────────────────
 SENTRY_DSN=
+
+# ── Platform Admin ───────────────────────────────────────────────────────────
+# Comma-separated emails that get auto-upgraded to enterprise tier on login
+# and bypass AI rate limits entirely.
+ADMIN_EMAILS=${ADMIN_EMAILS:-}
+RATE_LIMIT_BYPASS_EMAILS=${RATE_LIMIT_BYPASS_EMAILS:-}
 EOF
     ok "apps/api/.env written"
   fi
