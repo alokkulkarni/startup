@@ -161,9 +161,10 @@ export default function ProjectPage() {
     },
   )
 
-  // Auto self-heal on WebContainer errors
+  // Auto self-heal on WebContainer errors — only for app errors (code bugs),
+  // NOT platform errors (container crash, infra issues) where AI can't help.
   useEffect(() => {
-    if (wcError && healAttempts < MAX_HEAL_ATTEMPTS) {
+    if (wcError && wcError.kind === 'app' && healAttempts < MAX_HEAL_ATTEMPTS) {
       const location = wcError.file
         ? `\nFile: ${wcError.file}${wcError.line != null ? `:${wcError.line}` : ''}`
         : ''
@@ -175,10 +176,16 @@ export default function ProjectPage() {
       setFixPrompt(healPrompt)
       setHealAttempts(prev => prev + 1)
     }
-    if (!wcError) {
+    // Only reset heal counter when the preview is actually working again,
+    // NOT when error briefly clears during a restart cycle. This prevents
+    // an infinite loop where healAttempts resets to 0 on every restart.
+  }, [wcError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (wcStatus === 'ready') {
       setHealAttempts(0)
     }
-  }, [wcError]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wcStatus])
 
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo
   useEffect(() => {
@@ -298,8 +305,12 @@ export default function ProjectPage() {
   }, [id])
 
   const handleFilesChanged = useCallback(async (changedPaths?: string[]) => {
-    const freshFiles = await refreshFiles()
-    await syncFiles(freshFiles)
+    try {
+      const freshFiles = await refreshFiles()
+      await syncFiles(freshFiles)
+    } catch {
+      // syncFiles may fail if container is dead — restart will pick up changes
+    }
     // Show which files changed in the file tree for 8 seconds
     if (changedPaths && changedPaths.length > 0) {
       if (recentlyChangedTimerRef.current) clearTimeout(recentlyChangedTimerRef.current)
