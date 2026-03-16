@@ -52,18 +52,39 @@ export function PreviewPanel({
   // Only reset when the preview restarts (status goes idle) — NOT on every new error message,
   // because repeated proxy errors have slightly different messages each time.
   const [isDismissed, setIsDismissed] = useState(false)
+  // Runtime errors caught by the forge-reporter injected into the preview iframe.
+  // These are JavaScript / React errors that only appear in the browser, not in server SSE logs.
+  const [runtimeError, setRuntimeError] = useState<WCError | null>(null)
 
   useEffect(() => {
-    if (status === 'idle' || status === 'stopped') setIsDismissed(false)
+    if (status === 'idle' || status === 'stopped') {
+      setIsDismissed(false)
+      setRuntimeError(null)   // fresh start — clear any stale runtime error
+    }
     // When status flips to 'error' (new error session), re-show the overlay
     if (status === 'error') setIsDismissed(false)
   }, [status])
 
-  // Ctrl+Shift+R keyboard shortcut
+  // ── Runtime error listener ────────────────────────────────────────────────
+  // The forge-reporter.js script injected into each preview container catches
+  // window.onerror and unhandledrejection events and posts them here.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'forge:runtime-error') return
+      const { message, file, line, stack } = event.data
+      setRuntimeError({ kind: 'app', message: message ?? 'Runtime error', file, line, stack })
+      setIsDismissed(false)
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
+
+  // Ctrl+Shift+R keyboard shortcut — also clears any runtime error from previous session
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'R') {
         e.preventDefault()
+        setRuntimeError(null)
         onRefresh()
       }
     },
@@ -77,9 +98,8 @@ export function PreviewPanel({
 
   const isLoading = status !== 'ready' && status !== 'idle' && status !== 'stopped' && status !== 'error'
   const maxWidth = VIEWPORT_WIDTHS[viewport]
-  // If status is 'error' but hook didn't set an explicit error (shouldn't normally happen),
-  // synthesise a fallback so the user always sees something instead of a blank screen.
-  const activeError = error ?? (status === 'error'
+  // Priority: runtimeError (iframe JS) > SSE-detected error > status=error fallback
+  const activeError = runtimeError ?? error ?? (status === 'error'
     ? { kind: 'platform' as const, message: 'The preview stopped unexpectedly. Check the console for details, or restart the preview.' }
     : null)
   const visibleError = activeError && !isDismissed ? activeError : null

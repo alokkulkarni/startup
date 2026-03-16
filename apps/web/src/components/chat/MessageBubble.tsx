@@ -337,10 +337,16 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
     const explanationRaw = forgeOpen !== -1 ? content.slice(0, forgeOpen).trim() : content
 
     // Strip any residual XML/markdown patterns from the visible explanation
-    const explanation = explanationRaw
+    // Cap at 1200 chars to prevent huge whitespace-pre-wrap nodes from locking
+    // the main thread when the AI generates a very large response.
+    const MAX_STREAM_CHARS = 1200
+    const fullExplanation = explanationRaw
       .replace(/```[\w.\-/ ]*\n?/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim()
+    const explanation = fullExplanation.length > MAX_STREAM_CHARS
+      ? fullExplanation.slice(0, MAX_STREAM_CHARS) + '…'
+      : fullExplanation
 
     // Extract file paths from partial forge_changes block (for spinner badges)
     const streamingFilePaths: string[] = []

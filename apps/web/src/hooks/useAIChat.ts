@@ -131,13 +131,15 @@ export function useAIChat(
 
       const decoder = new TextDecoder()
 
-      // Buffer incoming text tokens and flush to state via rAF to avoid
-      // re-rendering on every single token (which freezes the browser).
+      // Buffer incoming text tokens and flush to state on a 100ms throttle.
+      // requestAnimationFrame (60fps) was too fast for large responses — streaming
+      // 100KB+ of code caused React to re-render and lay out a huge text node 60x/s,
+      // eventually blocking the main thread long enough to trigger "Page Unresponsive".
       let pendingContent = ''
-      let rafId: number | null = null
+      let flushTimerId: ReturnType<typeof setTimeout> | null = null
 
       const flushContent = () => {
-        rafId = null
+        flushTimerId = null
         const snapshot = pendingContent
         setMessages(prev =>
           prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
@@ -151,9 +153,9 @@ export function useAIChat(
 
             if (data.type === 'text' && data.text) {
               pendingContent += data.text
-              // Batch all tokens arriving within the same animation frame
-              if (rafId === null) {
-                rafId = requestAnimationFrame(flushContent)
+              // Throttle UI updates to 100ms — prevents browser hang on large responses
+              if (flushTimerId === null) {
+                flushTimerId = setTimeout(flushContent, 100)
               }
             } else if (data.type === 'file_written') {
               onFilesChanged?.()
@@ -166,9 +168,9 @@ export function useAIChat(
               )
               onFilesChanged?.()
             } else if (data.type === 'done') {
-              if (rafId !== null) {
-                cancelAnimationFrame(rafId)
-                rafId = null
+              if (flushTimerId !== null) {
+                clearTimeout(flushTimerId)
+                flushTimerId = null
               }
               setMessages(prev =>
                 prev.map(m => {
@@ -187,7 +189,7 @@ export function useAIChat(
               }
               onFilesChanged?.()
             } else if (data.type === 'error') {
-              if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+              if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
               setIsStreaming(false)
@@ -205,7 +207,7 @@ export function useAIChat(
       }
 
       // Ensure streaming flag is cleared if stream ended without explicit done event
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+      if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
       setMessages(prev =>
         prev.map(m => (m.id === assistantId ? { ...m, content: extractExplanation(pendingContent), isStreaming: false } : m)),
       )

@@ -176,6 +176,32 @@ function buildTar(files: Array<{ path: string; content: string }>): Buffer {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
+ * Inline script injected into every project's index.html.
+ * Captures window.onerror + unhandledrejection and posts them to the parent
+ * Forge AI frame via postMessage so the error overlay can display them.
+ */
+const FORGE_REPORTER_SCRIPT = `<script>(function(){function r(m,f,l,s){try{window.parent.postMessage({type:'forge:runtime-error',message:m,file:f,line:l,stack:s},'*')}catch(_){}}window.onerror=function(m,s,l,c,e){r(String(m),s,l,e&&e.stack);return false};window.addEventListener('unhandledrejection',function(ev){var e=ev.reason;r(e&&e.message?e.message:String(e),void 0,void 0,e&&e.stack)})})();</script>`
+
+/** Inject the forge error reporter into index.html content. No-op if already present. */
+function patchIndexHtml(html: string): string {
+  if (html.includes('forge:runtime-error')) return html
+  if (html.includes('<head>')) return html.replace('<head>', `<head>\n  ${FORGE_REPORTER_SCRIPT}`)
+  const headMatch = html.match(/<head[^>]*>/)
+  if (headMatch) return html.replace(headMatch[0], `${headMatch[0]}\n  ${FORGE_REPORTER_SCRIPT}`)
+  return FORGE_REPORTER_SCRIPT + '\n' + html
+}
+
+/** Augment the file list with forge-specific dev-only files. */
+function injectDevFiles(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
+  return files.map(f => {
+    if (f.path === 'index.html' || f.path === '/index.html') {
+      return { path: f.path, content: patchIndexHtml(f.content) }
+    }
+    return f
+  })
+}
+
+/**
  * Clean up any preview containers left behind by a previous API process.
  * Call once at server startup.
  */
@@ -316,7 +342,7 @@ export async function start(projectId: string, userId: string, db: DrizzleDB): P
     // Copy project files into /app inside the container BEFORE starting.
     // We extract to '/' with paths prefixed 'app/' so Docker creates /app automatically
     // (node:20-alpine has no /app directory by default).
-    const tar = buildTar(files.map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
+    const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
     await container.putArchive(tar, { path: '/' })
     pushLog(instance, `📦 Mounted ${files.length} file(s) — running ${isFlutter ? 'flutter pub get' : 'npm install'}…`)
 
@@ -447,7 +473,7 @@ export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void>
     .from(schema.projectFiles)
     .where(eq(schema.projectFiles.projectId, projectId))
 
-  const tar = buildTar(files.map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
+  const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
   const container = docker.getContainer(instance.containerName)
   await container.putArchive(tar, { path: '/' })
   pushLog(instance, `🔄 Synced ${files.length} file(s)`)
