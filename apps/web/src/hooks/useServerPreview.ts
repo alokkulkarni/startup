@@ -83,8 +83,11 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   const previewUrlRef = useRef<string | null>(null)
   // true while a container is running — used by cleanup to decide whether to stop
   const containerActiveRef = useRef(false)
-  // Rolling buffer: accumulate recent log lines for multi-line error detection
+  // Rolling buffer for multi-line error detection during build/startup phase only
   const errorBufRef = useRef('')
+  // True once the server has emitted its ready sentinel — prevents false positives
+  // from matching app runtime console.error() output against build-error patterns
+  const serverReadyRef = useRef(false)
 
   // ── Log helpers ──────────────────────────────────────────────────────────────
   const logBufRef = useRef<LogEntry[]>([])
@@ -126,18 +129,20 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
       const fileMatch = text.match(/([^\s(]+\.[jt]sx?):(\d+):(\d+):/)
       return { kind: 'app', message, file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
     }
-    // Failed to resolve import / module not found
+    // Failed to resolve import / module not found (build-phase only — too broad for runtime)
     if (text.includes('Failed to resolve import') || text.includes("Cannot find module '") || text.includes('Could not resolve')) {
       const importMatch = text.match(/Failed to resolve import "([^"]+)"|Cannot find module '([^']+)'|Could not resolve "([^"]+)"/)
       const mod = importMatch?.[1] ?? importMatch?.[2] ?? importMatch?.[3] ?? 'unknown'
       return { kind: 'app', message: `Cannot find module "${mod}" — it may be missing from package.json`, stack: text }
     }
-    // Syntax / parse errors
+    // Syntax / parse errors (requires a file path to distinguish from app log output)
     if (text.match(/SyntaxError:|Unexpected token|Unterminated string|Expected ";"/)) {
       const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
-      return { kind: 'app', message: text.split('\n')[0].trim(), file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+      if (fileMatch) {
+        return { kind: 'app', message: text.split('\n')[0].trim(), file: fileMatch[1], line: parseInt(fileMatch[2]), stack: text }
+      }
     }
-    // Build / compile failures
+    // Build / compile failures (Vite/Rollup specific phrases)
     if (text.includes('error during build') || text.includes('Build failed') || text.match(/\d+ error[s]? generated/)) {
       const line = text.split('\n').find(l => l.trim() && !l.includes('error during build')) ?? 'Build failed'
       return { kind: 'app', message: line.trim(), stack: text }
@@ -146,23 +151,28 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     if (text.includes('ENOENT') && text.includes('no such file or directory')) {
       const m = text.match(/open '([^']+)'/)
       const fp = m?.[1]
-      return {
-        kind: 'app' as const,
-        message: `Missing file: ${fp?.split('/').pop() ?? 'unknown'} — use "Fix with AI" to generate it`,
-        file: fp,
-        stack: text,
-      }
+      return { kind: 'app', message: `Missing file: ${fp?.split('/').pop() ?? 'unknown'} — use "Fix with AI" to generate it`, file: fp, stack: text }
     }
-    // TypeScript and general errors
-    if (text.includes('error TS') || (text.includes('Error:') && !text.includes('npm warn'))) {
+    // TypeScript compiler errors — very specific prefix
+    if (text.includes('error TS')) {
       const m = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
-      return {
-        kind: 'app' as const,
-        message: text.split('\n')[0].trim(),
-        file: m?.[1],
-        line: m?.[2] ? parseInt(m[2]) : undefined,
-        stack: text,
-      }
+      return { kind: 'app', message: text.split('\n')[0].trim(), file: m?.[1], line: m?.[2] ? parseInt(m[2]) : undefined, stack: text }
+    }
+    return null
+  }, [])
+
+  /** Post-ready scanner: only match Vite HMR error patterns that cannot appear in app log output. */
+  const parseViteHMRError = useCallback((text: string): WCError | null => {
+    if (text.includes('[vite] Internal server error:') || text.includes('[vite] Pre-transform error:')) {
+      const tag = text.includes('Internal server error:') ? 'Internal server error:' : 'Pre-transform error:'
+      const msgLine = text.split('\n').find(l => l.includes(tag))
+      const message = msgLine?.replace(/.*\[vite\][^:]+:\s*/, '').trim() || 'Vite transform error'
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
+      return { kind: 'app', message, file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    if (text.includes('✘ [ERROR]')) {
+      const errLine = text.replace(/.*✘ \[ERROR\]\s*/, '').split('\n')[0].trim()
+      return { kind: 'app', message: errLine || 'Build error', stack: text }
     }
     return null
   }, [])
@@ -207,6 +217,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')
 
       if (isServerReady) {
+        serverReadyRef.current = true
         setStatus('ready')
         setProgress(100)
         setError(null)
@@ -222,13 +233,26 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         return
       }
 
-      // ── Soft app errors (compile / transform) — overlay without killing status ──
-      // Parse the rolling buffer on every message so multi-line errors are caught
-      // as soon as the last line arrives, regardless of how chunks are split.
-      // Don't change status='error' here — the server is still running; the iframe
-      // shows blank because the app is broken, and the overlay explains why.
-      const appErr = parseError(errorBufRef.current)
-      if (appErr) setError(appErr)
+      // ── Soft app errors (compile / transform) ────────────────────────────
+      // Two different strategies depending on whether the server is already running:
+      //
+      // BEFORE ready: scan the rolling buffer with all build-error patterns.
+      //   Multi-line esbuild/Rollup errors span several SSE messages.
+      //
+      // AFTER ready: only match strict Vite HMR patterns on the individual line.
+      //   The rolling buffer is NOT used here because app console.error() output
+      //   would flood the buffer and trigger false-positive auto-heal AI messages.
+      if (serverReadyRef.current) {
+        // Post-ready: Vite HMR can send compile errors for newly saved files.
+        // Only match patterns that are unambiguously from Vite, not app runtime output.
+        const hmrErr = parseViteHMRError(text)
+        if (hmrErr) setError(hmrErr)
+        // Note: "compiled successfully" / "page reload" messages clear the error
+        // via the isServerReady branch above which already returned.
+      } else {
+        const appErr = parseError(errorBufRef.current)
+        if (appErr) setError(appErr)
+      }
     })
 
     sse.addEventListener('error', () => {
@@ -237,7 +261,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         // noop — EventSource will retry automatically
       }
     })
-  }, [addLog, parseError, status])
+  }, [addLog, parseError, parseViteHMRError, status])
 
   // ── Start preview container ──────────────────────────────────────────────────
   const startPreview = useCallback(async () => {
@@ -329,6 +353,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     sseRef.current?.close()
     startingRef.current = false
     startFailedRef.current = false   // allow auto-start again after manual restart
+    serverReadyRef.current = false
     errorBufRef.current = ''
     setStatus('idle')
     setPreviewUrl(null)
