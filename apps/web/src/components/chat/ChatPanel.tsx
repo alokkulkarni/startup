@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getToken } from '@/lib/auth'
 import { useAIChat } from '@/hooks/useAIChat'
@@ -101,24 +101,23 @@ function getSuggestions(lastMessage: string): string[] {
 export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPrompt, onPromptConsumed, files, onRateLimit }: ChatPanelProps) {
   const { authenticated } = useAuth()
   const token = typeof window !== 'undefined' ? getToken() ?? null : null
-  const { messages, isStreaming, error, rateLimit, sendMessage, loadHistory } = useAIChat(
+  const { messages, isStreaming, error, rateLimit, pendingPlan, sendMessage, loadHistory, clearPendingPlan } = useAIChat(
     projectId,
     token,
     onFilesChanged,
   )
   const bottomRef = useRef<HTMLDivElement>(null)
   const [input, setInput] = useState('')
+  const [chatMode, setChatMode] = useState<'agent' | 'plan'>('agent')
   const autoSentRef = useRef<string | null>(null)
 
   // Pre-fill OR auto-send initial prompt (e.g., from onboarding "Start Building" or "Fix with AI")
   useEffect(() => {
     if (!initialPrompt) return
     if (autoSendPrompt && autoSentRef.current !== initialPrompt && !isStreaming) {
-      // Track by prompt string so each unique prompt is sent exactly once,
-      // even across multiple fix cycles in the same session.
       autoSentRef.current = initialPrompt
       onPromptConsumed?.()
-      sendMessage(initialPrompt)
+      sendMessage(initialPrompt, 'agent')
     } else if (!autoSendPrompt) {
       setInput(initialPrompt)
       onPromptConsumed?.()
@@ -136,17 +135,28 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
   useEffect(() => {
     const newMessage = messages.length > messagesLenRef.current
     messagesLenRef.current = messages.length
-    // Use instant scroll during streaming (smooth scroll per-token freezes the browser)
-    // Only smooth-scroll when a new message is added
     bottomRef.current?.scrollIntoView({ behavior: newMessage ? 'smooth' : 'instant' })
   }, [messages.length, isStreaming])
 
-  // Notify parent when rate limit is hit
   useEffect(() => {
     if (rateLimit?.remaining === 0) {
       onRateLimit?.()
     }
   }, [rateLimit?.remaining]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSend = useCallback((prompt: string, mode: 'agent' | 'plan') => {
+    sendMessage(prompt, mode)
+  }, [sendMessage])
+
+  const handleApprovePlan = useCallback(() => {
+    clearPendingPlan()
+    setChatMode('agent')
+    sendMessage('Approved. Please execute the plan above exactly as described.', 'agent')
+  }, [clearPendingPlan, sendMessage])
+
+  const handleCancelPlan = useCallback(() => {
+    clearPendingPlan()
+  }, [clearPendingPlan])
 
 
   return (
@@ -158,9 +168,19 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
           <img src="/logo.svg" alt="Forge AI" className="w-6 h-6 rounded-lg" />
           <span className="text-sm font-semibold text-white">Forge AI</span>
         </div>
-        <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-lg border border-gray-700">
-          Claude 3.5 Sonnet
-        </span>
+        <div className="flex items-center gap-2">
+          {chatMode === 'plan' && (
+            <span className="flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-900/40 border border-amber-700/40 px-2 py-0.5 rounded-lg">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              Plan mode
+            </span>
+          )}
+          <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded-lg border border-gray-700">
+            Claude
+          </span>
+        </div>
       </div>
 
       {/* Rate limit banner */}
@@ -205,8 +225,8 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
         <div ref={bottomRef} />
       </div>
 
-      {/* Suggested follow-up prompts */}
-      {!isStreaming && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+      {/* Suggested follow-up prompts — hide when a plan is pending confirmation */}
+      {!isStreaming && !pendingPlan && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && !messages[messages.length - 1].isPlan && (
         <div className="px-3 pb-2 flex flex-col gap-1.5">
           {getSuggestions(messages[messages.length - 1].content).map((s, i) => (
             <button
@@ -220,6 +240,43 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
         </div>
       )}
 
+      {/* Plan confirmation bar */}
+      {pendingPlan && !isStreaming && (
+        <div className="shrink-0 mx-3 mb-3 rounded-xl border border-amber-700/50 bg-amber-950/30 overflow-hidden">
+          <div className="flex items-start gap-3 px-4 py-3">
+            <div className="shrink-0 w-8 h-8 rounded-lg bg-amber-600/20 border border-amber-600/30 flex items-center justify-center mt-0.5">
+              <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-200 mb-0.5">Plan ready for review</p>
+              <p className="text-xs text-amber-300/70">Review the plan above. Approve to start execution, or cancel to revise your request.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-4 pb-3">
+            <button
+              onClick={handleApprovePlan}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Approve &amp; Execute
+            </button>
+            <button
+              onClick={handleCancelPlan}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white text-xs font-medium transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error display */}
       {error && (
         <div className="shrink-0 mx-4 mb-2 px-3 py-2 rounded-xl bg-red-950/50 border border-red-800/50">
@@ -230,12 +287,14 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
       {/* Input area */}
       <div className="shrink-0">
         <ChatInput
-          onSend={sendMessage}
+          onSend={handleSend}
           isStreaming={isStreaming}
           disabled={!authenticated || rateLimit?.remaining === 0}
           value={input}
           onChange={setInput}
           files={files}
+          mode={chatMode}
+          onModeChange={setChatMode}
         />
       </div>
     </div>

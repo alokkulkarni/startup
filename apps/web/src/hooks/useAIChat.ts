@@ -12,6 +12,7 @@ export interface Message {
   content: string
   createdAt: string
   isStreaming?: boolean
+  isPlan?: boolean
   /** File paths created/modified/deleted by this assistant message. */
   changedPaths?: string[]
 }
@@ -42,8 +43,10 @@ interface UseAIChatReturn {
   isStreaming: boolean
   error: string | null
   rateLimit: { remaining: number; limit: number } | null
-  sendMessage: (prompt: string) => Promise<void>
+  pendingPlan: boolean
+  sendMessage: (prompt: string, mode?: 'agent' | 'plan') => Promise<void>
   loadHistory: () => Promise<void>
+  clearPendingPlan: () => void
 }
 
 function generateId(): string {
@@ -59,6 +62,7 @@ export function useAIChat(
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rateLimit, setRateLimit] = useState<{ remaining: number; limit: number } | null>(null)
+  const [pendingPlan, setPendingPlan] = useState(false)
 
   const loadHistory = useCallback(async () => {
     try {
@@ -72,10 +76,14 @@ export function useAIChat(
     }
   }, [projectId])
 
-  const sendMessage = useCallback(async (prompt: string) => {
+  const clearPendingPlan = useCallback(() => setPendingPlan(false), [])
+
+  const sendMessage = useCallback(async (prompt: string, mode: 'agent' | 'plan' = 'agent') => {
     if (!prompt.trim() || isStreaming) return
 
     setError(null)
+    // Clear any pending plan confirmation when a new message is sent
+    setPendingPlan(false)
 
     const userMessage: Message = {
       id: generateId(),
@@ -103,7 +111,7 @@ export function useAIChat(
           Authorization: `Bearer ${token ?? ''}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, mode }),
       })
 
       if (response.status === 429) {
@@ -139,7 +147,7 @@ export function useAIChat(
       const parser = createParser({
         onEvent(event) {
           try {
-            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[] }
+            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[]; isPlan?: boolean }
 
             if (data.type === 'text' && data.text) {
               pendingContent += data.text
@@ -169,10 +177,14 @@ export function useAIChat(
                     ...m,
                     content: extractExplanation(pendingContent),
                     isStreaming: false,
+                    isPlan: data.isPlan === true,
                   }
                 }),
               )
               setIsStreaming(false)
+              if (data.isPlan === true) {
+                setPendingPlan(true)
+              }
               onFilesChanged?.()
             } else if (data.type === 'error') {
               if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
@@ -205,5 +217,5 @@ export function useAIChat(
     }
   }, [projectId, token, isStreaming, onFilesChanged])
 
-  return { messages, isStreaming, error, rateLimit, sendMessage, loadHistory }
+  return { messages, isStreaming, error, rateLimit, pendingPlan, sendMessage, loadHistory, clearPendingPlan }
 }

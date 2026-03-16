@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { aiConversations, aiMessages } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
 import { streamAIResponse } from '../services/ai.js'
-import { buildSystemPrompt, getConversationHistory } from '../services/context.js'
+import { buildSystemPrompt, buildPlanSystemPrompt, getConversationHistory } from '../services/context.js'
 import { parseAIResponse, applyDiffs, applyDiffsNoSnapshot, extractNewlyCompletedFiles, writeSingleFile } from '../services/diff.js'
 import { createSnapshot } from '../services/snapshot.js'
 import { getUserPlanLimit } from '../services/stripe.js'
@@ -15,6 +15,7 @@ const RATE_LIMIT_TTL_SECONDS = 86400 // 24 hours
 
 const chatBodySchema = z.object({
   prompt: z.string().min(1, 'Prompt cannot be empty').max(4000, 'Prompt too long'),
+  mode: z.enum(['agent', 'plan']).optional().default('agent'),
 })
 
 async function getDbUser(app: FastifyInstance, userId: string) {
@@ -51,7 +52,7 @@ export async function aiRoutes(app: FastifyInstance) {
           error: { code: 'VALIDATION_ERROR', message: parseResult.error.errors[0].message },
         })
       }
-      const { prompt } = parseResult.data
+      const { prompt, mode } = parseResult.data
       const projectId = request.params.id
 
       // Get DB user by ID
@@ -121,13 +122,19 @@ export async function aiRoutes(app: FastifyInstance) {
         content: prompt,
       })
 
-      // Build context
+      // Build context — plan mode uses a planning-only system prompt (no code output)
       const messages = [...history, { role: 'user' as const, content: prompt }]
-      const systemPrompt = await buildSystemPrompt(projectId, app.db, {
-        name: project.name,
-        framework: project.framework,
-        description: project.description,
-      })
+      const systemPrompt = mode === 'plan'
+        ? await buildPlanSystemPrompt(projectId, app.db, {
+            name: project.name,
+            framework: project.framework,
+            description: project.description,
+          })
+        : await buildSystemPrompt(projectId, app.db, {
+            name: project.name,
+            framework: project.framework,
+            description: project.description,
+          })
 
       // Log the full prompt for debugging (first 2000 chars of system prompt + user prompt)
       app.log.info({
@@ -162,26 +169,29 @@ export async function aiRoutes(app: FastifyInstance) {
             fullContent += chunk.text
             write({ type: 'text', text: chunk.text })
 
-            // Incrementally write any newly-completed <file> blocks to DB
-            const newFiles = extractNewlyCompletedFiles(fullContent, writtenDuringStream)
-            if (newFiles.length > 0) {
-              // Take snapshot once, before the first write
-              if (!snapshotTaken) {
-                snapshotTaken = true
-                await createSnapshot(project.id, app.db, 'ai', prompt)
-              }
-              for (const fileDiff of newFiles) {
-                writtenDuringStream.add(fileDiff.path)
-                try {
-                  await writeSingleFile(project.id, fileDiff, app.db)
-                  write({ type: 'file_written', path: fileDiff.path })
-                } catch (err) {
-                  app.log.warn({ msg: '[AI] Incremental file write failed', path: fileDiff.path, err })
+            // In plan mode, no file writes — just stream the plan text
+            if (mode !== 'plan') {
+              // Incrementally write any newly-completed <file> blocks to DB
+              const newFiles = extractNewlyCompletedFiles(fullContent, writtenDuringStream)
+              if (newFiles.length > 0) {
+                // Take snapshot once, before the first write
+                if (!snapshotTaken) {
+                  snapshotTaken = true
+                  await createSnapshot(project.id, app.db, 'ai', prompt)
+                }
+                for (const fileDiff of newFiles) {
+                  writtenDuringStream.add(fileDiff.path)
+                  try {
+                    await writeSingleFile(project.id, fileDiff, app.db)
+                    write({ type: 'file_written', path: fileDiff.path })
+                  } catch (err) {
+                    app.log.warn({ msg: '[AI] Incremental file write failed', path: fileDiff.path, err })
+                  }
                 }
               }
             }
           } else if (chunk.type === 'done') {
-            // Save assistant message
+            // Save assistant message (plan text or code response)
             await app.db.insert(aiMessages).values({
               conversationId: conversation!.id,
               role: 'assistant',
@@ -189,14 +199,28 @@ export async function aiRoutes(app: FastifyInstance) {
               tokensUsed: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0),
             })
 
-            // Apply any remaining files not yet written (modify/delete actions, or if
-            // incremental parsing missed anything due to format quirks)
+            if (mode === 'plan') {
+              // Plan mode: no file diffs — just signal done with a plan marker
+              write({ type: 'done', isPlan: true })
+              res.end()
+              trackEvent(app.db, {
+                workspaceId: project.workspaceId,
+                projectId: projectId ?? null,
+                userId: user.id,
+                eventType: 'ai_request',
+                metadata: { mode: 'plan', tokens: (chunk.usage?.inputTokens ?? 0) + (chunk.usage?.outputTokens ?? 0) },
+              }, app.log)
+              return
+            }
+
+            // Agent mode: apply any remaining file diffs
             const { diffs } = parseAIResponse(fullContent)
             const remainingDiffs = diffs.filter(d => !writtenDuringStream.has(d.path))
 
             // Log response analysis
             app.log.info({
               msg: '[AI] Response complete',
+              mode,
               responseLength: fullContent.length,
               hasForgeChanges: fullContent.includes('<forge_changes>'),
               filesStreamed: writtenDuringStream.size,

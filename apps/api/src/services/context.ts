@@ -784,6 +784,84 @@ export async function buildSystemPrompt(
   return SYSTEM_PROMPT_TEMPLATE + '\n' + projectContext + fileTree + '\n'
 }
 
+// ─── PLAN MODE SYSTEM PROMPT ───────────────────────────────────────────────
+// Used when the user has activated Plan Mode. The AI must produce ONLY a
+// structured plan — no code, no file changes. The user will review and approve
+// before execution begins.
+
+const PLAN_SYSTEM_PROMPT_TEMPLATE = `You are Forge AI, an expert software architect and planning assistant.
+
+The user wants to build something. Your job in this response is to create a clear, detailed implementation plan — NOT to write any code or make any file changes.
+
+════════════════════════════════════════════════════════════════
+  STRICT RULES FOR PLAN MODE — READ CAREFULLY
+════════════════════════════════════════════════════════════════
+
+1. DO NOT output any code blocks, <forge_changes>, <file>, or XML tags.
+2. DO NOT write any file contents.
+3. ONLY produce a structured plan using plain text and markdown headings.
+4. Think step-by-step. Be thorough and specific.
+5. The user will read your plan, then choose to approve it or cancel.
+6. Once approved, you will receive a follow-up message and must then execute the plan.
+
+════════════════════════════════════════════════════════════════
+  PLAN FORMAT — follow this structure exactly
+════════════════════════════════════════════════════════════════
+
+## 🗺️ Overview
+1–3 sentences describing what will be built and the high-level approach.
+
+## 📁 Files to Create / Modify
+A list of every file that will be created or changed, with a short description of what each one does.
+
+## 🔢 Implementation Steps
+A numbered list of concrete actions in execution order. Each step should be specific enough that another engineer could follow it exactly.
+
+## ⚠️ Considerations
+Any edge cases, dependencies, potential issues, or design decisions worth flagging.
+
+---
+
+Remember: write ONLY the plan. The user will approve before any code is generated.`
+
+export async function buildPlanSystemPrompt(
+  projectId: string,
+  db: DrizzleDB,
+  meta?: ProjectMeta,
+): Promise<string> {
+  const files = await db
+    .select({ path: schema.projectFiles.path, content: schema.projectFiles.content })
+    .from(schema.projectFiles)
+    .where(eq(schema.projectFiles.projectId, projectId))
+
+  const projectContext = meta
+    ? `## Project context\n` +
+      `Name: ${meta.name}\n` +
+      `Framework: ${meta.framework}\n` +
+      (meta.description ? `Description: ${meta.description}\n` : '') +
+      `\n`
+    : ''
+
+  if (files.length === 0) {
+    return (
+      PLAN_SYSTEM_PROMPT_TEMPLATE +
+      '\n\n' + projectContext +
+      `(No files exist yet — this is a brand-new empty project.)\n`
+    )
+  }
+
+  const fileTree = files
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((f) => {
+      const preview = f.content.slice(0, 200)
+      const truncated = f.content.length > 200 ? '\n... (truncated)' : ''
+      return `### ${f.path}\n\`\`\`\n${preview}${truncated}\n\`\`\``
+    })
+    .join('\n\n')
+
+  return PLAN_SYSTEM_PROMPT_TEMPLATE + '\n\n' + projectContext + `## Current file tree\n\n` + fileTree + '\n'
+}
+
 export async function getOrCreateConversation(
   projectId: string,
   db: DrizzleDB,
