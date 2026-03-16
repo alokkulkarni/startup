@@ -13,7 +13,9 @@ export interface Message {
   createdAt: string
   isStreaming?: boolean
   isPlan?: boolean
-  /** File paths created/modified/deleted by this assistant message. */
+  /** File paths being written to project (during streaming, from server file_written events). */
+  streamingFilePaths?: string[]
+  /** File paths created/modified/deleted by this assistant message (after streaming complete). */
   changedPaths?: string[]
 }
 
@@ -131,26 +133,40 @@ export function useAIChat(
 
       const decoder = new TextDecoder()
 
-      // Stream text tokens directly into React state on every SSE event.
-      // React 18 automatic batching groups all setState calls that arrive
-      // inside a single reader.read() chunk into one render pass, so this
-      // is both correct and efficient — no timers, no buffers needed.
-      // On `done` we call extractExplanation() once to strip raw XML from
-      // the stored message so the DB and history display are clean.
+      // Stream text tokens directly into React state. React 18 automatic batching
+      // groups all setState calls inside a single reader.read() chunk into one render.
+      // KEY OPTIMIZATION: once <forge_changes> appears we stop accumulating raw XML
+      // into React state (it can be 100-200KB of file bodies). File progress is
+      // tracked separately via file_written events from the server.
 
       const parser = createParser({
         onEvent(event) {
           try {
-            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[]; isPlan?: boolean }
+            const data = JSON.parse(event.data) as { type: string; text?: string; path?: string; error?: string; paths?: string[]; isPlan?: boolean }
 
             if (data.type === 'text' && data.text) {
-              // Append token directly — React 18 batches rapid-fire calls
               setMessages(prev =>
-                prev.map(m =>
-                  m.id === assistantId ? { ...m, content: m.content + data.text! } : m,
-                ),
+                prev.map(m => {
+                  if (m.id !== assistantId) return m
+                  const newContent = m.content + data.text!
+                  // Once forge_changes XML starts, stop accumulating file bodies in state.
+                  // The explanation text before the tag is all we need to display.
+                  const forgeIdx = newContent.indexOf('<forge_changes>')
+                  if (forgeIdx !== -1) {
+                    return { ...m, content: newContent.slice(0, forgeIdx).trimEnd() }
+                  }
+                  return { ...m, content: newContent }
+                }),
               )
             } else if (data.type === 'file_written') {
+              // Track each file as it's written so MessageBubble can show progress badges.
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId
+                    ? { ...m, streamingFilePaths: [...(m.streamingFilePaths ?? []), data.path!] }
+                    : m,
+                ),
+              )
               onFilesChanged?.()
             } else if (data.type === 'files_changed') {
               const paths: string[] = data.paths ?? []
@@ -164,6 +180,8 @@ export function useAIChat(
               setMessages(prev =>
                 prev.map(m => {
                   if (m.id !== assistantId) return m
+                  // content is already explanation-only (XML was stripped during streaming).
+                  // extractExplanation runs once as a safety net for any residual tags.
                   return {
                     ...m,
                     content: extractExplanation(m.content),
@@ -194,7 +212,8 @@ export function useAIChat(
         parser.feed(decoder.decode(value, { stream: true }))
       }
 
-      // Ensure streaming flag is cleared if stream ended without explicit done event
+      // Ensure streaming flag is cleared if stream ended without explicit done event.
+      // content is already explanation-only (XML stripped during streaming).
       setMessages(prev =>
         prev.map(m => m.id === assistantId
           ? { ...m, content: extractExplanation(m.content), isStreaming: false }

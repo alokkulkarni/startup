@@ -214,6 +214,7 @@ export function ChatPanel({ projectId, onFilesChanged, initialPrompt, autoSendPr
                 content={msg.content}
                 createdAt={msg.createdAt}
                 isStreaming={msg.isStreaming}
+                streamingFilePaths={msg.streamingFilePaths}
                 changedPaths={msg.changedPaths}
               />
             ))}

@@ -8,6 +8,8 @@ interface MessageBubbleProps {
   content: string
   createdAt: string
   isStreaming?: boolean
+  /** File paths being written to project (during streaming). */
+  streamingFilePaths?: string[]
   /** File paths created/modified/deleted by this assistant message. */
   changedPaths?: string[]
 }
@@ -198,41 +200,8 @@ function AssistantMarkdown({ text }: { text: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Streaming-state parser
+// XML stripping helpers (used for legacy/historical messages and completed view)
 // ---------------------------------------------------------------------------
-
-interface StreamState {
-  explanation: string
-  isWritingFiles: boolean
-  streamingFilePaths: string[]
-}
-
-function parseStreamState(content: string): StreamState {
-  if (!content.includes('<forge_changes>')) {
-    return { explanation: stripFileXml(content), isWritingFiles: false, streamingFilePaths: [] }
-  }
-
-  const openIdx = content.indexOf('<forge_changes>')
-  const explanation = content.slice(0, openIdx).trim()
-  const closeIdx = content.indexOf('</forge_changes>')
-
-  if (closeIdx !== -1) {
-    const inner = content.slice(openIdx + '<forge_changes>'.length, closeIdx)
-    return { explanation, isWritingFiles: false, streamingFilePaths: extractFilePaths(inner) }
-  }
-
-  // Block still open (streaming)
-  const partial = content.slice(openIdx)
-  return { explanation, isWritingFiles: true, streamingFilePaths: extractFilePaths(partial) }
-}
-
-function extractFilePaths(text: string): string[] {
-  const paths: string[] = []
-  const re = /<file\s+path="([^"]+)"/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) paths.push(m[1])
-  return paths
-}
 
 function stripFileXml(text: string): string {
   return text
@@ -311,7 +280,7 @@ function parseLegacyContent(content: string): LegacyParsed {
 // Main component
 // ---------------------------------------------------------------------------
 
-export const MessageBubble = memo(function MessageBubble({ role, content, createdAt, isStreaming, changedPaths }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ role, content, createdAt, isStreaming, streamingFilePaths, changedPaths }: MessageBubbleProps) {
   const isUser = role === 'user'
 
   // ── User bubble ──────────────────────────────────────────────────────────
@@ -329,41 +298,33 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
   }
 
   // ── Assistant bubble — STREAMING ─────────────────────────────────────────
+  // content is explanation-only (XML is stripped in useAIChat before entering state).
+  // streamingFilePaths is populated from server file_written events — no parsing needed.
   if (isStreaming) {
-    // content accumulates raw stream text (including <forge_changes> XML).
-    // parseStreamState extracts the explanation and detects the writing phase
-    // by checking for an open <forge_changes> block. stripFileXml ensures
-    // file body content is never rendered into the DOM.
-    const { explanation, isWritingFiles, streamingFilePaths } = parseStreamState(content)
+    const hasFilePaths = (streamingFilePaths?.length ?? 0) > 0
+    const isWritingFiles = hasFilePaths
 
     return (
       <div className="flex justify-start mb-4">
         <div className="max-w-[85%] w-full">
           <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
-            {explanation && (
+            {content && (
               <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-gray-100 mb-2">
-                {explanation}
+                {content}
                 {!isWritingFiles && (
                   <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
                 )}
               </p>
             )}
-            {!explanation && !isWritingFiles && (
+            {!content && !isWritingFiles && (
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
                 <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
                 Thinking…
               </span>
             )}
             {isWritingFiles && (
-              <div className="space-y-1">
-                {streamingFilePaths.length > 0 ? (
-                  streamingFilePaths.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-violet-400">
-                    <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
-                    Writing files…
-                  </span>
-                )}
+              <div className="space-y-1 mt-1">
+                {streamingFilePaths!.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)}
               </div>
             )}
           </div>
@@ -375,6 +336,8 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
 
   // ── Assistant bubble — COMPLETE (fresh, changedPaths known) ─────────────
   if (changedPaths !== undefined) {
+    // content is already explanation-only (stripped in useAIChat on done).
+    // Run extractExplanation as a safety net for any residual XML.
     const explanation = stripFileXml(content)
     return (
       <div className="flex justify-start mb-4">

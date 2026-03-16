@@ -195,8 +195,10 @@ export async function aiRoutes(app: FastifyInstance) {
               textFlushTimer = setTimeout(flushTextBuffer, 80)
             }
 
-            // In plan mode, no file writes — just stream the plan text
-            if (mode !== 'plan') {
+            // In plan mode, no file writes — just stream the plan text.
+            // Only scan for completed file blocks when the NEW chunk contains </file>
+            // to avoid O(N²) regex scans on every token of a growing fullContent string.
+            if (mode !== 'plan' && chunk.text.includes('</file>')) {
               // Incrementally write any newly-completed <file> blocks to DB
               const newFiles = extractNewlyCompletedFiles(fullContent, writtenDuringStream)
               if (newFiles.length > 0) {
