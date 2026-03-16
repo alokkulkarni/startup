@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -59,6 +59,10 @@ export default function ProjectPage() {
   const [healAttempts, setHealAttempts] = useState(0)
   const [showRateLimitPrompt, setShowRateLimitPrompt] = useState(false)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
+  const [showFileTree, setShowFileTree] = useState(true)
+  const [showEditor, setShowEditor] = useState(true)
+  const showFileTreeRef = useRef(true)
+  const showEditorRef = useRef(true)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Capture token once authenticated
@@ -80,11 +84,12 @@ export default function ProjectPage() {
       try {
         const saved = localStorage.getItem(`forge:panel:${id}`)
         if (saved) {
-          const parsed = JSON.parse(saved) as Partial<typeof DEFAULT_WIDTHS>
-          // Merge with defaults so old 3-panel saves gracefully upgrade
+          const parsed = JSON.parse(saved) as Partial<typeof DEFAULT_WIDTHS> & { showFileTree?: boolean; showEditor?: boolean }
           const merged = { ...DEFAULT_WIDTHS, ...parsed }
           setPanelWidths(merged)
           panelWidthsRef.current = merged
+          if (parsed.showFileTree != null) { setShowFileTree(parsed.showFileTree); showFileTreeRef.current = parsed.showFileTree }
+          if (parsed.showEditor != null) { setShowEditor(parsed.showEditor); showEditorRef.current = parsed.showEditor }
         }
       } catch {
         // ignore
@@ -92,10 +97,13 @@ export default function ProjectPage() {
     }
   }, [id])
 
-  // Keep ref in sync with state
+  // Keep refs in sync with state
   useEffect(() => {
     panelWidthsRef.current = panelWidths
   }, [panelWidths])
+
+  useEffect(() => { showFileTreeRef.current = showFileTree }, [showFileTree])
+  useEffect(() => { showEditorRef.current = showEditor }, [showEditor])
 
   useEffect(() => {
     if (!authLoading && !authenticated) router.push('/login')
@@ -182,6 +190,28 @@ export default function ProjectPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [undoLast])
 
+  // Keyboard shortcuts: Cmd+B = toggle file tree, Cmd+Shift+E = toggle editor
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'b') {
+        e.preventDefault()
+        const next = !showFileTreeRef.current
+        setShowFileTree(next)
+        if (typeof window !== 'undefined')
+          localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: next, showEditor: showEditorRef.current }))
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'e') {
+        e.preventDefault()
+        const next = !showEditorRef.current
+        setShowEditor(next)
+        if (typeof window !== 'undefined')
+          localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: next }))
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [id])
+
   const handleSave = useCallback(async (path: string, content: string) => {
     await updateFile(path, content)
     // Sync to WebContainer FS for HMR
@@ -208,8 +238,9 @@ export default function ProjectPage() {
     await deleteFile(file.path)
   }, [deleteFile])
 
-  // Drag handle logic — supports 3 drag handles (0, 1, 2) for the 4-panel layout
-  const handleDragStart = useCallback((e: React.MouseEvent, dragIndex: 0 | 1 | 2) => {
+  // Drag handle logic — supports 4 drag types:
+  //   0 = fileTree↔chat  1 = chat↔editor  2 = editor↔preview  3 = chat↔preview (when editor hidden)
+  const handleDragStart = useCallback((e: React.MouseEvent, dragIndex: 0 | 1 | 2 | 3) => {
     e.preventDefault()
     const startX = e.clientX
     const startWidths = { ...panelWidthsRef.current }
@@ -233,12 +264,18 @@ export default function ProjectPage() {
         const diff = newChat - startWidths.chat
         const newEditor = Math.min(Math.max(startWidths.editor - diff, 10), 60)
         setPanelWidths(prev => ({ ...prev, chat: newChat, editor: newEditor }))
-      } else {
+      } else if (dragIndex === 2) {
         // editor ↔ preview
         const newEditor = Math.min(Math.max(startWidths.editor + percentDx, 10), 60)
         const diff = newEditor - startWidths.editor
         const newPreview = Math.min(Math.max(startWidths.preview - diff, 10), 60)
         setPanelWidths(prev => ({ ...prev, editor: newEditor, preview: newPreview }))
+      } else {
+        // chat ↔ preview (editor panel is hidden)
+        const newChat = Math.min(Math.max(startWidths.chat + percentDx, 10), 60)
+        const diff = newChat - startWidths.chat
+        const newPreview = Math.min(Math.max(startWidths.preview - diff, 10), 60)
+        setPanelWidths(prev => ({ ...prev, chat: newChat, preview: newPreview }))
       }
     }
 
@@ -246,7 +283,11 @@ export default function ProjectPage() {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
       if (typeof window !== 'undefined') {
-        localStorage.setItem(`forge:panel:${id}`, JSON.stringify(panelWidthsRef.current))
+        localStorage.setItem(`forge:panel:${id}`, JSON.stringify({
+          ...panelWidthsRef.current,
+          showFileTree: showFileTreeRef.current,
+          showEditor: showEditorRef.current,
+        }))
       }
     }
 
@@ -263,6 +304,22 @@ export default function ProjectPage() {
       await restartWC()
     }
   }, [refreshFiles, syncFiles, restartWC])
+
+  // Compute effective panel widths — redistributes hidden-panel space to visible panels
+  const displayWidths = useMemo(() => {
+    const { fileTree, chat, editor, preview } = panelWidths
+    if (!showFileTree && !showEditor) {
+      const total = fileTree + chat + editor + preview
+      const chatRatio = chat / (chat + preview)
+      return { fileTree: 0, chat: total * chatRatio, editor: 0, preview: total * (1 - chatRatio) }
+    }
+    if (!showFileTree) return { fileTree: 0, chat: chat + fileTree, editor, preview }
+    if (!showEditor) {
+      const chatRatio = chat / (chat + preview)
+      return { fileTree, chat: chat + editor * chatRatio, editor: 0, preview: preview + editor * (1 - chatRatio) }
+    }
+    return panelWidths
+  }, [panelWidths, showFileTree, showEditor])
 
   if (authLoading || loading) {
     return (
@@ -294,6 +351,33 @@ export default function ProjectPage() {
               {project.framework}
             </span>
           )}
+          {/* Panel visibility toggles */}
+          <div className="flex items-center border border-gray-700/60 rounded-lg overflow-hidden">
+            <button
+              onClick={() => {
+                const next = !showFileTree
+                setShowFileTree(next)
+                if (typeof window !== 'undefined')
+                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: next, showEditor: showEditorRef.current }))
+              }}
+              title={`${showFileTree ? 'Hide' : 'Show'} file tree (⌘B)`}
+              className={`px-2 py-1.5 transition-colors ${showFileTree ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}`}
+            >
+              <PanelFilesIcon />
+            </button>
+            <button
+              onClick={() => {
+                const next = !showEditor
+                setShowEditor(next)
+                if (typeof window !== 'undefined')
+                  localStorage.setItem(`forge:panel:${id}`, JSON.stringify({ ...panelWidthsRef.current, showFileTree: showFileTreeRef.current, showEditor: next }))
+              }}
+              title={`${showEditor ? 'Hide' : 'Show'} editor (⌘⇧E)`}
+              className={`px-2 py-1.5 border-l border-gray-700/60 transition-colors ${showEditor ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}`}
+            >
+              <PanelEditorIcon />
+            </button>
+          </div>
           {/* Undo last AI change */}
           <button
             onClick={async () => {
@@ -402,40 +486,51 @@ export default function ProjectPage() {
 
       {/* Four-panel workspace */}
       <div className="flex-1 flex overflow-hidden" data-panels>
-        {/* Panel 1 — File Tree */}
-        <div
-          className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden"
-          style={{ width: `${panelWidths.fileTree}%` }}
-        >
-          {filesLoading ? (
-            <div className="flex-1 flex flex-col gap-2 p-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-4 bg-gray-800 rounded animate-pulse" style={{ width: `${50 + i * 8}%` }} />
-              ))}
-            </div>
-          ) : (
-            <FileTree
-              files={files}
-              activeFilePath={activeFile?.path ?? null}
-              onFileClick={setActiveFile}
-              onCreateFile={handleCreateFile}
-              onCreateFolder={handleCreateFolder}
-              onRenameFile={handleRenameFile}
-              onDeleteFile={handleDeleteFile}
-            />
-          )}
-        </div>
 
-        {/* Drag handle 1 */}
-        <div
-          className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
-          onMouseDown={e => handleDragStart(e, 0)}
-        />
+        {/* Panel 1 — File Tree (or collapsed strip) */}
+        {showFileTree ? (
+          <div
+            className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden transition-all duration-200"
+            style={{ width: `${displayWidths.fileTree}%` }}
+          >
+            {filesLoading ? (
+              <div className="flex-1 flex flex-col gap-2 p-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-4 bg-gray-800 rounded animate-pulse" style={{ width: `${50 + i * 8}%` }} />
+                ))}
+              </div>
+            ) : (
+              <FileTree
+                files={files}
+                activeFilePath={activeFile?.path ?? null}
+                onFileClick={setActiveFile}
+                onCreateFile={handleCreateFile}
+                onCreateFolder={handleCreateFolder}
+                onRenameFile={handleRenameFile}
+                onDeleteFile={handleDeleteFile}
+              />
+            )}
+          </div>
+        ) : (
+          <CollapsedPanel
+            label="Files"
+            icon={<FolderCollapseIcon />}
+            onExpand={() => setShowFileTree(true)}
+          />
+        )}
 
-        {/* Panel 2 — Chat */}
+        {/* Drag handle 0 — fileTree ↔ chat (only when file tree is expanded) */}
+        {showFileTree && (
+          <div
+            className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
+            onMouseDown={e => handleDragStart(e, 0)}
+          />
+        )}
+
+        {/* Panel 2 — Chat (always visible) */}
         <div
-          className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden"
-          style={{ width: `${panelWidths.chat}%` }}
+          className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden transition-all duration-200"
+          style={{ width: `${displayWidths.chat}%` }}
         >
           <ChatPanel
             projectId={id}
@@ -448,36 +543,55 @@ export default function ProjectPage() {
           />
         </div>
 
-        {/* Drag handle 2 */}
-        <div
-          className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
-          onMouseDown={e => handleDragStart(e, 1)}
-        />
-
-        {/* Panel 3 — Code Editor */}
-        <div
-          className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden"
-          style={{ width: `${panelWidths.editor}%` }}
-        >
-          <CodeEditor
-            projectId={id}
-            files={files}
-            activeFile={activeFile}
-            onSave={handleSave}
-            onFileClick={setActiveFile}
+        {/* Drag handle between chat and next visible panel */}
+        {showEditor ? (
+          /* chat ↔ editor */
+          <div
+            className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
+            onMouseDown={e => handleDragStart(e, 1)}
           />
-        </div>
+        ) : (
+          /* chat ↔ preview (editor hidden) */
+          <div
+            className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
+            onMouseDown={e => handleDragStart(e, 3)}
+          />
+        )}
 
-        {/* Drag handle 3 */}
-        <div
-          className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
-          onMouseDown={e => handleDragStart(e, 2)}
-        />
+        {/* Panel 3 — Code Editor (or collapsed strip) */}
+        {showEditor ? (
+          <div
+            className="shrink-0 border-r border-gray-800 flex flex-col overflow-hidden transition-all duration-200"
+            style={{ width: `${displayWidths.editor}%` }}
+          >
+            <CodeEditor
+              projectId={id}
+              files={files}
+              activeFile={activeFile}
+              onSave={handleSave}
+              onFileClick={setActiveFile}
+            />
+          </div>
+        ) : (
+          <CollapsedPanel
+            label="Editor"
+            icon={<BracketsCollapseIcon />}
+            onExpand={() => setShowEditor(true)}
+          />
+        )}
 
-        {/* Panel 4 — Preview */}
+        {/* Drag handle 2 — editor ↔ preview (only when editor is expanded) */}
+        {showEditor && (
+          <div
+            className="w-1 shrink-0 cursor-col-resize bg-gray-800 hover:bg-indigo-500/50 transition-colors active:bg-indigo-500"
+            onMouseDown={e => handleDragStart(e, 2)}
+          />
+        )}
+
+        {/* Panel 4 — Preview (always visible) */}
         <div
-          className="shrink-0 flex flex-col overflow-hidden"
-          style={{ width: `${panelWidths.preview}%` }}
+          className="shrink-0 flex flex-col overflow-hidden transition-all duration-200"
+          style={{ width: `${displayWidths.preview}%` }}
         >
           <PreviewPanel
             status={wcStatus}
@@ -567,5 +681,70 @@ function GitHubIcon() {
     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
     </svg>
+  )
+}
+
+/** Icon for the "show/hide file tree" toggle button in the header */
+function PanelFilesIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="1.5" y="2" width="13" height="12" rx="1.5" />
+      <line x1="5.5" y1="2" x2="5.5" y2="14" />
+    </svg>
+  )
+}
+
+/** Icon for the "show/hide editor" toggle button in the header */
+function PanelEditorIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <polyline points="4.5,5 1.5,8 4.5,11" />
+      <polyline points="11.5,5 14.5,8 11.5,11" />
+      <line x1="9.5" y1="3" x2="6.5" y2="13" />
+    </svg>
+  )
+}
+
+/** Small icon shown inside the file-tree collapsed strip */
+function FolderCollapseIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M1.5 4.5A1.5 1.5 0 013 3h2.586l1.5 1.5H13A1.5 1.5 0 0114.5 6v5.5A1.5 1.5 0 0113 13H3a1.5 1.5 0 01-1.5-1.5V4.5z" />
+    </svg>
+  )
+}
+
+/** Small icon shown inside the editor collapsed strip */
+function BracketsCollapseIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <polyline points="5,3 2,8 5,13" />
+      <polyline points="11,3 14,8 11,13" />
+    </svg>
+  )
+}
+
+/** A thin 28 px collapsed panel strip with a click-to-expand affordance */
+function CollapsedPanel({ label, icon, onExpand }: {
+  label: string
+  icon: React.ReactNode
+  onExpand: () => void
+}) {
+  return (
+    <div
+      onClick={onExpand}
+      title={`Expand ${label} panel`}
+      className="shrink-0 w-7 border-r border-gray-800 flex flex-col items-center justify-center gap-2 bg-gray-950 hover:bg-gray-900/80 cursor-pointer transition-colors group select-none"
+    >
+      <div className="text-gray-600 group-hover:text-gray-400 transition-colors">
+        {icon}
+      </div>
+      <span
+        className="text-[9px] text-gray-600 group-hover:text-gray-400 font-medium tracking-widest uppercase transition-colors"
+        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+      >
+        {label}
+      </span>
+    </div>
   )
 }
