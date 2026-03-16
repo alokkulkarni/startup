@@ -330,46 +330,40 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
 
   // ── Assistant bubble — STREAMING ─────────────────────────────────────────
   if (isStreaming) {
-    // useAIChat now puts ONLY metadata into state during streaming:
-    //   • content  = short explanation preview (≤400 chars), or '' in thinking phase
-    //   • changedPaths = file paths extracted from <forge_changes> (set once writing starts)
-    // We never receive raw <forge_changes> XML in content, so no expensive regex needed.
-    const isWritingFiles = !!changedPaths?.length
-    const explanation = content
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
+    // content accumulates raw stream text (including <forge_changes> XML).
+    // parseStreamState extracts the explanation and detects the writing phase
+    // by checking for an open <forge_changes> block. stripFileXml ensures
+    // file body content is never rendered into the DOM.
+    const { explanation, isWritingFiles, streamingFilePaths } = parseStreamState(content)
 
     return (
       <div className="flex justify-start mb-4">
         <div className="max-w-[85%] w-full">
           <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
-            {/* Thinking phase: no explanation, no files yet */}
+            {explanation && (
+              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-gray-100 mb-2">
+                {explanation}
+                {!isWritingFiles && (
+                  <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
+                )}
+              </p>
+            )}
             {!explanation && !isWritingFiles && (
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
                 <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
                 Thinking…
               </span>
             )}
-
-            {/* Explanation preview (may appear briefly before writing starts) */}
-            {explanation && !isWritingFiles && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100">
-                {explanation}
-                <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
-              </p>
-            )}
-
-            {/* File-writing phase */}
             {isWritingFiles && (
-              <div className="space-y-2">
-                {explanation && (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100 mb-3">
-                    {explanation}
-                  </p>
+              <div className="space-y-1">
+                {streamingFilePaths.length > 0 ? (
+                  streamingFilePaths.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-violet-400">
+                    <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+                    Writing files…
+                  </span>
                 )}
-                <div className="space-y-1">
-                  {changedPaths!.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)}
-                </div>
               </div>
             )}
           </div>

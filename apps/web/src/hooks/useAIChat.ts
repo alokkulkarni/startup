@@ -131,78 +131,12 @@ export function useAIChat(
 
       const decoder = new TextDecoder()
 
-      // Buffer incoming text tokens and flush to state on a 100ms throttle.
-      // requestAnimationFrame (60fps) was too fast for large responses — streaming
-      // 100KB+ of code caused React to re-render and lay out a huge text node 60x/s,
-      // eventually blocking the main thread long enough to trigger "Page Unresponsive".
-      let pendingContent = ''
-      let flushTimerId: ReturnType<typeof setTimeout> | null = null
-
-      // ── CRITICAL: raw file content must NEVER enter React state ────────────
-      // Storing the full streaming content (prose + <forge_changes> XML with
-      // entire file bodies) in React state and calling setMessages at 10fps
-      // triggers expensive re-renders on a 50–200 KB whitespace-pre-wrap node,
-      // blocking the main thread and causing "Page Unresponsive".
-      //
-      // Solution: flushContent only ever puts METADATA into state:
-      //   • Thinking phase  → nothing (empty content → "Thinking…" spinner)
-      //   • Writing phase   → short explanation preview (≤400 chars) + file paths
-      //   • Done            → extractExplanation() strips XML → clean prose
-      //
-      // The pendingContent local var still accumulates the full raw stream so
-      // extractExplanation() can strip it correctly on done.
-
-      let thinkingStartMs: number | null = null
-
-      const flushContent = () => {
-        flushTimerId = null
-        const snapshot = pendingContent
-        const forgeStart = snapshot.indexOf('<forge_changes>')
-
-        if (forgeStart === -1) {
-          // ── Thinking phase ─────────────────────────────────────────────────
-          if (thinkingStartMs === null) thinkingStartMs = Date.now()
-          const elapsedMs = Date.now() - thinkingStartMs
-
-          // Guard: preamble is runaway-large OR model has been thinking too long
-          if (snapshot.length > 30_000 || elapsedMs > 120_000) {
-            reader.cancel()
-            const reason = elapsedMs > 120_000
-              ? 'The model took too long to respond. Please try again with a more specific request.'
-              : 'Response was unexpectedly large without producing file changes. Please try a more specific request.'
-            setError(reason)
-            setMessages(prev => prev.filter(m => m.id !== assistantId))
-            setIsStreaming(false)
-            return
-          }
-
-          // No state update — content stays '' → MessageBubble shows "Thinking…"
-          return
-        }
-
-        // ── File-writing phase ────────────────────────────────────────────────
-        // Extract file paths from partial XML (cheap regex on just the forge section)
-        const forgeSection = snapshot.slice(forgeStart)
-        const fileRe = /<file\s+path="([^"]+)"/g
-        const paths: string[] = []
-        let fm: RegExpExecArray | null
-        while ((fm = fileRe.exec(forgeSection)) !== null) paths.push(fm[1])
-
-        // Store ONLY the short explanation preview + file paths.
-        // Never store the file body content — it can be 100 KB+.
-        const shortExplanation = snapshot.slice(0, forgeStart)
-          .replace(/```[\s\S]*?```/g, '')
-          .replace(/```[\s\S]*/g, '')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim()
-          .slice(0, 400)
-
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId
-            ? { ...m, content: shortExplanation, changedPaths: paths }
-            : m),
-        )
-      }
+      // Stream text tokens directly into React state on every SSE event.
+      // React 18 automatic batching groups all setState calls that arrive
+      // inside a single reader.read() chunk into one render pass, so this
+      // is both correct and efficient — no timers, no buffers needed.
+      // On `done` we call extractExplanation() once to strip raw XML from
+      // the stored message so the DB and history display are clean.
 
       const parser = createParser({
         onEvent(event) {
@@ -210,11 +144,12 @@ export function useAIChat(
             const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[]; isPlan?: boolean }
 
             if (data.type === 'text' && data.text) {
-              pendingContent += data.text
-              // Throttle UI updates to 100ms — prevents browser hang on large responses
-              if (flushTimerId === null) {
-                flushTimerId = setTimeout(flushContent, 100)
-              }
+              // Append token directly — React 18 batches rapid-fire calls
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId ? { ...m, content: m.content + data.text! } : m,
+                ),
+              )
             } else if (data.type === 'file_written') {
               onFilesChanged?.()
             } else if (data.type === 'files_changed') {
@@ -226,16 +161,12 @@ export function useAIChat(
               )
               onFilesChanged?.()
             } else if (data.type === 'done') {
-              if (flushTimerId !== null) {
-                clearTimeout(flushTimerId)
-                flushTimerId = null
-              }
               setMessages(prev =>
                 prev.map(m => {
                   if (m.id !== assistantId) return m
                   return {
                     ...m,
-                    content: extractExplanation(pendingContent),
+                    content: extractExplanation(m.content),
                     isStreaming: false,
                     isPlan: data.isPlan === true,
                   }
@@ -247,7 +178,6 @@ export function useAIChat(
               }
               onFilesChanged?.()
             } else if (data.type === 'error') {
-              if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
               setIsStreaming(false)
@@ -265,9 +195,10 @@ export function useAIChat(
       }
 
       // Ensure streaming flag is cleared if stream ended without explicit done event
-      if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
       setMessages(prev =>
-        prev.map(m => (m.id === assistantId ? { ...m, content: extractExplanation(pendingContent), isStreaming: false } : m)),
+        prev.map(m => m.id === assistantId
+          ? { ...m, content: extractExplanation(m.content), isStreaming: false }
+          : m),
       )
       setIsStreaming(false)
     } catch (err) {
