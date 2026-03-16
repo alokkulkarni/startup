@@ -83,6 +83,8 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   const previewUrlRef = useRef<string | null>(null)
   // true while a container is running — used by cleanup to decide whether to stop
   const containerActiveRef = useRef(false)
+  // Rolling buffer: accumulate recent log lines for multi-line error detection
+  const errorBufRef = useRef('')
 
   // ── Log helpers ──────────────────────────────────────────────────────────────
   const logBufRef = useRef<LogEntry[]>([])
@@ -107,6 +109,40 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
   }, [])
 
   const parseError = useCallback((text: string): WCError | null => {
+    // Vite internal server error (compile / transform failure)
+    if (text.includes('[vite] Internal server error:') || text.includes('[vite] Pre-transform error:')) {
+      const tag = text.includes('Internal server error:') ? 'Internal server error:' : 'Pre-transform error:'
+      const msgLine = text.split('\n').find(l => l.includes(tag))
+      const message = msgLine?.replace(/.*\[vite\][^:]+:\s*/, '').trim() || 'Vite transform error'
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
+      return { kind: 'app', message, file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    // esbuild errors: ✘ [ERROR] ... (Vite's bundler)
+    if (text.includes('✘ [ERROR]') || text.match(/\[plugin:vite:[^\]]+\]/)) {
+      const errLine = text.split('\n').find(l => l.includes('✘ [ERROR]')) ?? ''
+      const message = errLine.replace(/.*✘ \[ERROR\]\s*/, '').trim()
+        || text.split('\n').find(l => l.match(/\[plugin:vite:/))?.replace(/.*\[plugin:[^\]]+\]\s*/, '').trim()
+        || 'Build error'
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?):(\d+):(\d+):/)
+      return { kind: 'app', message, file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    // Failed to resolve import / module not found
+    if (text.includes('Failed to resolve import') || text.includes("Cannot find module '") || text.includes('Could not resolve')) {
+      const importMatch = text.match(/Failed to resolve import "([^"]+)"|Cannot find module '([^']+)'|Could not resolve "([^"]+)"/)
+      const mod = importMatch?.[1] ?? importMatch?.[2] ?? importMatch?.[3] ?? 'unknown'
+      return { kind: 'app', message: `Cannot find module "${mod}" — it may be missing from package.json`, stack: text }
+    }
+    // Syntax / parse errors
+    if (text.match(/SyntaxError:|Unexpected token|Unterminated string|Expected ";"/)) {
+      const fileMatch = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
+      return { kind: 'app', message: text.split('\n')[0].trim(), file: fileMatch?.[1], line: fileMatch?.[2] ? parseInt(fileMatch[2]) : undefined, stack: text }
+    }
+    // Build / compile failures
+    if (text.includes('error during build') || text.includes('Build failed') || text.match(/\d+ error[s]? generated/)) {
+      const line = text.split('\n').find(l => l.trim() && !l.includes('error during build')) ?? 'Build failed'
+      return { kind: 'app', message: line.trim(), stack: text }
+    }
+    // Missing source file (ENOENT)
     if (text.includes('ENOENT') && text.includes('no such file or directory')) {
       const m = text.match(/open '([^']+)'/)
       const fp = m?.[1]
@@ -117,11 +153,12 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         stack: text,
       }
     }
-    if (text.includes('Error:') || text.includes('error TS') || text.includes('Cannot find')) {
-      const m = text.match(/([^\s]+\.[jt]sx?):(\d+)/)
+    // TypeScript and general errors
+    if (text.includes('error TS') || (text.includes('Error:') && !text.includes('npm warn'))) {
+      const m = text.match(/([^\s(]+\.[jt]sx?)[:(](\d+)/)
       return {
         kind: 'app' as const,
-        message: text.split('\n')[0],
+        message: text.split('\n')[0].trim(),
         file: m?.[1],
         line: m?.[2] ? parseInt(m[2]) : undefined,
         stack: text,
@@ -148,31 +185,50 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
         : 'stdout'
       addLog(logType, text)
 
-      // Status transitions from log sentinel text
+      // Accumulate recent output into a rolling buffer so multi-line Vite/esbuild
+      // errors (which arrive as separate SSE messages) can be matched as a unit.
+      errorBufRef.current = (errorBufRef.current + '\n' + text).slice(-4000)
+
+      // ── Status transitions ────────────────────────────────────────────────
       if (text.includes('__FORGE_INSTALL_DONE__') || text.includes('Packages installed')) {
         setStatus('starting')
         setProgress(70)
       }
-      if (text.includes('__FORGE_SERVER_READY__') ||
-          text.includes('Local:') || text.includes('ready in') || text.includes('App running') ||
-          text.includes('✓ Ready') || text.includes('started server on') ||
-          text.toLowerCase().includes('is being served at') ||
-          text.toLowerCase().includes('flutter run key commands') ||
-          text.toLowerCase().includes('compiled successfully') ||
-          text.toLowerCase().includes('angular live development server is listening') ||
-          // NOTE: 'watching for file changes' is intentionally omitted — Angular prints it
-          // before the HTTP server is ready, which causes a premature iframe load.
-          text.toLowerCase().includes('listening at') || text.toLowerCase().includes('listening on') ||
-          text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')) {
+
+      const isServerReady =
+        text.includes('__FORGE_SERVER_READY__') ||
+        text.includes('Local:') || text.includes('ready in') || text.includes('App running') ||
+        text.includes('✓ Ready') || text.includes('started server on') ||
+        text.toLowerCase().includes('is being served at') ||
+        text.toLowerCase().includes('flutter run key commands') ||
+        text.toLowerCase().includes('compiled successfully') ||
+        text.toLowerCase().includes('angular live development server is listening') ||
+        text.toLowerCase().includes('listening at') || text.toLowerCase().includes('listening on') ||
+        text.toLowerCase().includes('server listening') || text.toLowerCase().includes('server running')
+
+      if (isServerReady) {
         setStatus('ready')
         setProgress(100)
         setError(null)
+        errorBufRef.current = ''  // fresh compile succeeded — clear error buffer
+        return
       }
-      if (text.startsWith('❌') || text.includes('exited')) {
-        const err = parseError(text)
-        if (err) setError(err)
+
+      // ── Hard process failures → always set status=error ───────────────────
+      if (text.startsWith('❌') || text.includes('exited with code')) {
+        const err = parseError(errorBufRef.current) ?? { kind: 'platform' as const, message: text.replace(/^❌\s*/, '') }
+        setError(err)
         setStatus('error')
+        return
       }
+
+      // ── Soft app errors (compile / transform) — overlay without killing status ──
+      // Parse the rolling buffer on every message so multi-line errors are caught
+      // as soon as the last line arrives, regardless of how chunks are split.
+      // Don't change status='error' here — the server is still running; the iframe
+      // shows blank because the app is broken, and the overlay explains why.
+      const appErr = parseError(errorBufRef.current)
+      if (appErr) setError(appErr)
     })
 
     sse.addEventListener('error', () => {
@@ -273,6 +329,7 @@ export function useServerPreview(projectId: string, enabled: boolean): UseWebCon
     sseRef.current?.close()
     startingRef.current = false
     startFailedRef.current = false   // allow auto-start again after manual restart
+    errorBufRef.current = ''
     setStatus('idle')
     setPreviewUrl(null)
     setProgress(0)
