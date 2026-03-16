@@ -79,10 +79,10 @@ export function PreviewPanel({
 
   return (
     <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
-      {/* Header — flex-nowrap so controls never push off-screen */}
-      <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900 min-w-0 overflow-hidden">
-        {/* Viewport toggle — allowed to shrink/hide when panel is narrow */}
-        <div className="shrink-1 min-w-0 overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 flex items-center gap-2 px-2 py-2 border-b border-gray-800 bg-gray-900 overflow-hidden">
+        {/* Left side — viewport toggle or API label; flex-1 so it yields space to controls */}
+        <div className="flex-1 min-w-0">
           {!isApiProject && <ViewportToggle current={viewport} onChange={onViewportChange} />}
           {isApiProject && (
             <span className="text-xs font-medium text-indigo-400 px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
@@ -90,57 +90,49 @@ export function PreviewPanel({
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0" />
-        {/* Controls — shrink-0 so they're always visible */}
+
+        {/* Right side — controls always pinned, never overflow */}
         <div className="shrink-0 flex items-center gap-1">
-
-        {/* Stop */}
-        <button
-          onClick={onStop}
-          disabled={status === 'idle' || status === 'stopped'}
-          title="Stop preview"
-          aria-label="Stop preview"
-          className="p-1.5 rounded-lg transition-colors text-base leading-none disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400 hover:bg-gray-800"
-        >
-          ⏹
-        </button>
-
-        {/* Refresh */}
-        <button
-          onClick={onRefresh}
-          title="Restart preview (Ctrl+Shift+R)"
-          aria-label="Refresh preview"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors text-base leading-none"
-        >
-          ↺
-        </button>
-
-        {/* Open in new tab */}
-        <button
-          onClick={() => previewUrl && window.open(previewUrl, '_blank')}
-          disabled={!previewUrl}
-          title="Open in new tab"
-          aria-label="Open in new tab"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors text-sm leading-none disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          ↗
-        </button>
-
-        {/* Console toggle */}
-        <button
-          onClick={onToggleConsole}
-          title="Toggle console"
-          aria-label="Toggle console"
-          className={`p-1.5 rounded-lg text-sm transition-colors leading-none ${
-            showConsole
-              ? 'text-indigo-400 bg-indigo-900/30'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
-          }`}
-        >
-          ≡
-        </button>
-        </div>{/* end controls */}
-      </div>{/* end header */}
+          <button
+            onClick={onStop}
+            disabled={status === 'idle' || status === 'stopped'}
+            title="Stop preview"
+            aria-label="Stop preview"
+            className="p-1.5 rounded-lg transition-colors text-base leading-none disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400 hover:bg-gray-800"
+          >
+            ⏹
+          </button>
+          <button
+            onClick={onRefresh}
+            title="Restart preview (Ctrl+Shift+R)"
+            aria-label="Refresh preview"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors text-base leading-none"
+          >
+            ↺
+          </button>
+          <button
+            onClick={() => previewUrl && window.open(previewUrl, '_blank')}
+            disabled={!previewUrl}
+            title="Open in new tab"
+            aria-label="Open in new tab"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors text-sm leading-none disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ↗
+          </button>
+          <button
+            onClick={onToggleConsole}
+            title="Toggle console"
+            aria-label="Toggle console"
+            className={`p-1.5 rounded-lg text-sm transition-colors leading-none ${
+              showConsole
+                ? 'text-indigo-400 bg-indigo-900/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            ≡
+          </button>
+        </div>
+      </div>
 
       {/* Progress bar */}
       {isLoading && (
