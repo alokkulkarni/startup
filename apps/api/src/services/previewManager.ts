@@ -49,6 +49,10 @@ export interface PreviewInstance {
   /** Handle for the 10-minute inactivity teardown timer. */
   idleTimer: ReturnType<typeof setTimeout> | null
   readySent?: boolean
+  /** Last-synced package.json content — used to detect dependency changes. */
+  lastPackageJson?: string
+  /** Last-synced pubspec.yaml content — used to detect Flutter dependency changes. */
+  lastPubspec?: string
 }
 
 // ── Docker client ─────────────────────────────────────────────────────────────
@@ -473,9 +477,58 @@ export async function syncFiles(projectId: string, db: DrizzleDB): Promise<void>
     .from(schema.projectFiles)
     .where(eq(schema.projectFiles.projectId, projectId))
 
+  const currentPackageJson = files.find(f => f.path === 'package.json')?.content ?? ''
+  const currentPubspec = files.find(f => f.path === 'pubspec.yaml')?.content ?? ''
   const tar = buildTar(injectDevFiles(files).map(f => ({ path: `app/${f.path.replace(/^\/+/, '')}`, content: f.content })))
   const container = docker.getContainer(instance.containerName)
-  await container.putArchive(tar, { path: '/' })
+
+  // putArchive may fail if the container has already stopped (dev server exited).
+  // Catch and return early — the frontend's handleFilesChanged will trigger a
+  // full restart via restartWC() which creates a new container with fresh files.
+  try {
+    await container.putArchive(tar, { path: '/' })
+  } catch (err) {
+    pushLog(instance, `⚠ Container not running — sync skipped (restart will pick up changes)`)
+    return
+  }
+
+  // Detect real package.json / pubspec.yaml changes by comparing against the last-synced content.
+  const packageJsonChanged = currentPackageJson !== '' && currentPackageJson !== (instance.lastPackageJson ?? '')
+  const pubspecChanged = currentPubspec !== '' && currentPubspec !== (instance.lastPubspec ?? '')
+  instance.lastPackageJson = currentPackageJson
+  instance.lastPubspec = currentPubspec
+
+  // Docker putArchive writes via overlay FS which does NOT fire inotify events.
+  // Touch source files so Vite's chokidar watcher detects the changes.
+  // Include all common source directories — not just src/ and public/.
+  // For Flutter projects, run flutter pub get when pubspec.yaml changes.
+  try {
+    const isFlutter = files.some(f => f.path === 'pubspec.yaml')
+    const installCmd = isFlutter
+      ? (pubspecChanged ? 'cd /app && flutter pub get --no-color 2>/dev/null; ' : '')
+      : (packageJsonChanged ? 'cd /app && npm install --prefer-offline --no-audit --no-fund 2>/dev/null; ' : '')
+    const exec = await container.exec({
+      Cmd: ['sh', '-c', `${installCmd}find /app/src /app/public /app/app /app/pages /app/styles /app/components /app/lib /app/assets -type f 2>/dev/null | xargs touch 2>/dev/null; true`],
+      AttachStdout: true,
+      AttachStderr: true,
+    })
+    const stream = await exec.start({ hijack: false, stdin: false })
+    // Wait for exec to complete instead of fire-and-forget — ensures files are
+    // touched and npm install finishes before the frontend reloads the iframe.
+    await new Promise<void>((resolve) => {
+      stream.on('end', resolve)
+      stream.on('error', () => resolve())
+      // Safety timeout: don't block forever if exec hangs
+      setTimeout(resolve, 30_000)
+      stream.resume()
+    })
+    if (packageJsonChanged || pubspecChanged) {
+      pushLog(instance, `📦 Installing ${isFlutter ? 'Dart' : 'npm'} packages…`)
+    }
+  } catch {
+    // Non-fatal — preview will still show updated files on next iframe reload
+  }
+
   pushLog(instance, `🔄 Synced ${files.length} file(s)`)
 }
 

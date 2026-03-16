@@ -44,8 +44,9 @@ export function useSubscription() {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get<SubscriptionInfo>('/v1/billing/subscription')
-      setSubscription(res.data ?? DEFAULT_FREE_SUBSCRIPTION)
+      // Billing routes return raw objects, not ApiResponse-wrapped — cast directly.
+      const data = await api.get<SubscriptionInfo>('/v1/billing/subscription')
+      setSubscription((data as unknown as SubscriptionInfo) ?? DEFAULT_FREE_SUBSCRIPTION)
     } catch {
       // On any error, silently fall back to free tier so the page still renders
       setSubscription(DEFAULT_FREE_SUBSCRIPTION)
@@ -57,8 +58,9 @@ export function useSubscription() {
   const fetchUsage = async () => {
     setLoading(true)
     try {
-      const res = await api.get<UsageInfo>('/v1/billing/usage')
-      setUsage(res.data ?? null)
+      // Billing routes return raw objects, not ApiResponse-wrapped — cast directly.
+      const data = await api.get<UsageInfo>('/v1/billing/usage')
+      setUsage((data as unknown as UsageInfo) ?? null)
     } catch {
       // Non-critical — leave usage null
     } finally {
@@ -79,8 +81,10 @@ export function useSubscription() {
       if (res.data?.url) {
         window.location.href = res.data.url
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout')
+    } catch (err: unknown) {
+      // Extract server-provided message if available; never show raw HTTP status codes.
+      const serverMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(serverMsg ?? 'Unable to start checkout. Please try again or contact support.')
     } finally {
       setLoading(false)
     }
@@ -94,8 +98,9 @@ export function useSubscription() {
       if (res.data?.url) {
         window.location.href = res.data.url
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open portal')
+    } catch (err: unknown) {
+      const serverMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(serverMsg ?? 'Unable to open billing portal. Please try again or contact support.')
     } finally {
       setLoading(false)
     }

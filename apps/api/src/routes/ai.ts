@@ -65,22 +65,29 @@ export async function aiRoutes(app: FastifyInstance) {
       }
 
       // Rate limit: check per-plan daily limit
-      const rateLimitKey = `ratelimit:ai:${user.id}`
-      const [currentCount, planLimit] = await Promise.all([
-        app.redis.incr(rateLimitKey),
-        getUserPlanLimit(app.db, user.id),
-      ])
-      if (currentCount === 1) {
-        await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
-      }
-      if (currentCount > planLimit) {
-        return reply
-          .code(429)
-          .header('X-RateLimit-Remaining', '0')
-          .send({
-            success: false,
-            error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.' },
-          })
+      // Bypass list: comma-separated emails in RATE_LIMIT_BYPASS_EMAILS env var skip enforcement.
+      const bypassEmails = (process.env.RATE_LIMIT_BYPASS_EMAILS ?? '')
+        .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+      const isRateLimitBypassed = bypassEmails.includes((user.email ?? '').toLowerCase())
+
+      if (!isRateLimitBypassed) {
+        const rateLimitKey = `ratelimit:ai:${user.id}`
+        const [currentCount, planLimit] = await Promise.all([
+          app.redis.incr(rateLimitKey),
+          getUserPlanLimit(app.db, user.id),
+        ])
+        if (currentCount === 1) {
+          await app.redis.expire(rateLimitKey, RATE_LIMIT_TTL_SECONDS)
+        }
+        if (currentCount > planLimit) {
+          return reply
+            .code(429)
+            .header('X-RateLimit-Remaining', '0')
+            .send({
+              success: false,
+              error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Daily AI limit reached. Upgrade to Pro for unlimited.' },
+            })
+        }
       }
 
       // Assert project belongs to user's workspace
@@ -163,14 +170,42 @@ export async function aiRoutes(app: FastifyInstance) {
       const writtenDuringStream = new Set<string>()
       let snapshotTaken = false
 
+      // ── Text-token batching ─────────────────────────────────────────────────
+      // The LLM streams one token at a time (~1–5 chars each). Sending a
+      // separate SSE event per token means 2,000–5,000 events for a typical
+      // response. Each event triggers a React setState + re-render on the
+      // client, which blocks the browser main thread and causes "Page
+      // Unresponsive". Batching flushes accumulated text every 80 ms (or when
+      // the buffer hits 150 chars), reducing client renders to ~15–25 total.
+      let textBuffer = ''
+      let textFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+      const flushTextBuffer = () => {
+        if (textFlushTimer) { clearTimeout(textFlushTimer); textFlushTimer = null }
+        if (textBuffer) {
+          write({ type: 'text', text: textBuffer })
+          textBuffer = ''
+        }
+      }
+
       try {
         for await (const chunk of streamAIResponse(messages, systemPrompt)) {
           if (chunk.type === 'text' && chunk.text) {
             fullContent += chunk.text
-            write({ type: 'text', text: chunk.text })
 
-            // In plan mode, no file writes — just stream the plan text
-            if (mode !== 'plan') {
+            // Batch tokens: flush immediately if buffer is large, otherwise
+            // let the timer coalesce small tokens into one SSE event.
+            textBuffer += chunk.text
+            if (textBuffer.length >= 150) {
+              flushTextBuffer()
+            } else if (!textFlushTimer) {
+              textFlushTimer = setTimeout(flushTextBuffer, 80)
+            }
+
+            // In plan mode, no file writes — just stream the plan text.
+            // Only scan for completed file blocks when the NEW chunk contains </file>
+            // to avoid O(N²) regex scans on every token of a growing fullContent string.
+            if (mode !== 'plan' && chunk.text.includes('</file>')) {
               // Incrementally write any newly-completed <file> blocks to DB
               const newFiles = extractNewlyCompletedFiles(fullContent, writtenDuringStream)
               if (newFiles.length > 0) {
@@ -183,6 +218,8 @@ export async function aiRoutes(app: FastifyInstance) {
                   writtenDuringStream.add(fileDiff.path)
                   try {
                     await writeSingleFile(project.id, fileDiff, app.db)
+                    // Flush buffered text before file event so client sees text first
+                    flushTextBuffer()
                     write({ type: 'file_written', path: fileDiff.path })
                   } catch (err) {
                     app.log.warn({ msg: '[AI] Incremental file write failed', path: fileDiff.path, err })
@@ -191,6 +228,9 @@ export async function aiRoutes(app: FastifyInstance) {
               }
             }
           } else if (chunk.type === 'done') {
+            // Flush any remaining buffered text before processing done
+            flushTextBuffer()
+
             // Save assistant message (plan text or code response)
             await app.db.insert(aiMessages).values({
               conversationId: conversation!.id,
@@ -240,6 +280,13 @@ export async function aiRoutes(app: FastifyInstance) {
 
             if (allChangedPaths.length > 0) {
               write({ type: 'files_changed', paths: allChangedPaths })
+            } else {
+              app.log.warn({
+                msg: '[AI] No files written — model may have used wrong format or omitted <forge_changes>',
+                hasForgeChanges: fullContent.includes('<forge_changes>'),
+                responseLength: fullContent.length,
+                responsePreview: fullContent.slice(-500),
+              })
             }
 
             write({ type: 'done' })
@@ -253,6 +300,7 @@ export async function aiRoutes(app: FastifyInstance) {
             }, app.log)
             return
           } else if (chunk.type === 'error') {
+            flushTextBuffer()
             write({ type: 'error', error: chunk.error })
             res.end()
             return
@@ -261,6 +309,7 @@ export async function aiRoutes(app: FastifyInstance) {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'AI stream error'
         try {
+          flushTextBuffer()
           write({ type: 'error', error: message })
           res.end()
         } catch { /* ignore */ }

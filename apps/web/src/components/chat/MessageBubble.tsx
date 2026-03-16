@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, memo } from 'react'
+import { memo, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 
 interface MessageBubbleProps {
@@ -8,6 +8,8 @@ interface MessageBubbleProps {
   content: string
   createdAt: string
   isStreaming?: boolean
+  /** File paths being written to project (during streaming). */
+  streamingFilePaths?: string[]
   /** File paths created/modified/deleted by this assistant message. */
   changedPaths?: string[]
 }
@@ -27,213 +29,6 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString()
 }
 
-// ---------------------------------------------------------------------------
-// Lightweight inline markdown renderer (no external deps)
-// Handles: paragraphs, bold, italic, inline code, links, h1-h3, ul/ol lists.
-// ---------------------------------------------------------------------------
-
-type Inline = { type: 'text'; value: string }
-  | { type: 'bold'; children: Inline[] }
-  | { type: 'italic'; children: Inline[] }
-  | { type: 'code'; value: string }
-  | { type: 'link'; href: string; children: Inline[] }
-
-type Block = { type: 'paragraph'; inlines: Inline[] }
-  | { type: 'heading'; level: 1 | 2 | 3; inlines: Inline[] }
-  | { type: 'ul'; items: Inline[][] }
-  | { type: 'ol'; items: Inline[][] }
-  | { type: 'code_block'; value: string; lang: string }
-
-/** Parse inline markdown spans in a string. */
-function parseInlines(text: string): Inline[] {
-  const out: Inline[] = []
-  // Combined regex: **bold** | *italic* | `code` | [text](url)
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g
-  let last = 0
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) out.push({ type: 'text', value: text.slice(last, m.index) })
-    if (m[1] !== undefined)      out.push({ type: 'bold',   children: parseInlines(m[1]) })
-    else if (m[2] !== undefined) out.push({ type: 'italic', children: parseInlines(m[2]) })
-    else if (m[3] !== undefined) out.push({ type: 'code',   value: m[3] })
-    else if (m[4] !== undefined) out.push({ type: 'link',   href: m[5], children: parseInlines(m[4]) })
-    last = m.index + m[0].length
-  }
-  if (last < text.length) out.push({ type: 'text', value: text.slice(last) })
-  return out
-}
-
-/** Convert parsed inline nodes to React elements. */
-function renderInlines(nodes: Inline[], keyPrefix: string): React.ReactNode {
-  return nodes.map((n, i) => {
-    const k = `${keyPrefix}-${i}`
-    if (n.type === 'text')   return <Fragment key={k}>{n.value}</Fragment>
-    if (n.type === 'bold')   return <strong key={k} className="font-semibold text-white">{renderInlines(n.children, k)}</strong>
-    if (n.type === 'italic') return <em key={k} className="italic text-gray-300">{renderInlines(n.children, k)}</em>
-    if (n.type === 'code')   return <code key={k} className="bg-gray-900 rounded px-1.5 py-0.5 text-xs font-mono text-violet-300 border border-gray-700">{n.value}</code>
-    if (n.type === 'link')   return <a key={k} href={n.href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">{renderInlines(n.children, k)}</a>
-    return null
-  })
-}
-
-/** Parse a markdown string into blocks. */
-function parseBlocks(md: string): Block[] {
-  const lines = md.split('\n')
-  const blocks: Block[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-
-    // Fenced code block
-    if (/^```/.test(line)) {
-      const lang = line.replace(/^```/, '').trim()
-      const codeLines: string[] = []
-      i++
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i])
-        i++
-      }
-      blocks.push({ type: 'code_block', value: codeLines.join('\n'), lang })
-      i++
-      continue
-    }
-
-    // Headings
-    const h = line.match(/^(#{1,3})\s+(.+)/)
-    if (h) {
-      blocks.push({ type: 'heading', level: h[1].length as 1|2|3, inlines: parseInlines(h[2]) })
-      i++
-      continue
-    }
-
-    // Unordered list
-    if (/^[-*]\s/.test(line)) {
-      const items: Inline[][] = []
-      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
-        items.push(parseInlines(lines[i].replace(/^[-*]\s+/, '')))
-        i++
-      }
-      blocks.push({ type: 'ul', items })
-      continue
-    }
-
-    // Ordered list
-    if (/^\d+\.\s/.test(line)) {
-      const items: Inline[][] = []
-      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
-        items.push(parseInlines(lines[i].replace(/^\d+\.\s+/, '')))
-        i++
-      }
-      blocks.push({ type: 'ol', items })
-      continue
-    }
-
-    // Blank line → skip
-    if (line.trim() === '') { i++; continue }
-
-    // Paragraph: gather consecutive non-empty, non-special lines
-    const paraLines: string[] = []
-    while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,3}|```|[-*]|\d+\.)/.test(lines[i])) {
-      paraLines.push(lines[i])
-      i++
-    }
-    if (paraLines.length) {
-      blocks.push({ type: 'paragraph', inlines: parseInlines(paraLines.join(' ')) })
-    }
-  }
-  return blocks
-}
-
-/** Render parsed blocks as React elements. */
-function renderBlocks(blocks: Block[]): React.ReactNode {
-  return blocks.map((b, bi) => {
-    const k = `b${bi}`
-    if (b.type === 'heading') {
-      const cls = b.level === 1
-        ? 'text-base font-bold text-white mb-2 mt-3'
-        : b.level === 2
-        ? 'text-sm font-bold text-white mb-1.5 mt-3'
-        : 'text-sm font-semibold text-gray-200 mb-1 mt-2'
-      const Tag = `h${b.level}` as 'h1'|'h2'|'h3'
-      return <Tag key={k} className={cls}>{renderInlines(b.inlines, k)}</Tag>
-    }
-    if (b.type === 'paragraph') {
-      return <p key={k} className="text-sm leading-relaxed mb-2 last:mb-0">{renderInlines(b.inlines, k)}</p>
-    }
-    if (b.type === 'ul') {
-      return (
-        <ul key={k} className="text-sm list-disc list-inside space-y-1 mb-2 text-gray-200">
-          {b.items.map((item, ii) => (
-            <li key={ii} className="leading-relaxed">{renderInlines(item, `${k}-li${ii}`)}</li>
-          ))}
-        </ul>
-      )
-    }
-    if (b.type === 'ol') {
-      return (
-        <ol key={k} className="text-sm list-decimal list-inside space-y-1 mb-2 text-gray-200">
-          {b.items.map((item, ii) => (
-            <li key={ii} className="leading-relaxed">{renderInlines(item, `${k}-li${ii}`)}</li>
-          ))}
-        </ol>
-      )
-    }
-    if (b.type === 'code_block') {
-      return (
-        <code key={k} className="block bg-gray-900 rounded-lg px-3 py-2 text-xs font-mono text-gray-200 overflow-x-auto my-2 border border-gray-700 whitespace-pre">
-          {b.value}
-        </code>
-      )
-    }
-    return null
-  })
-}
-
-/** Renders markdown explanation text with no external dependencies. */
-function AssistantMarkdown({ text }: { text: string }) {
-  if (!text.trim()) return null
-  const blocks = parseBlocks(text)
-  return <div className="text-white">{renderBlocks(blocks)}</div>
-}
-
-// ---------------------------------------------------------------------------
-// Streaming-state parser
-// ---------------------------------------------------------------------------
-
-interface StreamState {
-  explanation: string
-  isWritingFiles: boolean
-  streamingFilePaths: string[]
-}
-
-function parseStreamState(content: string): StreamState {
-  if (!content.includes('<forge_changes>')) {
-    return { explanation: stripFileXml(content), isWritingFiles: false, streamingFilePaths: [] }
-  }
-
-  const openIdx = content.indexOf('<forge_changes>')
-  const explanation = content.slice(0, openIdx).trim()
-  const closeIdx = content.indexOf('</forge_changes>')
-
-  if (closeIdx !== -1) {
-    const inner = content.slice(openIdx + '<forge_changes>'.length, closeIdx)
-    return { explanation, isWritingFiles: false, streamingFilePaths: extractFilePaths(inner) }
-  }
-
-  // Block still open (streaming)
-  const partial = content.slice(openIdx)
-  return { explanation, isWritingFiles: true, streamingFilePaths: extractFilePaths(partial) }
-}
-
-function extractFilePaths(text: string): string[] {
-  const paths: string[] = []
-  const re = /<file\s+path="([^"]+)"/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) paths.push(m[1])
-  return paths
-}
-
 function stripFileXml(text: string): string {
   return text
     .replace(/<forge_changes>[\s\S]*?<\/forge_changes>/g, '')
@@ -246,72 +41,171 @@ function stripFileXml(text: string): string {
     .trim()
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
+// ── Lightweight Markdown Renderer ──────────────────────────────────────────
+// Only used for completed messages — never during streaming (avoids freeze).
 
-function StreamingFileBadge({ path }: { path: string }) {
-  return (
-    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-violet-950/30 border border-violet-800/40 rounded-lg">
-      <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
-      <span className="text-xs font-mono text-violet-300 truncate">{path}</span>
-    </div>
-  )
+interface InlineNode {
+  type: 'text' | 'bold' | 'italic' | 'code' | 'link'
+  text: string
+  href?: string
 }
 
-function FileSummaryCard({ paths }: { paths: string[] }) {
-  const MAX_SHOWN = 8
-  const shown = paths.slice(0, MAX_SHOWN)
-  const overflow = paths.length - MAX_SHOWN
-
-  return (
-    <div className="mt-3 rounded-xl border border-green-800/40 bg-green-950/25 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-green-800/30">
-        <span className="text-green-400 text-xs">✓</span>
-        <span className="text-xs font-medium text-green-300">
-          {paths.length} file{paths.length !== 1 ? 's' : ''} written to project
-        </span>
-      </div>
-      <div className="px-3 py-2 space-y-1">
-        {shown.map((p, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-green-500 text-xs shrink-0">+</span>
-            <span className="text-xs font-mono text-green-300 truncate">{p}</span>
-          </div>
-        ))}
-        {overflow > 0 && (
-          <p className="text-xs text-green-700 pt-0.5">…and {overflow} more</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// For historical DB messages that still have raw XML
-interface LegacyParsed {
-  explanation: string
-  diffs: Array<{ filePath: string; diff: string; action: string }>
-}
-
-function parseLegacyContent(content: string): LegacyParsed {
-  const explanation = stripFileXml(content)
-  const diffs: LegacyParsed['diffs'] = []
-  const forgeMatch = content.match(/<forge_changes>([\s\S]*?)<\/forge_changes>/)
-  if (forgeMatch) {
-    const re = /<file\s+path="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/file>/g
-    let m: RegExpExecArray | null
-    while ((m = re.exec(forgeMatch[1])) !== null) {
-      diffs.push({ filePath: m[1], diff: m[3].trim(), action: (m[2] ?? '').toLowerCase() || 'create' })
-    }
+function parseInlines(line: string): InlineNode[] {
+  const nodes: InlineNode[] = []
+  // Match bold, italic, inline code, and links
+  const rx = /(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|_(.+?)_)|(`([^`]+?)`)|(\[([^\]]+?)\]\(([^)]+?)\))/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = rx.exec(line)) !== null) {
+    if (m.index > last) nodes.push({ type: 'text', text: line.slice(last, m.index) })
+    if (m[1]) nodes.push({ type: 'bold', text: m[2] ?? m[3] })
+    else if (m[4]) nodes.push({ type: 'italic', text: m[5] ?? m[6] })
+    else if (m[7]) nodes.push({ type: 'code', text: m[8] })
+    else if (m[9]) nodes.push({ type: 'link', text: m[10], href: m[11] })
+    last = m.index + m[0].length
   }
-  return { explanation, diffs }
+  if (last < line.length) nodes.push({ type: 'text', text: line.slice(last) })
+  return nodes
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+function renderInlines(nodes: InlineNode[], keyPrefix: string) {
+  return nodes.map((n, i) => {
+    const key = `${keyPrefix}-${i}`
+    switch (n.type) {
+      case 'bold':
+        return <strong key={key} className="font-semibold text-white">{n.text}</strong>
+      case 'italic':
+        return <em key={key} className="italic text-gray-300">{n.text}</em>
+      case 'code':
+        return <code key={key} className="px-1.5 py-0.5 bg-gray-700/60 rounded text-indigo-300 text-xs font-mono">{n.text}</code>
+      case 'link':
+        return <a key={key} href={n.href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">{n.text}</a>
+      default:
+        return <span key={key}>{n.text}</span>
+    }
+  })
+}
 
-export const MessageBubble = memo(function MessageBubble({ role, content, createdAt, isStreaming, changedPaths }: MessageBubbleProps) {
+interface Block {
+  type: 'heading' | 'code' | 'bullet' | 'numbered' | 'paragraph'
+  content: string
+  lang?: string
+  level?: number
+}
+
+function parseBlocks(text: string): Block[] {
+  const lines = text.split('\n')
+  const blocks: Block[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Fenced code block
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim()
+      const codeLines: string[] = []
+      i++
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i])
+        i++
+      }
+      i++ // skip closing ```
+      blocks.push({ type: 'code', content: codeLines.join('\n'), lang })
+      continue
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)/)
+    if (headingMatch) {
+      blocks.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length })
+      i++
+      continue
+    }
+
+    // Bullet list item
+    if (line.match(/^\s*[-*+]\s+/)) {
+      blocks.push({ type: 'bullet', content: line.replace(/^\s*[-*+]\s+/, '') })
+      i++
+      continue
+    }
+
+    // Numbered list item
+    if (line.match(/^\s*\d+[.)]\s+/)) {
+      blocks.push({ type: 'numbered', content: line.replace(/^\s*\d+[.)]\s+/, '') })
+      i++
+      continue
+    }
+
+    // Empty line — skip
+    if (!line.trim()) {
+      i++
+      continue
+    }
+
+    // Paragraph
+    blocks.push({ type: 'paragraph', content: line })
+    i++
+  }
+
+  return blocks
+}
+
+function AssistantMarkdown({ text }: { text: string }) {
+  const blocks = useMemo(() => parseBlocks(text), [text])
+
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-gray-100">
+      {blocks.map((block, idx) => {
+        const key = `b-${idx}`
+        switch (block.type) {
+          case 'heading': {
+            const Tag = (`h${Math.min(block.level ?? 2, 4)}`) as 'h1' | 'h2' | 'h3' | 'h4'
+            const sizes = { h1: 'text-base font-bold', h2: 'text-sm font-bold', h3: 'text-sm font-semibold', h4: 'text-sm font-medium' }
+            return <Tag key={key} className={cn(sizes[Tag], 'text-white mt-1')}>{renderInlines(parseInlines(block.content), key)}</Tag>
+          }
+          case 'code':
+            return (
+              <div key={key} className="rounded-lg overflow-hidden border border-gray-700 my-1">
+                {block.lang && (
+                  <div className="bg-gray-800/80 px-3 py-1 border-b border-gray-700">
+                    <span className="text-xs text-gray-400 font-mono">{block.lang}</span>
+                  </div>
+                )}
+                <pre className="bg-gray-950 p-3 overflow-x-auto">
+                  <code className="text-xs font-mono text-gray-300 leading-relaxed">{block.content}</code>
+                </pre>
+              </div>
+            )
+          case 'bullet':
+            return (
+              <div key={key} className="flex gap-2 pl-2">
+                <span className="text-gray-500 shrink-0">•</span>
+                <span>{renderInlines(parseInlines(block.content), key)}</span>
+              </div>
+            )
+          case 'numbered':
+            return (
+              <div key={key} className="flex gap-2 pl-2">
+                <span>{renderInlines(parseInlines(block.content), key)}</span>
+              </div>
+            )
+          default:
+            return <p key={key}>{renderInlines(parseInlines(block.content), key)}</p>
+        }
+      })}
+    </div>
+  )
+}
+
+export const MessageBubble = memo(function MessageBubble({
+  role,
+  content,
+  createdAt,
+  isStreaming,
+  streamingFilePaths,
+  changedPaths,
+}: MessageBubbleProps) {
   const isUser = role === 'user'
 
   // ── User bubble ──────────────────────────────────────────────────────────
@@ -319,7 +213,7 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
     return (
       <div className="flex justify-end mb-4">
         <div className="max-w-[75%]">
-          <div className={cn('px-4 py-3 rounded-2xl rounded-br-none bg-indigo-600 text-white transition-all duration-200')}>
+          <div className={cn('px-4 py-3 rounded-2xl rounded-br-none bg-indigo-600 text-white')}>
             <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{content}</p>
           </div>
           <p className="text-xs text-gray-500 mt-1 text-right pr-1">{formatRelativeTime(createdAt)}</p>
@@ -329,62 +223,39 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
   }
 
   // ── Assistant bubble — STREAMING ─────────────────────────────────────────
+  // streamingFilePaths === undefined  → explanation phase (show text + cursor)
+  // streamingFilePaths === []         → writing phase, no files confirmed yet
+  // streamingFilePaths === [...]      → files being written (show path badges)
   if (isStreaming) {
-    // Detect if we're in the file-writing phase (XML opened but not closed)
-    const forgeOpen = content.indexOf('<forge_changes>')
-    const forgeClose = content.indexOf('</forge_changes>')
-    const isWritingFiles = forgeOpen !== -1 && forgeClose === -1
-    const explanationRaw = forgeOpen !== -1 ? content.slice(0, forgeOpen).trim() : content
-
-    // Strip code blocks entirely (fence + content) from streaming explanation.
-    // The old regex only removed the opening ``` fence but left all code lines visible.
-    // Now we: 1) strip complete blocks, 2) strip unclosed trailing block, 3) strip stray fences.
-    // Cap at 1200 chars to prevent large whitespace-pre-wrap nodes locking the main thread.
-    const MAX_STREAM_CHARS = 1200
-    const fullExplanation = explanationRaw
-      .replace(/```[\s\S]*?```/g, '')  // strip fully-closed code blocks (content + fences)
-      .replace(/```[\s\S]*/g, '')       // strip unclosed trailing code block (still streaming)
-      .replace(/`[^`\n]+`/g, (m) => m) // keep short inline backtick spans as-is
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-    const explanation = fullExplanation.length > MAX_STREAM_CHARS
-      ? fullExplanation.slice(0, MAX_STREAM_CHARS) + '…'
-      : fullExplanation
-
-    // Extract file paths from partial forge_changes block (for spinner badges)
-    const streamingFilePaths: string[] = []
-    if (isWritingFiles) {
-      const re = /<file\s+path="([^"]+)"/g
-      let m: RegExpExecArray | null
-      const partial = content.slice(forgeOpen)
-      while ((m = re.exec(partial)) !== null) streamingFilePaths.push(m[1])
-    }
+    const isWritingFiles = streamingFilePaths !== undefined
 
     return (
       <div className="flex justify-start mb-4">
         <div className="max-w-[85%] w-full">
           <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
-            {explanation && (
-              <div className={isWritingFiles ? 'mb-3' : ''}>
-                {/* Plain text during streaming — no markdown parsing overhead */}
-                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-100">
-                  {explanation}
-                  {!isWritingFiles && (
-                    <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
-                  )}
-                </p>
-              </div>
+            {content && (
+              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed text-gray-100 mb-2">
+                {content}
+                {!isWritingFiles && (
+                  <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-middle animate-pulse" />
+                )}
+              </p>
             )}
-            {!explanation && !isWritingFiles && (
+            {!content && !isWritingFiles && (
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
                 <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
                 Thinking…
               </span>
             )}
             {isWritingFiles && (
-              <div className="space-y-1">
-                {streamingFilePaths.length > 0 ? (
-                  streamingFilePaths.map((fp, i) => <StreamingFileBadge key={i} path={fp} />)
+              <div className="space-y-1 mt-1">
+                {streamingFilePaths!.length > 0 ? (
+                  streamingFilePaths!.map((fp, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-violet-950/30 border border-violet-800/40 rounded-lg">
+                      <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                      <span className="text-xs font-mono text-violet-300 truncate">{fp}</span>
+                    </div>
+                  ))
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-violet-400">
                     <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
@@ -400,34 +271,30 @@ export const MessageBubble = memo(function MessageBubble({ role, content, create
     )
   }
 
-  // ── Assistant bubble — COMPLETE (fresh, changedPaths known) ─────────────
-  if (changedPaths !== undefined) {
-    const explanation = stripFileXml(content)
-    return (
-      <div className="flex justify-start mb-4">
-        <div className="max-w-[85%] w-full">
-          <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700 transition-all duration-200')}>
-            {explanation
-              ? <AssistantMarkdown text={explanation} />
-              : <p className="text-sm text-gray-400 italic">✓ Done</p>
-            }
-          </div>
-          <p className="text-xs text-gray-500 mt-1 pl-1">{formatRelativeTime(createdAt)}</p>
-        </div>
-      </div>
-    )
-  }
+  // ── Assistant bubble — COMPLETE (includes historical DB messages) ─────────
+  // stripFileXml cleans any residual XML in fresh or historical messages.
+  const displayText = stripFileXml(content)
+  const filePaths = changedPaths ?? []
 
-  // ── Assistant bubble — HISTORICAL (loaded from DB, may contain XML) ──────
-  const legacy = parseLegacyContent(content)
   return (
     <div className="flex justify-start mb-4">
       <div className="max-w-[85%] w-full">
-        <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700 transition-all duration-200')}>
-          {legacy.explanation
-            ? <AssistantMarkdown text={legacy.explanation} />
-            : <p className="text-sm text-gray-400 italic">✓ Done</p>
-          }
+        <div className={cn('px-4 py-3 rounded-2xl rounded-bl-none bg-gray-800 text-white border border-gray-700')}>
+          {displayText ? (
+            <AssistantMarkdown text={displayText} />
+          ) : (
+            <p className="text-sm text-gray-400 italic">✓ Done</p>
+          )}
+          {filePaths.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {filePaths.map((p, i) => (
+                <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-green-950/50 border border-green-800/50 rounded-lg">
+                  <span className="text-green-400 text-xs shrink-0">✓</span>
+                  <span className="text-xs font-mono text-green-300 truncate">{p}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <p className="text-xs text-gray-500 mt-1 pl-1">{formatRelativeTime(createdAt)}</p>
       </div>

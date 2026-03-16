@@ -13,7 +13,9 @@ export interface Message {
   createdAt: string
   isStreaming?: boolean
   isPlan?: boolean
-  /** File paths created/modified/deleted by this assistant message. */
+  /** File paths being written to project (during streaming, from server file_written events). */
+  streamingFilePaths?: string[]
+  /** File paths created/modified/deleted by this assistant message (after streaming complete). */
   changedPaths?: string[]
 }
 
@@ -56,7 +58,7 @@ function generateId(): string {
 export function useAIChat(
   projectId: string,
   token: string | null,
-  onFilesChanged?: () => void,
+  onFilesChanged?: (paths?: string[]) => void,
 ): UseAIChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -104,6 +106,15 @@ export function useAIChat(
     setMessages(prev => [...prev, userMessage, assistantPlaceholder])
     setIsStreaming(true)
 
+    // Track whether files_changed was received so we don't double-call onFilesChanged
+    // from the 'done' event when files_changed already fired.
+    let filesChangedFired = false
+
+    // Safety net: if the server never sends 'done' (network drop, crash, etc.)
+    // abort after 5 minutes so the Stop button doesn't stay up forever.
+    const abortController = new AbortController()
+    const streamingTimeout = setTimeout(() => abortController.abort(), 300_000)
+
     try {
       const response = await fetch(`${API_URL}/v1/projects/${projectId}/ai/chat`, {
         method: 'POST',
@@ -112,10 +123,12 @@ export function useAIChat(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prompt, mode }),
+        signal: abortController.signal,
       })
 
       if (response.status === 429) {
-        setRateLimit({ remaining: 0, limit: 50 })
+        clearTimeout(streamingTimeout)
+        setRateLimit({ remaining: 0, limit: 20 })
         setMessages(prev => prev.filter(m => m.id !== assistantId))
         setIsStreaming(false)
         setError('Rate limit reached. Please wait before sending another message.')
@@ -131,34 +144,65 @@ export function useAIChat(
 
       const decoder = new TextDecoder()
 
-      // Buffer incoming text tokens and flush to state on a 100ms throttle.
-      // requestAnimationFrame (60fps) was too fast for large responses — streaming
-      // 100KB+ of code caused React to re-render and lay out a huge text node 60x/s,
-      // eventually blocking the main thread long enough to trigger "Page Unresponsive".
-      let pendingContent = ''
-      let flushTimerId: ReturnType<typeof setTimeout> | null = null
-
-      const flushContent = () => {
-        flushTimerId = null
-        const snapshot = pendingContent
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId ? { ...m, content: snapshot } : m),
-        )
-      }
+      // Stream text tokens directly into React state. React 18 automatic batching
+      // groups all setState calls inside a single reader.read() chunk into one render.
+      // KEY OPTIMIZATION: stop accumulating raw file/code content in React state.
+      // We truncate at two boundaries:
+      //   1. <forge_changes> — model using proper XML format
+      //   2. \n``` — model writing code directly (non-compliant, but must be handled)
+      // In both cases, once we hit these markers we flip the message into
+      // "writing files" mode (streamingFilePaths defined) which shows the spinner/
+      // file badge UI instead of rendering raw code in the chat bubble.
+      // File paths are populated via file_written server events.
 
       const parser = createParser({
         onEvent(event) {
           try {
-            const data = JSON.parse(event.data) as { type: string; text?: string; error?: string; paths?: string[]; isPlan?: boolean }
+            const data = JSON.parse(event.data) as { type: string; text?: string; path?: string; error?: string; paths?: string[]; isPlan?: boolean }
 
             if (data.type === 'text' && data.text) {
-              pendingContent += data.text
-              // Throttle UI updates to 100ms — prevents browser hang on large responses
-              if (flushTimerId === null) {
-                flushTimerId = setTimeout(flushContent, 100)
-              }
+              setMessages(prev =>
+                prev.map(m => {
+                  if (m.id !== assistantId) return m
+                  // Once writing mode starts (streamingFilePaths defined), stop
+                  // accumulating text. The model continues streaming XML/code which
+                  // must NOT enter React state — it causes unbounded growth and freezes.
+                  if (m.streamingFilePaths !== undefined) return m
+                  const newContent = m.content + data.text!
+
+                  // Find the earliest truncation boundary
+                  const forgeIdx = newContent.indexOf('<forge_changes>')
+                  // Detect code fence opening: newline then ``` (multi-line code block)
+                  const fenceIdx = newContent.search(/\n```[\w.\-/ ]*\n/)
+
+                  const truncateAt = Math.min(
+                    forgeIdx !== -1 ? forgeIdx : Infinity,
+                    fenceIdx !== -1 ? fenceIdx : Infinity,
+                  )
+
+                  if (truncateAt !== Infinity) {
+                    // Switch to writing-files mode: keep only explanation before the boundary.
+                    // streamingFilePaths: [] (defined but empty) signals "writing phase started".
+                    return {
+                      ...m,
+                      content: newContent.slice(0, truncateAt).trimEnd(),
+                      streamingFilePaths: m.streamingFilePaths ?? [],
+                    }
+                  }
+                  return { ...m, content: newContent }
+                }),
+              )
             } else if (data.type === 'file_written') {
-              onFilesChanged?.()
+              // Track each file as it's written so MessageBubble can show progress badges.
+              // Do NOT call onFilesChanged here — we batch-sync once at the end to avoid
+              // N concurrent refreshFiles+syncFiles calls during streaming which freeze the UI.
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId
+                    ? { ...m, streamingFilePaths: [...(m.streamingFilePaths ?? []), data.path!] }
+                    : m,
+                ),
+              )
             } else if (data.type === 'files_changed') {
               const paths: string[] = data.paths ?? []
               setMessages(prev =>
@@ -166,18 +210,19 @@ export function useAIChat(
                   m.id === assistantId ? { ...m, changedPaths: paths } : m,
                 ),
               )
-              onFilesChanged?.()
+              // Single sync call with the paths of all changed files
+              filesChangedFired = true
+              onFilesChanged?.(paths)
             } else if (data.type === 'done') {
-              if (flushTimerId !== null) {
-                clearTimeout(flushTimerId)
-                flushTimerId = null
-              }
+              clearTimeout(streamingTimeout)
               setMessages(prev =>
                 prev.map(m => {
                   if (m.id !== assistantId) return m
+                  // content is already explanation-only (XML/code stripped during streaming).
+                  // extractExplanation runs once as a safety net for any residual tags.
                   return {
                     ...m,
-                    content: extractExplanation(pendingContent),
+                    content: extractExplanation(m.content),
                     isStreaming: false,
                     isPlan: data.isPlan === true,
                   }
@@ -187,9 +232,13 @@ export function useAIChat(
               if (data.isPlan === true) {
                 setPendingPlan(true)
               }
-              onFilesChanged?.()
+              // Only call onFilesChanged if files_changed wasn't already fired
+              // (plan mode has no file writes; also guards against double-sync)
+              if (!filesChangedFired) {
+                onFilesChanged?.()
+              }
             } else if (data.type === 'error') {
-              if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
+              clearTimeout(streamingTimeout)
               setError(data.error ?? 'An error occurred')
               setMessages(prev => prev.filter(m => m.id !== assistantId))
               setIsStreaming(false)
@@ -206,13 +255,27 @@ export function useAIChat(
         parser.feed(decoder.decode(value, { stream: true }))
       }
 
-      // Ensure streaming flag is cleared if stream ended without explicit done event
-      if (flushTimerId !== null) { clearTimeout(flushTimerId); flushTimerId = null }
+      // Ensure streaming flag is cleared if stream ended without explicit done event.
+      // content is already explanation-only (XML/code stripped during streaming).
+      clearTimeout(streamingTimeout)
       setMessages(prev =>
-        prev.map(m => (m.id === assistantId ? { ...m, content: extractExplanation(pendingContent), isStreaming: false } : m)),
+        prev.map(m => m.id === assistantId
+          ? { ...m, content: extractExplanation(m.content), isStreaming: false }
+          : m),
       )
       setIsStreaming(false)
     } catch (err) {
+      clearTimeout(streamingTimeout)
+      // AbortError = our 5-min safety timeout fired — clean up silently
+      if (err instanceof Error && err.name === 'AbortError') {
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId
+            ? { ...m, content: extractExplanation(m.content), isStreaming: false }
+            : m),
+        )
+        setIsStreaming(false)
+        return
+      }
       setError(err instanceof Error ? err.message : 'Network error. Please try again.')
       setMessages(prev => prev.filter(m => m.id !== assistantId))
       setIsStreaming(false)

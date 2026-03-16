@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { api } from '@/lib/api'
 
 export interface Template {
@@ -32,7 +32,7 @@ export function useTemplates() {
   const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
 
-  const fetchTemplates = async (filters?: TemplateFilters) => {
+  const fetchTemplates = useCallback(async (filters?: TemplateFilters) => {
     setLoading(true)
     setError(null)
     try {
@@ -51,7 +51,7 @@ export function useTemplates() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const fetchTemplate = async (slug: string): Promise<Template | null> => {
     setLoading(true)
@@ -108,11 +108,6 @@ export function useTemplates() {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    fetchTemplates()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   return {
     templates,

@@ -58,6 +58,8 @@ export default function ProjectPage() {
   const [deployMenuOpen, setDeployMenuOpen] = useState(false)
   const [healAttempts, setHealAttempts] = useState(0)
   const [showRateLimitPrompt, setShowRateLimitPrompt] = useState(false)
+  const [recentlyChangedPaths, setRecentlyChangedPaths] = useState<string[]>([])
+  const recentlyChangedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const [showFileTree, setShowFileTree] = useState(true)
   const [showEditor, setShowEditor] = useState(true)
@@ -159,9 +161,10 @@ export default function ProjectPage() {
     },
   )
 
-  // Auto self-heal on WebContainer errors
+  // Auto self-heal on WebContainer errors — only for app errors (code bugs),
+  // NOT platform errors (container crash, infra issues) where AI can't help.
   useEffect(() => {
-    if (wcError && healAttempts < MAX_HEAL_ATTEMPTS) {
+    if (wcError && wcError.kind === 'app' && healAttempts < MAX_HEAL_ATTEMPTS) {
       const location = wcError.file
         ? `\nFile: ${wcError.file}${wcError.line != null ? `:${wcError.line}` : ''}`
         : ''
@@ -173,10 +176,16 @@ export default function ProjectPage() {
       setFixPrompt(healPrompt)
       setHealAttempts(prev => prev + 1)
     }
-    if (!wcError) {
+    // Only reset heal counter when the preview is actually working again,
+    // NOT when error briefly clears during a restart cycle. This prevents
+    // an infinite loop where healAttempts resets to 0 on every restart.
+  }, [wcError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (wcStatus === 'ready') {
       setHealAttempts(0)
     }
-  }, [wcError]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wcStatus])
 
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo
   useEffect(() => {
@@ -214,12 +223,12 @@ export default function ProjectPage() {
 
   const handleSave = useCallback(async (path: string, content: string) => {
     await updateFile(path, content)
-    // Sync to WebContainer FS for HMR
-    await writeFile(path, content)
+    // Sync updated file to the preview container so Vite picks up the change
+    await syncFiles()
     setAutoSaved(true)
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => setAutoSaved(false), 2000)
-  }, [updateFile, writeFile])
+  }, [updateFile, syncFiles])
 
   const handleCreateFile = useCallback(async (path: string) => {
     await createFile(path, '')
@@ -295,9 +304,19 @@ export default function ProjectPage() {
     document.addEventListener('mouseup', handleMouseUp)
   }, [id])
 
-  const handleFilesChanged = useCallback(async () => {
-    const freshFiles = await refreshFiles()
-    await syncFiles(freshFiles)
+  const handleFilesChanged = useCallback(async (changedPaths?: string[]) => {
+    try {
+      const freshFiles = await refreshFiles()
+      await syncFiles(freshFiles)
+    } catch {
+      // syncFiles may fail if container is dead — restart will pick up changes
+    }
+    // Show which files changed in the file tree for 8 seconds
+    if (changedPaths && changedPaths.length > 0) {
+      if (recentlyChangedTimerRef.current) clearTimeout(recentlyChangedTimerRef.current)
+      setRecentlyChangedPaths(changedPaths)
+      recentlyChangedTimerRef.current = setTimeout(() => setRecentlyChangedPaths([]), 8000)
+    }
     // If the preview was errored, restart it so the fix takes effect.
     // Vite HMR handles running apps automatically; only a full restart clears crash state.
     if (wcStatusRef.current === 'error') {
@@ -508,6 +527,7 @@ export default function ProjectPage() {
                 onCreateFolder={handleCreateFolder}
                 onRenameFile={handleRenameFile}
                 onDeleteFile={handleDeleteFile}
+                recentlyChangedPaths={recentlyChangedPaths}
               />
             )}
           </div>

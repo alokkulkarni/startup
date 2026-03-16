@@ -189,6 +189,8 @@ services:
       # ── Preview containers (Traefik subdomain routing — no host port binding) ──
       TRAEFIK_NETWORK: forge_forge_network
       PREVIEW_DOMAIN: localhost
+      # ── Rate limit bypass (comma-separated emails that skip daily AI limits) ──
+      RATE_LIMIT_BYPASS_EMAILS: ${RATE_LIMIT_BYPASS_EMAILS:-}
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages:/app/packages

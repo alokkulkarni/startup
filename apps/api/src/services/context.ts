@@ -893,13 +893,35 @@ export async function buildSystemPrompt(
     )
   }
 
-  const fileTree = files
-    .sort((a, b) => a.path.localeCompare(b.path))
+  // Build the file listing with full content so the model can make accurate edits.
+  // Files are sorted by importance (configs + package files first, then source).
+  // Hard limits: 32KB per file, 150KB total — stays well within Claude's 200K-token window.
+  const MAX_FILE_CHARS = 32_000
+  const MAX_TOTAL_CHARS = 150_000
+
+  const sortedFiles = [...files].sort((a, b) => {
+    const priority = (p: string) => {
+      if (p === 'package.json') return 0
+      if (p.startsWith('vite.') || p.startsWith('tsconfig') || p.endsWith('.config.ts') || p.endsWith('.config.js')) return 1
+      if (p === 'index.html') return 2
+      if (p.startsWith('src/main') || p.startsWith('src/App') || p.startsWith('src/index')) return 3
+      return 4
+    }
+    return priority(a.path) - priority(b.path) || a.path.localeCompare(b.path)
+  })
+
+  let totalChars = 0
+  const fileTree = sortedFiles
     .map((f) => {
-      const preview = f.content.slice(0, 400)
-      const truncated = f.content.length > 400 ? '\n... (truncated)' : ''
-      return `### ${f.path}\n\`\`\`\n${preview}${truncated}\n\`\`\``
+      const available = MAX_TOTAL_CHARS - totalChars
+      if (available <= 0) return null        // budget exhausted — skip remaining files
+      const chars = Math.min(f.content.length, MAX_FILE_CHARS, available)
+      const snippet = f.content.slice(0, chars)
+      const truncated = f.content.length > chars ? `\n... (${f.content.length - chars} chars truncated — file continues)` : ''
+      totalChars += chars
+      return `### ${f.path}\n\`\`\`\n${snippet}${truncated}\n\`\`\``
     })
+    .filter(Boolean)
     .join('\n\n')
 
   return SYSTEM_PROMPT_TEMPLATE + '\n' + projectContext + fileTree + '\n'
@@ -1006,13 +1028,24 @@ export async function buildPlanSystemPrompt(
     )
   }
 
-  const fileTree = files
-    .sort((a, b) => a.path.localeCompare(b.path))
+  // Plan mode: show full file content (same caps as agent mode) so the plan
+  // accurately reflects what exists and what needs to change.
+  const MAX_FILE_CHARS_PLAN = 32_000
+  const MAX_TOTAL_CHARS_PLAN = 150_000
+
+  const sortedFilesPlan = [...files].sort((a, b) => a.path.localeCompare(b.path))
+  let totalCharsPlan = 0
+  const fileTree = sortedFilesPlan
     .map((f) => {
-      const preview = f.content.slice(0, 200)
-      const truncated = f.content.length > 200 ? '\n... (truncated)' : ''
-      return `### ${f.path}\n\`\`\`\n${preview}${truncated}\n\`\`\``
+      const available = MAX_TOTAL_CHARS_PLAN - totalCharsPlan
+      if (available <= 0) return null
+      const chars = Math.min(f.content.length, MAX_FILE_CHARS_PLAN, available)
+      const snippet = f.content.slice(0, chars)
+      const truncated = f.content.length > chars ? `\n... (${f.content.length - chars} chars truncated)` : ''
+      totalCharsPlan += chars
+      return `### ${f.path}\n\`\`\`\n${snippet}${truncated}\n\`\`\``
     })
+    .filter(Boolean)
     .join('\n\n')
 
   return PLAN_SYSTEM_PROMPT_TEMPLATE + '\n\n' + projectContext + `## Current file tree\n\n` + fileTree + '\n'

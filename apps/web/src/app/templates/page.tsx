@@ -88,6 +88,11 @@ export default function TemplatesPage() {
 
   const PER_PAGE = 12
 
+  // Fetch initial templates on mount
+  useEffect(() => {
+    fetchTemplates({ sort, perPage: PER_PAGE })
+  }, [fetchTemplates]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSearch = (q: string) => {
     setSearch(q)
     setPage(1)
