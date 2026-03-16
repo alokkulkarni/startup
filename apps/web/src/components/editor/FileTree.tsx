@@ -26,6 +26,8 @@ interface FileTreeProps {
   onCreateFolder: (path: string) => void
   onRenameFile: (file: FileNode, newPath: string) => void
   onDeleteFile: (file: FileNode) => void
+  /** Paths recently modified by an AI response (shown with an indicator, auto-cleared). */
+  recentlyChangedPaths?: string[]
 }
 
 function buildTree(files: FileNode[]): TreeItem[] {
@@ -113,6 +115,7 @@ interface TreeNodeProps {
   onNewItemChange: (v: string) => void
   onNewItemConfirm: () => void
   onNewItemCancel: () => void
+  recentlyChangedPaths?: string[]
 }
 
 interface NewItemState {
@@ -137,6 +140,7 @@ function TreeNode({
   onNewItemChange,
   onNewItemConfirm,
   onNewItemCancel,
+  recentlyChangedPaths,
 }: TreeNodeProps) {
   const [isOpen, setIsOpen] = useState(isRootLevel)
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -159,6 +163,7 @@ function TreeNode({
 
   const isRenaming = renamingPath === item.path
   const isActive = !item.isFolder && activeFilePath === item.path
+  const isRecentlyChanged = !item.isFolder && (recentlyChangedPaths?.includes(item.path) ?? false)
 
   const showNewItemInput = item.isFolder && isOpen && newItemState?.parentPath === item.path
 
@@ -214,6 +219,7 @@ function TreeNode({
                 onNewItemChange={onNewItemChange}
                 onNewItemConfirm={onNewItemConfirm}
                 onNewItemCancel={onNewItemCancel}
+                recentlyChangedPaths={recentlyChangedPaths}
               />
             ))}
             {showNewItemInput && (
@@ -265,9 +271,15 @@ function TreeNode({
           onClick={e => e.stopPropagation()}
         />
       ) : (
-        <span className={cn('text-xs truncate font-mono', isActive ? 'text-indigo-300' : 'text-gray-300')}>
+        <span className={cn('text-xs truncate font-mono flex-1', isActive ? 'text-indigo-300' : 'text-gray-300')}>
           {item.name}
         </span>
+      )}
+      {isRecentlyChanged && !isRenaming && (
+        <span
+          className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400"
+          title="Modified by AI"
+        />
       )}
     </div>
   )
@@ -281,6 +293,7 @@ export function FileTree({
   onCreateFolder,
   onRenameFile,
   onDeleteFile,
+  recentlyChangedPaths,
 }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
@@ -376,6 +389,7 @@ export function FileTree({
     onNewItemChange: (v: string) => setNewItemState(s => s ? { ...s, value: v } : s),
     onNewItemConfirm: confirmNewItem,
     onNewItemCancel: cancelNewItem,
+    recentlyChangedPaths,
   }
 
   return (

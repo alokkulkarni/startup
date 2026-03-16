@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 
 interface ChatPanelProps {
   projectId: string
-  onFilesChanged?: () => void
+  onFilesChanged?: (paths?: string[]) => void
   initialPrompt?: string | null
   autoSendPrompt?: boolean          // if true, auto-sends initialPrompt instead of just pre-filling
   onPromptConsumed?: () => void

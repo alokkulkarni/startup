@@ -58,7 +58,7 @@ function generateId(): string {
 export function useAIChat(
   projectId: string,
   token: string | null,
-  onFilesChanged?: () => void,
+  onFilesChanged?: (paths?: string[]) => void,
 ): UseAIChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -105,6 +105,10 @@ export function useAIChat(
 
     setMessages(prev => [...prev, userMessage, assistantPlaceholder])
     setIsStreaming(true)
+
+    // Track whether files_changed was received so we don't double-call onFilesChanged
+    // from the 'done' event when files_changed already fired.
+    let filesChangedFired = false
 
     // Safety net: if the server never sends 'done' (network drop, crash, etc.)
     // abort after 5 minutes so the Stop button doesn't stay up forever.
@@ -190,6 +194,8 @@ export function useAIChat(
               )
             } else if (data.type === 'file_written') {
               // Track each file as it's written so MessageBubble can show progress badges.
+              // Do NOT call onFilesChanged here — we batch-sync once at the end to avoid
+              // N concurrent refreshFiles+syncFiles calls during streaming which freeze the UI.
               setMessages(prev =>
                 prev.map(m =>
                   m.id === assistantId
@@ -197,7 +203,6 @@ export function useAIChat(
                     : m,
                 ),
               )
-              onFilesChanged?.()
             } else if (data.type === 'files_changed') {
               const paths: string[] = data.paths ?? []
               setMessages(prev =>
@@ -205,7 +210,9 @@ export function useAIChat(
                   m.id === assistantId ? { ...m, changedPaths: paths } : m,
                 ),
               )
-              onFilesChanged?.()
+              // Single sync call with the paths of all changed files
+              filesChangedFired = true
+              onFilesChanged?.(paths)
             } else if (data.type === 'done') {
               clearTimeout(streamingTimeout)
               setMessages(prev =>
@@ -225,7 +232,11 @@ export function useAIChat(
               if (data.isPlan === true) {
                 setPendingPlan(true)
               }
-              onFilesChanged?.()
+              // Only call onFilesChanged if files_changed wasn't already fired
+              // (plan mode has no file writes; also guards against double-sync)
+              if (!filesChangedFired) {
+                onFilesChanged?.()
+              }
             } else if (data.type === 'error') {
               clearTimeout(streamingTimeout)
               setError(data.error ?? 'An error occurred')

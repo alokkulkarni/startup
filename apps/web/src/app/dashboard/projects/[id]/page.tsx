@@ -58,6 +58,8 @@ export default function ProjectPage() {
   const [deployMenuOpen, setDeployMenuOpen] = useState(false)
   const [healAttempts, setHealAttempts] = useState(0)
   const [showRateLimitPrompt, setShowRateLimitPrompt] = useState(false)
+  const [recentlyChangedPaths, setRecentlyChangedPaths] = useState<string[]>([])
+  const recentlyChangedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelWidthsRef = useRef(DEFAULT_WIDTHS)
   const [showFileTree, setShowFileTree] = useState(true)
   const [showEditor, setShowEditor] = useState(true)
@@ -295,9 +297,15 @@ export default function ProjectPage() {
     document.addEventListener('mouseup', handleMouseUp)
   }, [id])
 
-  const handleFilesChanged = useCallback(async () => {
+  const handleFilesChanged = useCallback(async (changedPaths?: string[]) => {
     const freshFiles = await refreshFiles()
     await syncFiles(freshFiles)
+    // Show which files changed in the file tree for 8 seconds
+    if (changedPaths && changedPaths.length > 0) {
+      if (recentlyChangedTimerRef.current) clearTimeout(recentlyChangedTimerRef.current)
+      setRecentlyChangedPaths(changedPaths)
+      recentlyChangedTimerRef.current = setTimeout(() => setRecentlyChangedPaths([]), 8000)
+    }
     // If the preview was errored, restart it so the fix takes effect.
     // Vite HMR handles running apps automatically; only a full restart clears crash state.
     if (wcStatusRef.current === 'error') {
@@ -508,6 +516,7 @@ export default function ProjectPage() {
                 onCreateFolder={handleCreateFolder}
                 onRenameFile={handleRenameFile}
                 onDeleteFile={handleDeleteFile}
+                recentlyChangedPaths={recentlyChangedPaths}
               />
             )}
           </div>
