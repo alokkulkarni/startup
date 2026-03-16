@@ -280,6 +280,13 @@ export async function aiRoutes(app: FastifyInstance) {
 
             if (allChangedPaths.length > 0) {
               write({ type: 'files_changed', paths: allChangedPaths })
+            } else {
+              app.log.warn({
+                msg: '[AI] No files written — model may have used wrong format or omitted <forge_changes>',
+                hasForgeChanges: fullContent.includes('<forge_changes>'),
+                responseLength: fullContent.length,
+                responsePreview: fullContent.slice(-500),
+              })
             }
 
             write({ type: 'done' })
